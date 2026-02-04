@@ -36,7 +36,7 @@ export type {
 
 // Game types
 export type {
-  PlayerState,
+  PlayerInfo,
   Turn,
   GameConfig,
   GameResult,

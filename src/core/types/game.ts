@@ -2,10 +2,10 @@ import type { CardTemplate, PlayerIndex } from './card';
 import type { Zone, ZoneConfig } from './zone';
 import type { Action } from './action';
 
-export interface PlayerState<T extends CardTemplate = CardTemplate> {
+// Minimal player info (zones are now top-level)
+export interface PlayerInfo {
   index: PlayerIndex;
   id: string;
-  zones: Record<string, Zone<T>>;
   hasConceded: boolean;
   hasDeclaredVictory: boolean;
 }
@@ -34,7 +34,8 @@ export interface GameState<T extends CardTemplate = CardTemplate> {
   config: GameConfig;
   turnNumber: number;
   activePlayer: PlayerIndex;
-  players: [PlayerState<T>, PlayerState<T>];
+  zones: Record<string, Zone<T>>;  // flattened: "player0_hand", "player1_tableau_1", etc.
+  players: [PlayerInfo, PlayerInfo];  // minimal player info
   currentTurn: Turn;
   result: GameResult | null;
   startedAt: number;

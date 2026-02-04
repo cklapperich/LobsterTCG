@@ -3,6 +3,8 @@ import {
   loadDeck,
   moveCard,
   flipCard,
+  makeZoneKey,
+  toReadableState,
   VISIBILITY,
   GameLoop,
 } from './core';
@@ -30,11 +32,11 @@ game.on('action:executed', (event, { action }) => {
 });
 
 const state = game.getState();
-const player = state.players[0];
-const stock = player.zones[ZONE_IDS.STOCK];
-const waste = player.zones[ZONE_IDS.WASTE];
-const tableau1 = player.zones[ZONE_IDS.TABLEAUS[0]];
-const foundation1 = player.zones[ZONE_IDS.FOUNDATIONS[0]];
+// Use new flat zone access: state.zones["player0_stock"]
+const stock = state.zones[makeZoneKey(0, ZONE_IDS.STOCK)];
+const waste = state.zones[makeZoneKey(0, ZONE_IDS.WASTE)];
+const tableau1 = state.zones[makeZoneKey(0, ZONE_IDS.TABLEAUS[0])];
+const foundation1 = state.zones[makeZoneKey(0, ZONE_IDS.FOUNDATIONS[0])];
 
 console.log('=== Initial State ===');
 console.log(`Stock: ${stock.cards.length} cards`);
@@ -100,3 +102,42 @@ console.log('');
 const history = game.getHistory();
 console.log(`History: ${history.states.length} states, ${history.actions.length} actions`);
 console.log(`Actions: ${history.actions.map(a => a.type).join(', ')}`);
+
+// Test toReadableState
+console.log('');
+console.log('=== Readable State Test ===');
+const readable = toReadableState(state);
+const readableStock = readable.zones[makeZoneKey(0, ZONE_IDS.STOCK)];
+const readableFoundation = readable.zones[makeZoneKey(0, ZONE_IDS.FOUNDATIONS[0])];
+
+console.log(`Stock zone has ${readableStock.cards.length} readable cards`);
+console.log(`Top of readable stock: ${readableStock.cards[0]?.name}`);
+console.log(`Foundation 1 cards: ${readableFoundation.cards.map(c => c.name).join(', ') || '(empty)'}`);
+
+// Show zone keys
+console.log('');
+console.log('=== Zone Keys ===');
+console.log(`Zone keys: ${Object.keys(state.zones).slice(0, 5).join(', ')}...`);
+
+// Test duplicate card naming (create a deck with duplicates)
+console.log('');
+console.log('=== Duplicate Card Naming Test ===');
+import type { DeckList } from './core';
+
+// Create a deck with duplicates
+const testDuplicateDeck: DeckList = {
+  id: 'test-duplicates',
+  name: 'Test Deck with Duplicates',
+  cards: [
+    { templateId: 'A-hearts', count: 3 },  // 3 Aces of hearts
+    { templateId: 'K-spades', count: 2 },  // 2 Kings of spades
+  ],
+};
+
+const duplicateTestState = createGameState<PlayingCardTemplate>(SOLITAIRE_CONFIG, 'test', 'none');
+loadDeck(duplicateTestState, 0, ZONE_IDS.STOCK, testDuplicateDeck, (id) => CARD_TEMPLATE_MAP.get(id), false);
+
+const readableDup = toReadableState(duplicateTestState);
+const dupStock = readableDup.zones[makeZoneKey(0, ZONE_IDS.STOCK)];
+console.log(`Duplicate test stock cards: ${dupStock.cards.map(c => c.name).join(', ')}`);
+// Expected: A♥, A♥_1, A♥_2, K♠, K♠_1

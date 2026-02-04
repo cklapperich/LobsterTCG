@@ -26,7 +26,7 @@ import type {
   DeclareVictoryAction,
   RevealAction,
   PeekAction,
-  PlayerState,
+  PlayerInfo,
   GameConfig,
   GameState,
   Turn,
@@ -71,22 +71,21 @@ function createZone<T extends CardTemplate>(
   };
 }
 
-function createPlayerState<T extends CardTemplate>(
+function createPlayerInfo(
   index: PlayerIndex,
-  playerId: string,
-  zoneConfigs: ZoneConfig[]
-): PlayerState<T> {
-  const zones: Record<string, Zone<T>> = {};
-  for (const config of zoneConfigs) {
-    zones[config.id] = createZone(config, index);
-  }
+  playerId: string
+): PlayerInfo {
   return {
     index,
     id: playerId,
-    zones,
     hasConceded: false,
     hasDeclaredVictory: false,
   };
+}
+
+// Create flattened zone key: "player0_hand", "player1_tableau_1"
+export function makeZoneKey(playerIndex: PlayerIndex, zoneId: string): string {
+  return `player${playerIndex}_${zoneId}`;
 }
 
 function createTurn(turnNumber: number, activePlayer: PlayerIndex): Turn {
@@ -104,14 +103,25 @@ export function createGameState<T extends CardTemplate>(
   player2Id: string
 ): GameState<T> {
   const now = Date.now();
+
+  // Create flattened zones for all players
+  const zones: Record<string, Zone<T>> = {};
+  for (let playerIndex = 0; playerIndex < config.playerCount; playerIndex++) {
+    for (const zoneConfig of config.zones) {
+      const key = makeZoneKey(playerIndex as PlayerIndex, zoneConfig.id);
+      zones[key] = createZone(zoneConfig, playerIndex as PlayerIndex);
+    }
+  }
+
   return {
     id: `game_${now}_${Math.random().toString(36).slice(2, 9)}`,
     config,
     turnNumber: 1,
     activePlayer: 0,
+    zones,
     players: [
-      createPlayerState<T>(0, player1Id, config.zones),
-      createPlayerState<T>(1, player2Id, config.zones),
+      createPlayerInfo(0, player1Id),
+      createPlayerInfo(1, player2Id),
     ],
     currentTurn: createTurn(1, 0),
     result: null,
@@ -143,9 +153,10 @@ export function loadDeck<T extends CardTemplate>(
   getTemplate: (templateId: string) => T | undefined,
   shuffle: boolean = true
 ): void {
-  const zone = state.players[playerIndex].zones[zoneId];
+  const zoneKey = makeZoneKey(playerIndex, zoneId);
+  const zone = state.zones[zoneKey];
   if (!zone) {
-    throw new Error(`Zone "${zoneId}" not found for player ${playerIndex}`);
+    throw new Error(`Zone "${zoneKey}" not found for player ${playerIndex}`);
   }
 
   const cards: CardInstance<T>[] = [];
@@ -185,31 +196,29 @@ function findCardInZones<T extends CardTemplate>(
   state: GameState<T>,
   cardInstanceId: string
 ): { card: CardInstance<T>; zone: Zone<T>; index: number } | null {
-  for (const player of state.players) {
-    for (const zone of Object.values(player.zones)) {
-      const index = zone.cards.findIndex((c) => c.instanceId === cardInstanceId);
-      if (index !== -1) {
-        return { card: zone.cards[index], zone, index };
+  for (const zone of Object.values(state.zones)) {
+    const index = zone.cards.findIndex((c) => c.instanceId === cardInstanceId);
+    if (index !== -1) {
+      return { card: zone.cards[index], zone, index };
+    }
+    // Check attachments and evolution stacks
+    for (const card of zone.cards) {
+      const attachmentIndex = card.attachments.findIndex(
+        (a) => a.instanceId === cardInstanceId
+      );
+      if (attachmentIndex !== -1) {
+        return {
+          card: card.attachments[attachmentIndex],
+          zone,
+          index: attachmentIndex,
+        };
       }
-      // Check attachments and evolution stacks
-      for (const card of zone.cards) {
-        const attachmentIndex = card.attachments.findIndex(
-          (a) => a.instanceId === cardInstanceId
+      if (card.evolutionStack) {
+        const evoIndex = card.evolutionStack.findIndex(
+          (e) => e.instanceId === cardInstanceId
         );
-        if (attachmentIndex !== -1) {
-          return {
-            card: card.attachments[attachmentIndex],
-            zone,
-            index: attachmentIndex,
-          };
-        }
-        if (card.evolutionStack) {
-          const evoIndex = card.evolutionStack.findIndex(
-            (e) => e.instanceId === cardInstanceId
-          );
-          if (evoIndex !== -1) {
-            return { card: card.evolutionStack[evoIndex], zone, index: evoIndex };
-          }
+        if (evoIndex !== -1) {
+          return { card: card.evolutionStack[evoIndex], zone, index: evoIndex };
         }
       }
     }
@@ -222,7 +231,8 @@ function getZone<T extends CardTemplate>(
   zoneId: string,
   playerIndex: PlayerIndex
 ): Zone<T> | null {
-  return state.players[playerIndex].zones[zoneId] ?? null;
+  const zoneKey = makeZoneKey(playerIndex, zoneId);
+  return state.zones[zoneKey] ?? null;
 }
 
 function removeCardFromZone<T extends CardTemplate>(
@@ -249,9 +259,8 @@ function executeDraw<T extends CardTemplate>(
   state: GameState<T>,
   action: DrawAction
 ): void {
-  const player = state.players[action.player];
-  const deck = player.zones['deck'];
-  const hand = player.zones['hand'];
+  const deck = getZone(state, 'deck', action.player);
+  const hand = getZone(state, 'hand', action.player);
 
   if (!deck || !hand) return;
 
@@ -293,9 +302,8 @@ function executePlayCard<T extends CardTemplate>(
   state: GameState<T>,
   action: PlayCardAction
 ): void {
-  const player = state.players[action.player];
-  const hand = player.zones['hand'];
-  const toZone = player.zones[action.toZone];
+  const hand = getZone(state, 'hand', action.player);
+  const toZone = getZone(state, action.toZone, action.player);
 
   if (!hand || !toZone) return;
 
@@ -490,13 +498,11 @@ function executeEndTurn<T extends CardTemplate>(
   state.currentTurn = createTurn(state.turnNumber, state.activePlayer);
 
   // Clear "played_this_turn" status from all cards
-  for (const player of state.players) {
-    for (const zone of Object.values(player.zones)) {
-      for (const card of zone.cards) {
-        const idx = card.status.indexOf('played_this_turn');
-        if (idx !== -1) {
-          card.status.splice(idx, 1);
-        }
+  for (const zone of Object.values(state.zones)) {
+    for (const card of zone.cards) {
+      const idx = card.status.indexOf('played_this_turn');
+      if (idx !== -1) {
+        card.status.splice(idx, 1);
       }
     }
   }
@@ -657,10 +663,8 @@ export function getPlayerView<T extends CardTemplate>(
 ): GameState<T> {
   const view = deepClone(state);
 
-  for (const player of view.players) {
-    for (const zone of Object.values(player.zones)) {
-      zone.cards = zone.cards.map((card) => filterCardForPlayer(card, viewingPlayer));
-    }
+  for (const zone of Object.values(view.zones)) {
+    zone.cards = zone.cards.map((card) => filterCardForPlayer(card, viewingPlayer));
   }
 
   return view;
