@@ -1,6 +1,6 @@
 # Dependencies
 node_modules
-
+card-images/
 # Build output
 dist
 dist-ssr
