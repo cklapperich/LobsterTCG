@@ -1,0 +1,45 @@
+{
+  "id": "klondike-solitaire",
+  "name": "Klondike Solitaire",
+  "gameType": "solitaire",
+  "playerCount": 1,
+  "layout": {
+    "rows": 2,
+    "cols": 7,
+    "slots": [
+      { "id": "slot_stock", "zoneId": "stock", "position": { "row": 0, "col": 0 }, "stackDirection": "none" },
+      { "id": "slot_waste", "zoneId": "waste", "position": { "row": 0, "col": 1 }, "stackDirection": "right" },
+      { "id": "slot_foundation_1", "zoneId": "foundation_1", "position": { "row": 0, "col": 3 }, "stackDirection": "none" },
+      { "id": "slot_foundation_2", "zoneId": "foundation_2", "position": { "row": 0, "col": 4 }, "stackDirection": "none" },
+      { "id": "slot_foundation_3", "zoneId": "foundation_3", "position": { "row": 0, "col": 5 }, "stackDirection": "none" },
+      { "id": "slot_foundation_4", "zoneId": "foundation_4", "position": { "row": 0, "col": 6 }, "stackDirection": "none" },
+      { "id": "slot_tableau_1", "zoneId": "tableau_1", "position": { "row": 1, "col": 0 }, "stackDirection": "down" },
+      { "id": "slot_tableau_2", "zoneId": "tableau_2", "position": { "row": 1, "col": 1 }, "stackDirection": "down" },
+      { "id": "slot_tableau_3", "zoneId": "tableau_3", "position": { "row": 1, "col": 2 }, "stackDirection": "down" },
+      { "id": "slot_tableau_4", "zoneId": "tableau_4", "position": { "row": 1, "col": 3 }, "stackDirection": "down" },
+      { "id": "slot_tableau_5", "zoneId": "tableau_5", "position": { "row": 1, "col": 4 }, "stackDirection": "down" },
+      { "id": "slot_tableau_6", "zoneId": "tableau_6", "position": { "row": 1, "col": 5 }, "stackDirection": "down" },
+      { "id": "slot_tableau_7", "zoneId": "tableau_7", "position": { "row": 1, "col": 6 }, "stackDirection": "down" }
+    ],
+    "groups": [
+      { "id": "draw_area", "name": "Draw Area", "slotIds": ["slot_stock", "slot_waste"] },
+      { "id": "foundations", "name": "Foundations", "slotIds": ["slot_foundation_1", "slot_foundation_2", "slot_foundation_3", "slot_foundation_4"] },
+      { "id": "tableaus", "name": "Tableaus", "slotIds": ["slot_tableau_1", "slot_tableau_2", "slot_tableau_3", "slot_tableau_4", "slot_tableau_5", "slot_tableau_6", "slot_tableau_7"] }
+    ]
+  },
+  "zones": [
+    { "id": "stock", "name": "Stock", "ordered": true, "defaultVisibility": "hidden", "maxCards": -1, "ownerCanSeeContents": false, "opponentCanSeeCount": true },
+    { "id": "waste", "name": "Waste", "ordered": true, "defaultVisibility": "public", "maxCards": -1, "ownerCanSeeContents": true, "opponentCanSeeCount": true },
+    { "id": "foundation_1", "name": "Foundation 1", "ordered": true, "defaultVisibility": "public", "maxCards": 13, "ownerCanSeeContents": true, "opponentCanSeeCount": true },
+    { "id": "foundation_2", "name": "Foundation 2", "ordered": true, "defaultVisibility": "public", "maxCards": 13, "ownerCanSeeContents": true, "opponentCanSeeCount": true },
+    { "id": "foundation_3", "name": "Foundation 3", "ordered": true, "defaultVisibility": "public", "maxCards": 13, "ownerCanSeeContents": true, "opponentCanSeeCount": true },
+    { "id": "foundation_4", "name": "Foundation 4", "ordered": true, "defaultVisibility": "public", "maxCards": 13, "ownerCanSeeContents": true, "opponentCanSeeCount": true },
+    { "id": "tableau_1", "name": "Tableau 1", "ordered": true, "defaultVisibility": "public", "maxCards": -1, "ownerCanSeeContents": true, "opponentCanSeeCount": true },
+    { "id": "tableau_2", "name": "Tableau 2", "ordered": true, "defaultVisibility": "public", "maxCards": -1, "ownerCanSeeContents": true, "opponentCanSeeCount": true },
+    { "id": "tableau_3", "name": "Tableau 3", "ordered": true, "defaultVisibility": "public", "maxCards": -1, "ownerCanSeeContents": true, "opponentCanSeeCount": true },
+    { "id": "tableau_4", "name": "Tableau 4", "ordered": true, "defaultVisibility": "public", "maxCards": -1, "ownerCanSeeContents": true, "opponentCanSeeCount": true },
+    { "id": "tableau_5", "name": "Tableau 5", "ordered": true, "defaultVisibility": "public", "maxCards": -1, "ownerCanSeeContents": true, "opponentCanSeeCount": true },
+    { "id": "tableau_6", "name": "Tableau 6", "ordered": true, "defaultVisibility": "public", "maxCards": -1, "ownerCanSeeContents": true, "opponentCanSeeCount": true },
+    { "id": "tableau_7", "name": "Tableau 7", "ordered": true, "defaultVisibility": "public", "maxCards": -1, "ownerCanSeeContents": true, "opponentCanSeeCount": true }
+  ]
+}

@@ -38,6 +38,9 @@ export type {
 export { toReadableState } from './readable';
 export type { ReadableCard, ReadableZone, ReadableGameState } from './readable';
 
+// Re-export playmat loader
+export { loadPlaymat, parsePlaymat } from './playmat-loader';
+
 // Re-export action factory functions
 export {
   draw,

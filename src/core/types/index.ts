@@ -42,3 +42,12 @@ export type {
   GameResult,
   GameState,
 } from './game';
+
+// Playmat types
+export type {
+  PlaymatPosition,
+  PlaymatSlot,
+  PlaymatZoneGroup,
+  PlaymatLayout,
+  Playmat,
+} from './playmat';
