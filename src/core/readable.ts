@@ -69,8 +69,8 @@ export function toReadableState<T extends CardTemplate>(
     readableZones[zoneKey] = convertZone(zone, playerIndex);
   }
 
-  // Build instanceId → card name lookup for action conversion
-  const idToName = buildCardNameMap(state);
+  // Build instanceId → card name lookup for action conversion (visibility-aware)
+  const idToName = buildCardNameMap(state, playerIndex);
 
   const readable: ReadableGameState = {
     turnNumber: state.turnNumber,
@@ -91,17 +91,26 @@ export function toReadableState<T extends CardTemplate>(
 }
 
 /**
- * Build a map from instanceId → card display name for all cards in the game.
+ * Build a map from instanceId → card display name for cards visible to the
+ * specified player. Hidden cards are mapped to "[hidden card]" so actions
+ * referencing them don't leak card identity.
  */
-function buildCardNameMap<T extends CardTemplate>(state: GameState<T>): Map<string, string> {
+function buildCardNameMap<T extends CardTemplate>(
+  state: GameState<T>,
+  playerIndex: PlayerIndex
+): Map<string, string> {
   const map = new Map<string, string>();
 
-  // Build disambiguation across ALL zones so names are globally consistent
   const allCards = Object.values(state.zones).flatMap(z => z.cards);
-  const ambiguousNames = findAmbiguousNames(allCards);
+  const visibleCards = allCards.filter(c => c.visibility[playerIndex]);
+  const ambiguousNames = findAmbiguousNames(visibleCards);
 
   for (const card of allCards) {
-    map.set(card.instanceId, computeDisplayName(card, ambiguousNames));
+    if (card.visibility[playerIndex]) {
+      map.set(card.instanceId, computeDisplayName(card, ambiguousNames));
+    } else {
+      map.set(card.instanceId, '[hidden card]');
+    }
   }
 
   return map;

@@ -60,6 +60,7 @@
   // Game log - derived from state.log (canonical source for AI agents)
   const gameLog = $derived(gameState?.log ?? []);
   let logContainer = $state<HTMLDivElement | null>(null);
+  let logInput = $state('');
 
   // Auto-scroll log to bottom when new entries are added
   $effect(() => {
@@ -435,6 +436,19 @@
               <div class="log-entry text-[0.45rem] text-gbc-light">{entry}</div>
             {/each}
           </div>
+          <form class="log-input-bar" onsubmit={(e) => {
+            e.preventDefault();
+            if (!logInput.trim() || !gameState) return;
+            addLog(`[Player ${gameState.activePlayer + 1}] ${logInput.trim()}`);
+            logInput = '';
+          }}>
+            <input
+              type="text"
+              class="log-input"
+              placeholder="Type a message..."
+              bind:value={logInput}
+            />
+          </form>
         </div>
       </div>
     </div>
@@ -562,18 +576,35 @@
   }
 
   .log-panel {
-    @apply max-lg:w-auto;
+    @apply max-lg:w-auto flex flex-col;
+    height: 28rem;
   }
 
   .log-content {
-    @apply overflow-y-auto px-2;
-    height: 25rem;
+    @apply overflow-y-auto px-2 flex-1;
     scrollbar-width: thin;
     scrollbar-color: var(--color-gbc-green) var(--color-gbc-border);
   }
 
   .log-entry {
     @apply py-0.5 border-b border-gbc-border/30;
+  }
+
+  .log-input-bar {
+    @apply px-2 py-1 border-t border-gbc-border;
+  }
+
+  .log-input {
+    @apply w-full bg-gbc-dark text-gbc-light text-[0.45rem] px-2 py-1 border border-gbc-border rounded-sm;
+    @apply outline-none;
+  }
+
+  .log-input::placeholder {
+    @apply text-gbc-green/50;
+  }
+
+  .log-input:focus {
+    @apply border-gbc-green;
   }
 
   .preview-card {
