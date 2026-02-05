@@ -4,6 +4,7 @@ import type { PlayerIndex, Visibility } from './card';
 interface BaseAction {
   type: string;
   player: PlayerIndex;
+  allowed_by_effect?: boolean;  // Card effect overrides normal rules
 }
 
 // Card Movement Actions
@@ -15,6 +16,14 @@ export interface DrawAction extends BaseAction {
 export interface MoveCardAction extends BaseAction {
   type: 'move_card';
   cardInstanceId: string;
+  fromZone: string;
+  toZone: string;
+  position?: number;
+}
+
+export interface MoveCardStackAction extends BaseAction {
+  type: 'move_card_stack';
+  cardInstanceIds: string[];
   fromZone: string;
   toZone: string;
   position?: number;
@@ -130,6 +139,7 @@ export interface PeekAction extends BaseAction {
 export type Action =
   | DrawAction
   | MoveCardAction
+  | MoveCardStackAction
   | PlayCardAction
   | PlaceOnZoneAction
   | ShuffleAction

@@ -40,4 +40,5 @@ export interface GameState<T extends CardTemplate = CardTemplate> {
   result: GameResult | null;
   startedAt: number;
   lastActionAt: number;
+  log: string[];
 }

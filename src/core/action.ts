@@ -3,6 +3,7 @@ import type {
   Visibility,
   DrawAction,
   MoveCardAction,
+  MoveCardStackAction,
   PlayCardAction,
   PlaceOnZoneAction,
   ShuffleAction,
@@ -37,6 +38,16 @@ export function moveCard(
   position?: number
 ): MoveCardAction {
   return { type: 'move_card', player, cardInstanceId, fromZone, toZone, position };
+}
+
+export function moveCardStack(
+  player: PlayerIndex,
+  cardInstanceIds: string[],
+  fromZone: string,
+  toZone: string,
+  position?: number
+): MoveCardStackAction {
+  return { type: 'move_card_stack', player, cardInstanceIds, fromZone, toZone, position };
 }
 
 export function playCard(

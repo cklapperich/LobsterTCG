@@ -48,6 +48,7 @@ export interface ReadableGameState {
   players: [PlayerInfo, PlayerInfo];
   currentTurn: ReadableTurn;
   result: GameResult | null;
+  log: string[];
 }
 
 /**
@@ -59,7 +60,8 @@ export interface ReadableGameState {
  */
 export function toReadableState<T extends CardTemplate>(
   state: GameState<T>,
-  playerIndex: PlayerIndex
+  playerIndex: PlayerIndex,
+  modifyReadableState?: (readable: ReadableGameState, state: Readonly<GameState<T>>, playerIndex: PlayerIndex) => ReadableGameState
 ): ReadableGameState {
   const readableZones: Record<string, ReadableZone> = {};
 
@@ -70,14 +72,22 @@ export function toReadableState<T extends CardTemplate>(
   // Build instanceId → card name lookup for action conversion
   const idToName = buildCardNameMap(state);
 
-  return {
+  const readable: ReadableGameState = {
     turnNumber: state.turnNumber,
     activePlayer: state.activePlayer,
     zones: readableZones,
-    players: state.players,
+    players: state.players.map(p => {
+      const rp: Record<string, unknown> = { ...p };
+      if (!p.hasConceded) delete rp.hasConceded;
+      if (!p.hasDeclaredVictory) delete rp.hasDeclaredVictory;
+      return rp;
+    }) as unknown as [PlayerInfo, PlayerInfo],
     currentTurn: convertTurn(state.currentTurn, idToName),
     result: state.result,
+    log: state.log,
   };
+
+  return modifyReadableState ? modifyReadableState(readable, state, playerIndex) : readable;
 }
 
 /**

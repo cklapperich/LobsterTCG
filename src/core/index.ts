@@ -42,6 +42,9 @@ export type {
 export { toReadableState, resolveCardName } from './readable';
 export type { ReadableCard, ReadableZone, ReadableGameState, ReadableAction, ReadableTurn } from './readable';
 
+// Re-export AI tools
+export { createDefaultTools } from './ai-tools';
+
 // Re-export playmat loader
 export { loadPlaymat, parsePlaymat } from './playmat-loader';
 
@@ -49,6 +52,7 @@ export { loadPlaymat, parsePlaymat } from './playmat-loader';
 export {
   draw,
   moveCard,
+  moveCardStack,
   playCard,
   placeOnZone,
   placeOnTop,

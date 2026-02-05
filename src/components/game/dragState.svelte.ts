@@ -1,5 +1,5 @@
 import type { CardInstance, CardTemplate, Visibility, GameState } from '../../core';
-import { executeAction, moveCard, flipCard, parseZoneKey, VISIBILITY } from '../../core';
+import { executeAction, moveCard, flipCard, parseZoneKey, VISIBILITY, type PluginManager } from '../../core';
 import { playSfx } from '../../lib/audio.svelte';
 
 export interface DragState {
@@ -45,7 +45,8 @@ export function executeDrop(
   cardInstanceId: string,
   toZoneKey: string,
   gameState: GameState<CardTemplate>,
-  position?: number
+  position?: number,
+  pluginManager?: PluginManager<CardTemplate>
 ): GameState<CardTemplate> | null {
   if (!dragStore.current) return null;
 
@@ -66,9 +67,14 @@ export function executeDrop(
 
   // Manually update zone keys since moveCard assumes same player for both zones
   if (from.playerIndex !== to.playerIndex) {
-    // Direct zone manipulation for cross-player moves
+    // Cross-player: inline capacity check (bypasses executeAction)
     const fromZone = gameState.zones[dragStore.current.fromZoneKey];
     const toZone = gameState.zones[toZoneKey];
+    if (toZone && toZone.config.maxCards !== -1 && toZone.cards.length >= toZone.config.maxCards) {
+      gameState.log.push(`Move blocked: ${toZone.config.name} is full (${toZone.config.maxCards}/${toZone.config.maxCards} cards)`);
+      dragStore.current = null;
+      return null;
+    }
     const cardIndex = fromZone.cards.findIndex(c => c.instanceId === cardInstanceId);
     if (cardIndex !== -1 && toZone) {
       const [card] = fromZone.cards.splice(cardIndex, 1);
@@ -79,7 +85,20 @@ export function executeDrop(
       }
     }
   } else {
-    executeAction(gameState, action);
+    // Same-player: run plugin pre-hooks then executeAction
+    if (pluginManager) {
+      const preResult = pluginManager.runPreHooks(gameState, action);
+      if (preResult.outcome === 'block') {
+        gameState.log.push(`Action blocked: ${preResult.reason ?? 'Unknown'}`);
+        dragStore.current = null;
+        return null;
+      }
+    }
+    const blocked = executeAction(gameState, action);
+    if (blocked) {
+      dragStore.current = null;
+      return null;
+    }
   }
 
   // Determine visibility for the card

@@ -32,6 +32,7 @@ export interface PokemonCardTemplate extends CardTemplate {
   subtypes: string[];
   types: string[];
   hp?: number;
+  evolveFrom?: string;
   attacks?: PokemonAttack[];
   abilities?: PokemonAbility[];
   weaknesses?: Array<{ type: string; value: string }>;
@@ -62,6 +63,7 @@ interface WesternCard {
   subtypes?: string[];
   types?: string[];
   hp?: number;
+  evolveFrom?: string;
   attacks?: PokemonAttack[];
   abilities?: PokemonAbility[];
   weaknesses?: Array<{ type: string; value: string }>;
@@ -176,6 +178,7 @@ const BASE_SET_CARDS: Array<{ number: number; name: string }> = [
 function extractGameFields(card: WesternCard): Partial<PokemonCardTemplate> {
   const fields: Partial<PokemonCardTemplate> = {};
   if (card.hp) fields.hp = card.hp;
+  if (card.evolveFrom) fields.evolveFrom = card.evolveFrom;
   if (card.attacks?.length) fields.attacks = card.attacks;
   if (card.abilities?.length) fields.abilities = card.abilities;
   if (card.weaknesses?.length) fields.weaknesses = card.weaknesses;

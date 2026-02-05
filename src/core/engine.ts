@@ -8,6 +8,7 @@ import type {
   Action,
   DrawAction,
   MoveCardAction,
+  MoveCardStackAction,
   PlayCardAction,
   PlaceOnZoneAction,
   ShuffleAction,
@@ -153,6 +154,7 @@ export function createGameState<T extends CardTemplate>(
     result: null,
     startedAt: now,
     lastActionAt: now,
+    log: [],
   };
 }
 
@@ -309,6 +311,31 @@ function executeMoveCard<T extends CardTemplate>(
     toZone.cards.splice(action.position, 0, card);
   } else {
     toZone.cards.push(card);
+  }
+}
+
+function executeMoveCardStack<T extends CardTemplate>(
+  state: GameState<T>,
+  action: MoveCardStackAction
+): void {
+  const fromZone = getZone(state, action.fromZone, action.player);
+  const toZone = getZone(state, action.toZone, action.player);
+
+  if (!fromZone || !toZone) return;
+
+  const cards: CardInstance<T>[] = [];
+  for (const cardId of action.cardInstanceIds) {
+    const card = removeCardFromZone(fromZone, cardId);
+    if (card) {
+      card.visibility = toZone.config.defaultVisibility;
+      cards.push(card);
+    }
+  }
+
+  if (action.position !== undefined && action.position >= 0) {
+    toZone.cards.splice(action.position, 0, ...cards);
+  } else {
+    toZone.cards.push(...cards);
   }
 }
 
@@ -548,13 +575,65 @@ function executePeek<T extends CardTemplate>(
 }
 
 // ============================================================================
+// Zone Capacity Checks
+// ============================================================================
+
+function isZoneAtCapacity(zone: Zone<any>, additionalCards = 1): boolean {
+  if (zone.config.maxCards === -1) return false;
+  return zone.cards.length + additionalCards > zone.config.maxCards;
+}
+
+function checkZoneCapacity<T extends CardTemplate>(
+  state: GameState<T>,
+  action: Action
+): string | null {
+  switch (action.type) {
+    case 'move_card': {
+      const toZone = getZone(state, action.toZone, action.player);
+      if (toZone && isZoneAtCapacity(toZone))
+        return `Move blocked: ${toZone.config.name} is full (${toZone.config.maxCards}/${toZone.config.maxCards} cards)`;
+      return null;
+    }
+    case 'move_card_stack': {
+      const toZone = getZone(state, action.toZone, action.player);
+      if (toZone && isZoneAtCapacity(toZone, action.cardInstanceIds.length))
+        return `Move blocked: ${toZone.config.name} is full (${toZone.config.maxCards}/${toZone.config.maxCards} cards)`;
+      return null;
+    }
+    case 'play_card': {
+      const toZone = getZone(state, action.toZone, action.player);
+      if (toZone && isZoneAtCapacity(toZone))
+        return `Play blocked: ${toZone.config.name} is full (${toZone.config.maxCards}/${toZone.config.maxCards} cards)`;
+      return null;
+    }
+    case 'place_on_zone': {
+      const zone = getZone(state, action.zoneId, action.player);
+      if (zone && isZoneAtCapacity(zone, action.cardInstanceIds.length))
+        return `Place blocked: ${zone.config.name} is full (${zone.config.maxCards}/${zone.config.maxCards} cards)`;
+      return null;
+    }
+    default:
+      return null;
+  }
+}
+
+// ============================================================================
 // Main Action Executor
 // ============================================================================
 
 export function executeAction<T extends CardTemplate>(
   state: GameState<T>,
   action: Action
-): void {
+): string | null {
+  // Capacity pre-check (before recording in action history)
+  if (!action.allowed_by_effect) {
+    const blocked = checkZoneCapacity(state, action);
+    if (blocked) {
+      state.log.push(blocked);
+      return blocked;
+    }
+  }
+
   state.lastActionAt = Date.now();
   state.currentTurn.actions.push(action);
 
@@ -564,6 +643,9 @@ export function executeAction<T extends CardTemplate>(
       break;
     case 'move_card':
       executeMoveCard(state, action);
+      break;
+    case 'move_card_stack':
+      executeMoveCardStack(state, action);
       break;
     case 'play_card':
       executePlayCard(state, action);
@@ -614,6 +696,8 @@ export function executeAction<T extends CardTemplate>(
       executePeek(state, action);
       break;
   }
+
+  return null;
 }
 
 // ============================================================================
