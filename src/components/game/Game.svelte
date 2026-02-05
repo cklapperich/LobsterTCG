@@ -245,7 +245,7 @@
 
   function handleDebug() {
     if (!gameState) return;
-    const readable = toReadableState(gameState);
+    const readable = toReadableState(gameState, gameState.activePlayer);
     debugJson = JSON.stringify(readable, null, 2);
     showDebugModal = true;
   }
