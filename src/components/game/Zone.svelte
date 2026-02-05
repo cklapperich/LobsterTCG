@@ -42,6 +42,9 @@
   const stackDirection = $derived(slot.stackDirection ?? 'none');
   const label = $derived(slot.label ?? zone.config.name);
   const fixedSize = $derived(slot.fixedSize ?? false);
+  const isFull = $derived(
+    zone.config.maxCards !== -1 && zone.cards.length >= zone.config.maxCards
+  );
 
   let zoneEl: HTMLDivElement;
 
@@ -58,6 +61,7 @@
   });
 
   function handleDragOver(event: DragEvent) {
+    if (isFull) return; // Don't allow drop → browser shows "no drop" cursor
     event.preventDefault();
     isDragOver = true;
   }
@@ -70,6 +74,7 @@
   function handleDrop(event: DragEvent) {
     event.preventDefault();
     isDragOver = false;
+    if (isFull) return;
     const cardInstanceId = event.dataTransfer?.getData('text/plain');
     if (cardInstanceId) {
       const isHandZone = zone.config.id === 'hand';

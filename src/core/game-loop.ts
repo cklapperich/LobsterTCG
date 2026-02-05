@@ -82,6 +82,7 @@ export class GameLoop<T extends CardTemplate = CardTemplate> {
     if (this.pluginManager) {
       const blockReason = this.pluginManager.validateAction(this.state, action);
       if (blockReason) {
+        this.state.log.push(`Action blocked: ${blockReason}`);
         this.emit('action:blocked', { state: this.state, action, reason: blockReason });
         return;
       }
@@ -100,6 +101,7 @@ export class GameLoop<T extends CardTemplate = CardTemplate> {
     if (this.pluginManager) {
       const preResult = this.pluginManager.runPreHooks(this.state, action);
       if (preResult.outcome === 'block') {
+        this.state.log.push(`Action blocked: ${preResult.reason ?? 'Unknown reason'}`);
         this.emit('action:blocked', { state: this.state, action, reason: preResult.reason });
         return;
       }
@@ -126,7 +128,11 @@ export class GameLoop<T extends CardTemplate = CardTemplate> {
       }
     }
     if (!executed) {
-      executeAction(this.state, action);
+      const blocked = executeAction(this.state, action);
+      if (blocked) {
+        this.emit('action:blocked', { state: this.state, action, reason: blocked });
+        return;
+      }
     }
 
     // Record history

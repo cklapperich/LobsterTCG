@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Playmat, CardInstance, CardTemplate, GameState, CounterDefinition, DeckList, ZoneConfig } from '../../core';
-  import { executeAction, shuffle, VISIBILITY, flipCard, parseZoneKey, endTurn, loadDeck, getCardName, findCardInZones, toReadableState } from '../../core';
-  import { plugin, executeSetup, ZONE_IDS } from '../../plugins/pokemon';
+  import type { Playmat, CardInstance, CardTemplate, GameState, CounterDefinition, DeckList, ZoneConfig, Action } from '../../core';
+  import { executeAction, shuffle, VISIBILITY, flipCard, parseZoneKey, endTurn, loadDeck, getCardName, findCardInZones, toReadableState, PluginManager } from '../../core';
+  import { plugin, executeSetup, ZONE_IDS, pokemonWarningsPlugin } from '../../plugins/pokemon';
   import { getTemplate } from '../../plugins/pokemon/cards';
   import PlaymatGrid from './PlaymatGrid.svelte';
   import ZoneContextMenu from './ZoneContextMenu.svelte';
@@ -19,7 +19,7 @@
     clearZoneCounters,
   } from './counterDragState.svelte';
   import { playSfx } from '../../lib/audio.svelte';
-  import { gameLogStore, addLogEntry, resetLog } from './gameLog.svelte';
+  // gameLog store no longer used - log lives in gameState.log
   import { contextMenuStore, openContextMenu, closeContextMenu as closeContextMenuStore } from './contextMenu.svelte';
   import { cardModalStore, openCardModal, closeCardModal as closeCardModalStore } from './cardModal.svelte';
 
@@ -31,6 +31,10 @@
   }
 
   let { player1Deck, player2Deck, onBackToMenu }: Props = $props();
+
+  // Plugin manager for warnings/hooks
+  const pluginManager = new PluginManager<CardTemplate>();
+  pluginManager.register(pokemonWarningsPlugin as any);
 
   // Game state
   let gameState = $state<GameState<CardTemplate> | null>(null);
@@ -53,8 +57,8 @@
   // Preview state
   let previewCard = $state<CardInstance<CardTemplate> | null>(null);
 
-  // Game log - use store, keep DOM ref for scrolling
-  const gameLog = $derived(gameLogStore.entries);
+  // Game log - derived from state.log (canonical source for AI agents)
+  const gameLog = $derived(gameState?.log ?? []);
   let logContainer = $state<HTMLDivElement | null>(null);
 
   // Auto-scroll log to bottom when new entries are added
@@ -79,9 +83,33 @@
   // CoinFlip component reference
   let coinFlipRef: CoinFlip | undefined = $state();
 
+  // Write to state.log (canonical source) instead of gameLogStore
+  function addLog(message: string) {
+    if (!gameState) return;
+    gameState.log.push(message);
+    gameState = { ...gameState };
+  }
+
+  // Try an action through plugin hooks + capacity checks
+  function tryAction(action: Action): string | null {
+    if (!gameState) return 'No game state';
+
+    const preResult = pluginManager.runPreHooks(gameState, action);
+    if (preResult.outcome === 'block') {
+      const reason = `Action blocked: ${preResult.reason ?? 'Unknown'}`;
+      gameState.log.push(reason);
+      gameState = { ...gameState };
+      return reason;
+    }
+
+    const blocked = executeAction(gameState, action);
+    gameState = { ...gameState };
+    return blocked;
+  }
+
   function handleCoinResult(result: 'heads' | 'tails') {
     const flipPlayer = gameState?.activePlayer ?? 0;
-    addLogEntry(`[Player ${flipPlayer + 1}] Coin flip: ${result === 'heads' ? 'HEADS' : 'TAILS'}`);
+    addLog(`[Player ${flipPlayer + 1}] Coin flip: ${result === 'heads' ? 'HEADS' : 'TAILS'}`);
   }
 
   onMount(async () => {
@@ -97,8 +125,8 @@
       executeSetup(gameState, 0);
       executeSetup(gameState, 1);
 
+      gameState.log = ['Game started'];
       gameState = { ...gameState };
-      resetLog('Game started');
       loading = false;
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to load game';
@@ -110,16 +138,19 @@
     if (!gameState) return;
 
     const cardName = getCardName(gameState, cardInstanceId);
-    const updatedState = executeDrop(cardInstanceId, toZoneKey, gameState, position);
+    const updatedState = executeDrop(cardInstanceId, toZoneKey, gameState, position, pluginManager);
     if (updatedState) {
       gameState = updatedState;
       const { playerIndex, zoneId } = parseZoneKey(toZoneKey);
-      addLogEntry(`[Player ${playerIndex + 1}] Moved ${cardName} to ${zoneId}`);
+      gameState.log.push(`[Player ${playerIndex + 1}] Moved ${cardName} to ${zoneId}`);
+      gameState = { ...gameState };
     }
   }
 
   function handlePreview(card: CardInstance<CardTemplate>) {
-    previewCard = card;
+    if (card.visibility[0]) {
+      previewCard = card;
+    }
   }
 
   function handleToggleVisibility(cardInstanceId: string) {
@@ -132,9 +163,9 @@
     const newVisibility = card.visibility[0] ? VISIBILITY.HIDDEN : VISIBILITY.PUBLIC;
     const activePlayer = gameState.activePlayer;
     executeAction(gameState, flipCard(activePlayer, cardInstanceId, newVisibility));
-    gameState = { ...gameState };
     const flipDirection = newVisibility === VISIBILITY.PUBLIC ? 'face up' : 'face down';
-    addLogEntry(`[Player ${activePlayer + 1}] Flipped ${card.template.name} ${flipDirection}`);
+    gameState.log.push(`[Player ${activePlayer + 1}] Flipped ${card.template.name} ${flipDirection}`);
+    gameState = { ...gameState };
   }
 
   // Context menu handlers
@@ -164,8 +195,8 @@
     const { playerIndex, zoneId } = parseZoneKey(zoneKey);
     const action = shuffle(playerIndex, zoneId);
     executeAction(gameState, action);
+    gameState.log.push(`[Player ${playerIndex + 1}] Shuffled ${zoneId}`);
     gameState = { ...gameState };
-    addLogEntry(`[Player ${playerIndex + 1}] Shuffled ${zoneId}`);
   }
 
   function handleCardModal(mode: 'peek' | 'arrange', position: 'top' | 'bottom', count: number) {
@@ -226,11 +257,11 @@
       executeSetup(state, 0);
       executeSetup(state, 1);
 
+      state.log = ['Game started'];
       gameState = state;
       previewCard = null;
       closeContextMenuStore();
       closeCardModalStore();
-      resetLog('Game started');
     });
   }
 
@@ -245,7 +276,7 @@
 
   function handleDebug() {
     if (!gameState) return;
-    const readable = toReadableState(gameState, gameState.activePlayer);
+    const readable = toReadableState(gameState, gameState.activePlayer, plugin.modifyReadableState?.bind(plugin));
     debugJson = JSON.stringify(readable, null, 2);
     showDebugModal = true;
   }
@@ -255,8 +286,8 @@
     const currentPlayer = gameState.activePlayer;
     const action = endTurn(currentPlayer);
     executeAction(gameState, action);
+    gameState.log.push(`[Player ${currentPlayer + 1}] Ended turn`);
     gameState = { ...gameState };
-    addLogEntry(`[Player ${currentPlayer + 1}] Ended turn`);
     playSfx('confirm');
   }
 
@@ -268,7 +299,8 @@
       gameState = updatedState;
       const cardName = getCardName(gameState, cardInstanceId);
       const counter = getCounterById(counterId);
-      addLogEntry(`Added ${counter?.name ?? counterId} to ${cardName}`);
+      gameState.log.push(`Added ${counter?.name ?? counterId} to ${cardName}`);
+      gameState = { ...gameState };
     }
   }
 
@@ -281,7 +313,8 @@
       gameState = updatedState;
       const cardName = getCardName(gameState, sourceCardId);
       const counter = getCounterById(counterId ?? '');
-      addLogEntry(`Removed ${counter?.name ?? counterId} from ${cardName}`);
+      gameState.log.push(`Removed ${counter?.name ?? counterId} from ${cardName}`);
+      gameState = { ...gameState };
     }
   }
 
@@ -290,7 +323,8 @@
     const zoneKey = contextMenu.zoneKey;
     const zoneName = contextMenu.zoneName;
     gameState = clearZoneCounters(zoneKey, gameState);
-    addLogEntry(`Cleared all counters from ${zoneName}`);
+    gameState.log.push(`Cleared all counters from ${zoneName}`);
+    gameState = { ...gameState };
     playSfx('confirm');
   }
 </script>
