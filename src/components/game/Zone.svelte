@@ -8,6 +8,8 @@
     slot: PlaymatSlot;
     cardBack?: string;
     renderFace?: (template: CardTemplate) => { rank?: string; suit?: string; color?: string };
+    isShuffling?: boolean;
+    shufflePacketStart?: number;
     onDrop?: (cardInstanceId: string, toZoneId: string, position?: number) => void;
     onPreview?: (card: CardInstance<CardTemplate>) => void;
     onToggleVisibility?: (cardInstanceId: string) => void;
@@ -19,6 +21,8 @@
     slot,
     cardBack,
     renderFace,
+    isShuffling = false,
+    shufflePacketStart = -1,
     onDrop,
     onPreview,
     onToggleVisibility,
@@ -98,6 +102,8 @@
         zoneKey={zone.key}
         {cardBack}
         {renderFace}
+        {isShuffling}
+        {shufflePacketStart}
         {onPreview}
         {onToggleVisibility}
         onCardDrop={handleCardDrop}

@@ -9,6 +9,8 @@
     zoneKey: string;
     cardBack?: string;
     renderFace?: (template: CardTemplate) => { rank?: string; suit?: string; color?: string };
+    isShuffling?: boolean;
+    shufflePacketStart?: number;
     onPreview?: (card: CardInstance<CardTemplate>) => void;
     onToggleVisibility?: (cardInstanceId: string) => void;
     onCardDrop?: (droppedCardId: string, targetCardId: string, targetIndex: number) => void;
@@ -21,6 +23,8 @@
     zoneKey,
     cardBack,
     renderFace,
+    isShuffling = false,
+    shufflePacketStart = -1,
     onPreview,
     onToggleVisibility,
     onCardDrop,
@@ -29,49 +33,112 @@
   // All cards can be drop targets
   const isDropTarget = true;
 
-  // Dynamic layout: switch fan to right stacking when too many cards
-  const FAN_THRESHOLD = 8;
-  const effectiveDirection = $derived(
-    stackDirection === 'fan' && cards.length > FAN_THRESHOLD ? 'right' : stackDirection
+  // Container width for dynamic fan layout
+  let containerWidth = $state(0);
+  let cardWidth = $state(0);
+  let stackEl: HTMLDivElement;
+
+  // Minimum offset so cards remain visible/clickable (in pixels)
+  const MIN_OFFSET_PX = 24;
+  // Gap between cards when fully spread (in pixels)
+  const FULL_SPREAD_GAP_PX = 8;
+
+  // Calculate optimal offset for fan layout based on available space
+  const fanOffset = $derived.by(() => {
+    if (stackDirection !== 'fan' || cards.length <= 1 || !containerWidth || !cardWidth) {
+      return cardWidth + FULL_SPREAD_GAP_PX; // Full spread
+    }
+
+    // Space needed for full spread: cardWidth * N + gap * (N-1)
+    const fullSpreadWidth = cardWidth * cards.length + FULL_SPREAD_GAP_PX * (cards.length - 1);
+
+    if (fullSpreadWidth <= containerWidth) {
+      // All cards fit without overlap
+      return cardWidth + FULL_SPREAD_GAP_PX;
+    }
+
+    // Calculate offset needed to fit: cardWidth + (N-1) * offset = containerWidth
+    // offset = (containerWidth - cardWidth) / (N - 1)
+    const neededOffset = (containerWidth - cardWidth) / (cards.length - 1);
+
+    // Clamp to minimum offset
+    return Math.max(MIN_OFFSET_PX, neededOffset);
+  });
+
+  // Enable hover-to-top when cards are overlapping
+  const hoverToTop = $derived(
+    stackDirection === 'fan' && cardWidth > 0 && fanOffset < cardWidth
   );
-  // Enable hover-to-top when we've switched from fan to stacked
-  const hoverToTop = $derived(stackDirection === 'fan' && cards.length > FAN_THRESHOLD);
 
   // Calculate stack size based on card count and offset (1.5rem = 24px at base, but use rem)
   const stackOffset = 1.5; // rem
   const extraHeight = $derived(Math.max(0, cards.length - 1) * stackOffset);
   const extraWidth = $derived(Math.max(0, cards.length - 1) * stackOffset);
 
-  // Calculate dynamic min-width style based on effective direction
+  // Calculate dynamic min-width style based on direction
   const stackStyle = $derived.by(() => {
     if (fixedSize) return '';
-    if (effectiveDirection === 'down') {
+    if (stackDirection === 'down') {
       return `min-height: calc(var(--spacing-card-w) * 1.4 + ${extraHeight}rem)`;
     }
-    if (effectiveDirection === 'right') {
+    if (stackDirection === 'right') {
       return `min-width: calc(var(--spacing-card-w) + ${extraWidth}rem)`;
     }
-    if (effectiveDirection === 'fan') {
-      // Fan uses full card width spacing - use CSS calc with card count
-      return `min-width: calc(var(--spacing-card-w) * ${cards.length} + ${Math.max(0, cards.length - 1) * 0.5}rem)`;
-    }
+    // Fan layout fills container, no min-width needed
     return '';
+  });
+
+  // Measure container width and get card width from CSS variable
+  $effect(() => {
+    if (!stackEl) return;
+
+    // Get card width from CSS variable
+    const styles = getComputedStyle(stackEl);
+    const cardWidthValue = styles.getPropertyValue('--spacing-card-w').trim();
+    if (cardWidthValue) {
+      // Parse rem value to pixels
+      const remValue = parseFloat(cardWidthValue);
+      const rootFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
+      cardWidth = remValue * rootFontSize;
+    }
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.target === stackEl) {
+          containerWidth = entry.contentRect.width;
+          // Re-check card width on resize (responsive breakpoints may change it)
+          const styles = getComputedStyle(stackEl);
+          const cardWidthValue = styles.getPropertyValue('--spacing-card-w').trim();
+          if (cardWidthValue) {
+            const remValue = parseFloat(cardWidthValue);
+            const rootFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
+            cardWidth = remValue * rootFontSize;
+          }
+        }
+      }
+    });
+
+    resizeObserver.observe(stackEl);
+    return () => resizeObserver.disconnect();
   });
 </script>
 
 <div
   class="card-stack"
-  class:fan={effectiveDirection === 'fan'}
+  class:fan={stackDirection === 'fan'}
   class:hover-to-top={hoverToTop}
   style={stackStyle}
+  bind:this={stackEl}
 >
   {#each cards as card, i (card.instanceId)}
+    {@const isInPacket = isShuffling && shufflePacketStart >= 0 && i >= shufflePacketStart}
     <div
       class="stack-card"
-      class:offset-down={effectiveDirection === 'down'}
-      class:offset-right={effectiveDirection === 'right'}
-      class:offset-fan={effectiveDirection === 'fan'}
-      style="--i: {i}; z-index: {i + 1}"
+      class:offset-down={stackDirection === 'down'}
+      class:offset-right={stackDirection === 'right'}
+      class:offset-fan={stackDirection === 'fan'}
+      class:animate-overhand-lift={isInPacket}
+      style="--i: {i}; --fan-offset: {fanOffset}px; z-index: {isInPacket ? 200 : i + 1}"
     >
       <Card
         {card}
@@ -113,24 +180,10 @@
     left: calc(var(--i) * 1.5rem);
   }
 
-  /* Fan layout: cards spread out with full card width + small gap */
-  .card-stack.fan {
-    display: flex;
-    flex-direction: row;
-    gap: 0.5rem;
-    align-items: flex-start;
-  }
-
-  .card-stack.fan .stack-card {
-    position: relative;
-    top: auto;
-    left: auto;
-  }
-
+  /* Fan layout: cards positioned with dynamic offset */
   .stack-card.offset-fan {
-    position: relative;
-    top: auto;
-    left: auto;
+    top: 0;
+    left: calc(var(--i) * var(--fan-offset, 0px));
   }
 
   /* Hover-to-top: when hovering a card in stacked mode, bring it to front */
