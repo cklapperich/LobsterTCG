@@ -1,27 +1,35 @@
 <script lang="ts">
-  import type { CardInstance } from '../../core';
-  import type { PlayingCardTemplate } from '../../plugins/solitaire';
+  import type { CardInstance, CardTemplate } from '../../core';
   import Card from './Card.svelte';
 
   interface Props {
-    cards: CardInstance<PlayingCardTemplate>[];
+    cards: CardInstance<CardTemplate>[];
     stackDirection: 'none' | 'down' | 'right' | 'fan';
     zoneId: string;
+    cardBack?: string;
+    renderFace?: (template: CardTemplate) => { rank?: string; suit?: string; color?: string };
     onDragStart?: (cardInstanceId: string, zoneId: string) => void;
     onDragEnd?: () => void;
-    onPreview?: (card: CardInstance<PlayingCardTemplate>) => void;
+    onPreview?: (card: CardInstance<CardTemplate>) => void;
     onToggleVisibility?: (cardInstanceId: string) => void;
+    onCardDrop?: (droppedCardId: string, targetCardId: string, targetIndex: number) => void;
   }
 
   let {
     cards,
     stackDirection,
     zoneId,
+    cardBack,
+    renderFace,
     onDragStart,
     onDragEnd,
     onPreview,
     onToggleVisibility,
+    onCardDrop,
   }: Props = $props();
+
+  // All cards can be drop targets
+  const isDropTarget = true;
 </script>
 
 <div class="card-stack" class:stack-down={stackDirection === 'down'} class:stack-right={stackDirection === 'right'} class:stack-none={stackDirection === 'none' || stackDirection === 'fan'}>
@@ -36,10 +44,14 @@
         {card}
         index={i}
         {zoneId}
+        {isDropTarget}
+        {cardBack}
+        {renderFace}
         {onDragStart}
         {onDragEnd}
         {onPreview}
         {onToggleVisibility}
+        {onCardDrop}
       />
     </div>
   {/each}
@@ -55,12 +67,10 @@
   }
 
   .stack-down {
-    /* Extend height to accommodate cascading cards */
     min-height: calc(var(--spacing-card-w) * 1.4 + 15rem);
   }
 
   .stack-right {
-    /* Extend width to accommodate spread cards */
     min-width: calc(var(--spacing-card-w) + 10rem);
   }
 

@@ -1,0 +1,254 @@
+<script lang="ts">
+  import type { CardInstance, CardTemplate } from '../../core';
+
+  interface Props {
+    card: CardInstance<CardTemplate>;
+    index: number;
+    draggable?: boolean;
+    zoneId: string;
+    isDropTarget?: boolean;
+    cardBack?: string;
+    // For playing cards without images - render functions
+    renderFace?: (template: CardTemplate) => { rank?: string; suit?: string; color?: string };
+    onDragStart?: (cardInstanceId: string, zoneId: string) => void;
+    onDragEnd?: () => void;
+    onPreview?: (card: CardInstance<CardTemplate>) => void;
+    onToggleVisibility?: (cardInstanceId: string) => void;
+    onCardDrop?: (droppedCardId: string, targetCardId: string, targetIndex: number) => void;
+  }
+
+  let {
+    card,
+    index,
+    draggable = true,
+    zoneId,
+    isDropTarget = false,
+    cardBack,
+    renderFace,
+    onDragStart,
+    onDragEnd,
+    onPreview,
+    onToggleVisibility,
+    onCardDrop,
+  }: Props = $props();
+
+  let isDragging = $state(false);
+  let isDragOver = $state(false);
+
+  const isFaceUp = $derived(card.visibility[0]);
+  const template = $derived(card.template);
+
+  // Get render data if renderFace provided, otherwise use template.imageUrl
+  const faceData = $derived(renderFace ? renderFace(template) : null);
+  const hasImage = $derived(!!template.imageUrl);
+
+  function handleDragStart(event: DragEvent) {
+    if (!draggable) return;
+    isDragging = true;
+    event.dataTransfer?.setData('text/plain', card.instanceId);
+    onDragStart?.(card.instanceId, zoneId);
+  }
+
+  function handleDragEnd() {
+    isDragging = false;
+    onDragEnd?.();
+  }
+
+  function handleClick() {
+    onPreview?.(card);
+  }
+
+  function handleDoubleClick() {
+    onToggleVisibility?.(card.instanceId);
+  }
+
+  function handleDragOver(event: DragEvent) {
+    if (!isDropTarget) return;
+    event.preventDefault();
+    event.stopPropagation();
+    isDragOver = true;
+  }
+
+  function handleDragLeave() {
+    isDragOver = false;
+  }
+
+  function handleDrop(event: DragEvent) {
+    if (!isDropTarget) return;
+    event.preventDefault();
+    event.stopPropagation();
+    isDragOver = false;
+    const droppedCardId = event.dataTransfer?.getData('text/plain');
+    if (droppedCardId && droppedCardId !== card.instanceId) {
+      onCardDrop?.(droppedCardId, card.instanceId, index);
+    }
+  }
+</script>
+
+<button
+  type="button"
+  class="card"
+  class:face-up={isFaceUp}
+  class:face-down={!isFaceUp}
+  class:red={isFaceUp && faceData?.color === 'red'}
+  class:black={isFaceUp && faceData?.color === 'black'}
+  class:dragging={isDragging}
+  class:drop-target={isDragOver}
+  style="--i: {index}"
+  {draggable}
+  ondragstart={handleDragStart}
+  ondragend={handleDragEnd}
+  ondragover={handleDragOver}
+  ondragleave={handleDragLeave}
+  ondrop={handleDrop}
+  onclick={handleClick}
+  ondblclick={handleDoubleClick}
+>
+  {#if isFaceUp}
+    {#if hasImage}
+      <!-- Image-based card face -->
+      <div class="card-face card-image">
+        <img src={template.imageUrl} alt={template.name} />
+      </div>
+    {:else if faceData}
+      <!-- Text-based card face (playing cards) -->
+      <div class="card-face">
+        <div class="corner top-left">
+          <span class="rank">{faceData.rank}</span>
+          <span class="suit">{faceData.suit}</span>
+        </div>
+        <div class="center-suit">{faceData.suit}</div>
+        <div class="corner bottom-right">
+          <span class="rank">{faceData.rank}</span>
+          <span class="suit">{faceData.suit}</span>
+        </div>
+      </div>
+    {:else}
+      <!-- Fallback: just show name -->
+      <div class="card-face card-name">
+        <span>{template.name}</span>
+      </div>
+    {/if}
+  {:else}
+    <div class="card-back">
+      {#if cardBack}
+        <img src={cardBack} alt="Card back" class="back-image" />
+      {:else}
+        <div class="back-pattern"></div>
+      {/if}
+    </div>
+  {/if}
+</button>
+
+<style>
+  @reference "../../app.css";
+
+  .card {
+    @apply w-card-w aspect-[5/7] rounded-lg overflow-hidden p-0 cursor-pointer;
+    @apply transition-all duration-200 border-4 border-gbc-border;
+    @apply max-sm:w-card-w-sm;
+    box-shadow: 0.125rem 0.125rem 0 rgba(0,0,0,0.2);
+    position: relative;
+    user-select: none;
+  }
+
+  .card:hover {
+    @apply z-10;
+    transform: translateY(-0.25rem);
+    box-shadow:
+      0 0.25rem 0 rgba(0,0,0,0.3),
+      0 0 0 0.125rem var(--color-gbc-yellow);
+  }
+
+  .card.dragging {
+    @apply opacity-50;
+    transform: scale(1.05);
+  }
+
+  .card.drop-target {
+    @apply border-gbc-green;
+    box-shadow:
+      0 0.25rem 0 rgba(0,0,0,0.3),
+      0 0 0.5rem var(--color-gbc-green);
+  }
+
+  .card.face-up {
+    @apply bg-gbc-cream;
+  }
+
+  .card.red {
+    color: var(--color-gbc-red);
+  }
+
+  .card.black {
+    color: var(--color-gbc-border);
+  }
+
+  .card-face {
+    @apply w-full h-full relative font-retro;
+  }
+
+  .card-face.card-image {
+    @apply p-0;
+  }
+
+  .card-face.card-image img {
+    @apply w-full h-full object-cover;
+  }
+
+  .card-face.card-name {
+    @apply flex items-center justify-center text-center p-2;
+    font-size: 0.5rem;
+  }
+
+  .corner {
+    @apply absolute flex flex-col items-center leading-tight;
+    font-size: 0.6rem;
+  }
+
+  .corner .rank {
+    font-size: 0.7rem;
+    font-weight: bold;
+  }
+
+  .corner .suit {
+    font-size: 0.6rem;
+  }
+
+  .top-left {
+    @apply top-1 left-1;
+  }
+
+  .bottom-right {
+    @apply bottom-1 right-1;
+    transform: rotate(180deg);
+  }
+
+  .center-suit {
+    @apply absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2;
+    font-size: 2rem;
+  }
+
+  .card.face-down {
+    @apply bg-gbc-blue;
+  }
+
+  .card-back {
+    @apply w-full h-full flex items-center justify-center;
+  }
+
+  .back-image {
+    @apply w-full h-full object-cover;
+  }
+
+  .back-pattern {
+    @apply w-[85%] h-[90%] rounded border-2 border-gbc-cream;
+    background: repeating-linear-gradient(
+      45deg,
+      var(--color-gbc-dark-green),
+      var(--color-gbc-dark-green) 0.25rem,
+      var(--color-gbc-blue) 0.25rem,
+      var(--color-gbc-blue) 0.5rem
+    );
+  }
+</style>

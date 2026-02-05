@@ -51,3 +51,6 @@ export type {
   PlaymatLayout,
   Playmat,
 } from './playmat';
+
+// Game plugin interface
+export type { GamePlugin } from './game-plugin';

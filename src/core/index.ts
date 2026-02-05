@@ -10,6 +10,7 @@ export {
   executeAction,
   getPlayerView,
   makeZoneKey,
+  STAGING_ZONE_CONFIG,
 } from './engine';
 
 // Re-export GameLoop

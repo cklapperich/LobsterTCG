@@ -1,0 +1,205 @@
+<script lang="ts">
+  import { onMount } from 'svelte';
+
+  interface Props {
+    x: number;
+    y: number;
+    zoneId: string;
+    zoneName: string;
+    cardCount: number;
+    onShuffle: () => void;
+    onPeekTop: (count: number) => void;
+    onPeekBottom: (count: number) => void;
+    onArrangeTop: (count: number) => void;
+    onArrangeBottom: (count: number) => void;
+    onClose: () => void;
+  }
+
+  let {
+    x,
+    y,
+    zoneId: _zoneId,
+    zoneName,
+    cardCount,
+    onShuffle,
+    onPeekTop,
+    onPeekBottom,
+    onArrangeTop,
+    onArrangeBottom,
+    onClose,
+  }: Props = $props();
+
+  let menuRef: HTMLDivElement;
+  let activeSubmenu = $state<'peek' | 'arrange' | null>(null);
+
+  // Counts available for peek/arrange
+  const availableCounts = $derived([1, 3, 5, 7].filter(n => n <= cardCount));
+
+  function handleClickOutside(event: MouseEvent) {
+    if (menuRef && !menuRef.contains(event.target as Node)) {
+      onClose();
+    }
+  }
+
+  function handleShuffle() {
+    onShuffle();
+    onClose();
+  }
+
+  function handlePeekTop(count: number) {
+    onPeekTop(count);
+    onClose();
+  }
+
+  function handlePeekBottom(count: number) {
+    onPeekBottom(count);
+    onClose();
+  }
+
+  function handleArrangeTop(count: number) {
+    onArrangeTop(count);
+    onClose();
+  }
+
+  function handleArrangeBottom(count: number) {
+    onArrangeBottom(count);
+    onClose();
+  }
+
+  onMount(() => {
+    document.addEventListener('click', handleClickOutside);
+    return () => {
+      document.removeEventListener('click', handleClickOutside);
+    };
+  });
+</script>
+
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div
+  class="context-menu gbc-panel"
+  bind:this={menuRef}
+  style="left: {x}px; top: {y}px;"
+  oncontextmenu={(e) => e.preventDefault()}
+>
+  <div class="menu-header">{zoneName}</div>
+
+  <button class="menu-item" onclick={handleShuffle} disabled={cardCount < 2}>
+    Shuffle
+  </button>
+
+  <!-- Peek submenu wrapper -->
+  <div
+    class="submenu-wrapper"
+    onmouseenter={() => { activeSubmenu = 'peek'; }}
+  >
+    <div class="menu-item has-submenu" class:open={activeSubmenu === 'peek'}>
+      <span>Peek...</span>
+      <span class="arrow">▶</span>
+    </div>
+
+    {#if activeSubmenu === 'peek' && availableCounts.length > 0}
+      <div class="submenu gbc-panel">
+        <div class="submenu-section">Top</div>
+        {#each availableCounts as count}
+          <button class="menu-item" onclick={() => handlePeekTop(count)}>
+            {count} card{count > 1 ? 's' : ''}
+          </button>
+        {/each}
+
+        <div class="submenu-divider"></div>
+
+        <div class="submenu-section">Bottom</div>
+        {#each availableCounts as count}
+          <button class="menu-item" onclick={() => handlePeekBottom(count)}>
+            {count} card{count > 1 ? 's' : ''}
+          </button>
+        {/each}
+      </div>
+    {/if}
+  </div>
+
+  <!-- Arrange submenu wrapper -->
+  <div
+    class="submenu-wrapper"
+    onmouseenter={() => { activeSubmenu = 'arrange'; }}
+  >
+    <div class="menu-item has-submenu" class:open={activeSubmenu === 'arrange'}>
+      <span>Arrange...</span>
+      <span class="arrow">▶</span>
+    </div>
+
+    {#if activeSubmenu === 'arrange' && availableCounts.length > 0}
+      <div class="submenu gbc-panel">
+        <div class="submenu-section">Top</div>
+        {#each availableCounts as count}
+          <button class="menu-item" onclick={() => handleArrangeTop(count)}>
+            {count} card{count > 1 ? 's' : ''}
+          </button>
+        {/each}
+
+        <div class="submenu-divider"></div>
+
+        <div class="submenu-section">Bottom</div>
+        {#each availableCounts as count}
+          <button class="menu-item" onclick={() => handleArrangeBottom(count)}>
+            {count} card{count > 1 ? 's' : ''}
+          </button>
+        {/each}
+      </div>
+    {/if}
+  </div>
+</div>
+
+<style>
+  @reference "../../app.css";
+
+  .context-menu {
+    @apply fixed min-w-32;
+    @apply p-1;
+    z-index: 9999;
+  }
+
+  .menu-header {
+    @apply text-gbc-yellow text-[0.4rem] text-center py-1 px-2 bg-gbc-border mb-1;
+  }
+
+  .menu-item {
+    @apply block w-full text-left text-[0.5rem] py-1.5 px-2;
+    @apply text-gbc-cream bg-transparent border-none cursor-pointer;
+    @apply hover:bg-gbc-border hover:text-gbc-yellow;
+    @apply disabled:opacity-50 disabled:cursor-not-allowed;
+    transition: background 0.1s, color 0.1s;
+  }
+
+  .menu-item.has-submenu {
+    @apply flex justify-between items-center;
+  }
+
+  .menu-item.has-submenu.open {
+    @apply bg-gbc-border text-gbc-yellow;
+  }
+
+  .menu-item .arrow {
+    @apply text-[0.4rem] ml-2;
+  }
+
+  .submenu-wrapper {
+    @apply relative;
+  }
+
+  .submenu {
+    @apply absolute left-full min-w-24;
+    @apply p-1;
+    bottom: 0;
+    margin-left: 0.25rem;
+    z-index: 10000;
+  }
+
+  .submenu-section {
+    @apply text-gbc-yellow text-[0.35rem] py-0.5 px-2 uppercase tracking-wider;
+  }
+
+  .submenu-divider {
+    @apply h-px bg-gbc-border my-1;
+  }
+</style>

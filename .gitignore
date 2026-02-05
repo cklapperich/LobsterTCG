@@ -4,7 +4,7 @@ card-images/
 # Build output
 dist
 dist-ssr
-
+.temp/
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

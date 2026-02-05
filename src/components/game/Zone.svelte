@@ -1,32 +1,52 @@
 <script lang="ts">
-  import type { Zone as ZoneType, PlaymatSlot, CardInstance } from '../../core';
-  import type { PlayingCardTemplate } from '../../plugins/solitaire';
+  import { onMount } from 'svelte';
+  import type { Zone as ZoneType, PlaymatSlot, CardInstance, CardTemplate } from '../../core';
   import CardStack from './CardStack.svelte';
 
   interface Props {
-    zone: ZoneType<PlayingCardTemplate>;
+    zone: ZoneType<CardTemplate>;
     slot: PlaymatSlot;
-    onDrop?: (cardInstanceId: string, toZoneId: string) => void;
+    cardBack?: string;
+    renderFace?: (template: CardTemplate) => { rank?: string; suit?: string; color?: string };
+    onDrop?: (cardInstanceId: string, toZoneId: string, position?: number) => void;
     onDragStart?: (cardInstanceId: string, zoneId: string) => void;
     onDragEnd?: () => void;
-    onPreview?: (card: CardInstance<PlayingCardTemplate>) => void;
+    onPreview?: (card: CardInstance<CardTemplate>) => void;
     onToggleVisibility?: (cardInstanceId: string) => void;
+    onZoneContextMenu?: (zoneId: string, zoneName: string, cardCount: number, x: number, y: number) => void;
   }
 
   let {
     zone,
     slot,
+    cardBack,
+    renderFace,
     onDrop,
     onDragStart,
     onDragEnd,
     onPreview,
     onToggleVisibility,
+    onZoneContextMenu,
   }: Props = $props();
 
   let isDragOver = $state(false);
 
   const stackDirection = $derived(slot.stackDirection ?? 'none');
   const label = $derived(slot.label ?? zone.config.name);
+
+  let zoneEl: HTMLDivElement;
+
+  onMount(() => {
+    function handleContextMenu(e: MouseEvent) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      onZoneContextMenu?.(slot.zoneId, label, zone.cards.length, e.clientX, e.clientY);
+      return false;
+    }
+    zoneEl.addEventListener('contextmenu', handleContextMenu, { capture: true });
+    return () => zoneEl.removeEventListener('contextmenu', handleContextMenu, { capture: true });
+  });
 
   function handleDragOver(event: DragEvent) {
     event.preventDefault();
@@ -37,14 +57,28 @@
     isDragOver = false;
   }
 
+  // Zone drop = bottom of stack (no position specified = append)
   function handleDrop(event: DragEvent) {
     event.preventDefault();
     isDragOver = false;
     const cardInstanceId = event.dataTransfer?.getData('text/plain');
     if (cardInstanceId) {
+      // Zone background drop always goes to bottom (append)
       onDrop?.(cardInstanceId, slot.zoneId);
     }
   }
+
+  // Card drop behavior depends on stackDirection
+  // - "none": always go to top (position 0)
+  // - others: insert at target card's position (on top of that card)
+  function handleCardDrop(droppedCardId: string, _targetCardId: string, targetIndex: number) {
+    if (stackDirection === 'none') {
+      onDrop?.(droppedCardId, slot.zoneId, 0);
+    } else {
+      onDrop?.(droppedCardId, slot.zoneId, targetIndex);
+    }
+  }
+
 </script>
 
 <div
@@ -52,6 +86,7 @@
   class:drag-over={isDragOver}
   role="region"
   aria-label={label}
+  bind:this={zoneEl}
   ondragover={handleDragOver}
   ondragleave={handleDragLeave}
   ondrop={handleDrop}
@@ -63,10 +98,13 @@
         cards={zone.cards}
         {stackDirection}
         zoneId={slot.zoneId}
+        {cardBack}
+        {renderFace}
         {onDragStart}
         {onDragEnd}
         {onPreview}
         {onToggleVisibility}
+        onCardDrop={handleCardDrop}
       />
     {:else}
       <div class="empty-zone"></div>
@@ -96,6 +134,7 @@
   .zone-label {
     @apply text-gbc-yellow text-[0.4rem] text-center mb-2 py-0.5 px-1 bg-gbc-border inline-block;
     @apply relative left-1/2 -translate-x-1/2;
+    cursor: context-menu;
   }
 
   .zone-content {

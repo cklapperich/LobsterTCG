@@ -1,4 +1,4 @@
-import type { GameState, Playmat } from '../../core';
+import type { GameState, Playmat, GamePlugin } from '../../core';
 import { createGameState, loadDeck } from '../../core';
 import { getSolitairePlaymat, getGameConfig, ZONE_IDS } from './playmat';
 import { STANDARD_DECK, CARD_TEMPLATE_MAP, type PlayingCardTemplate } from './deck';
@@ -62,5 +62,17 @@ export function startSolitaireWithPlaymat(playmat: Playmat): SolitaireGameState 
 
 // Re-exports
 export { getSolitairePlaymat, getGameConfig, ZONE_IDS } from './playmat';
-export { STANDARD_DECK, PLAYING_CARD_TEMPLATES, getTemplate } from './deck';
+export { STANDARD_DECK, PLAYING_CARD_TEMPLATES, getTemplate, getCardBack, renderCardFace, getCardInfo } from './deck';
 export type { PlayingCardTemplate, Suit, Rank } from './deck';
+
+// Import for plugin object
+import { getCardBack, renderCardFace, getCardInfo } from './deck';
+
+// Plugin object conforming to GamePlugin interface
+export const plugin: GamePlugin<PlayingCardTemplate> = {
+  getPlaymat: getSolitairePlaymat,
+  startGame: startSolitaire,
+  getCardBack,
+  renderCardFace,
+  getCardInfo,
+};
