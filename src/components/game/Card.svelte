@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { CardInstance, CardTemplate } from '../../core';
+  import { startDrag, updateDragPosition, endDrag } from './dragState.svelte';
 
   interface Props {
     card: CardInstance<CardTemplate>;
@@ -10,9 +11,6 @@
     cardBack?: string;
     // For playing cards without images - render functions
     renderFace?: (template: CardTemplate) => { rank?: string; suit?: string; color?: string };
-    onDragStart?: (cardInstanceId: string, zoneKey: string, x: number, y: number) => void;
-    onDrag?: (x: number, y: number) => void;
-    onDragEnd?: () => void;
     onPreview?: (card: CardInstance<CardTemplate>) => void;
     onToggleVisibility?: (cardInstanceId: string) => void;
     onCardDrop?: (droppedCardId: string, targetCardId: string, targetIndex: number) => void;
@@ -26,9 +24,6 @@
     isDropTarget = false,
     cardBack,
     renderFace,
-    onDragStart,
-    onDrag,
-    onDragEnd,
     onPreview,
     onToggleVisibility,
     onCardDrop,
@@ -54,19 +49,19 @@
     event.dataTransfer?.setData('text/plain', card.instanceId);
     // Suppress browser's default ghost image with transparent pixel
     event.dataTransfer?.setDragImage(transparentImg, 0, 0);
-    onDragStart?.(card.instanceId, zoneKey, event.clientX, event.clientY);
+    startDrag(card, zoneKey, event.clientX, event.clientY);
   }
 
   function handleDrag(event: DragEvent) {
     // During drag, clientX/Y can be 0 when cursor leaves window - ignore those
     if (event.clientX !== 0 || event.clientY !== 0) {
-      onDrag?.(event.clientX, event.clientY);
+      updateDragPosition(event.clientX, event.clientY);
     }
   }
 
   function handleDragEnd() {
     isDragging = false;
-    onDragEnd?.();
+    endDrag();
   }
 
   function handleClick() {

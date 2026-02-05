@@ -9,9 +9,6 @@
     zoneKey: string;
     cardBack?: string;
     renderFace?: (template: CardTemplate) => { rank?: string; suit?: string; color?: string };
-    onDragStart?: (cardInstanceId: string, zoneKey: string, x: number, y: number) => void;
-    onDrag?: (x: number, y: number) => void;
-    onDragEnd?: () => void;
     onPreview?: (card: CardInstance<CardTemplate>) => void;
     onToggleVisibility?: (cardInstanceId: string) => void;
     onCardDrop?: (droppedCardId: string, targetCardId: string, targetIndex: number) => void;
@@ -24,9 +21,6 @@
     zoneKey,
     cardBack,
     renderFace,
-    onDragStart,
-    onDrag,
-    onDragEnd,
     onPreview,
     onToggleVisibility,
     onCardDrop,
@@ -59,9 +53,6 @@
         {isDropTarget}
         {cardBack}
         {renderFace}
-        {onDragStart}
-        {onDrag}
-        {onDragEnd}
         {onPreview}
         {onToggleVisibility}
         {onCardDrop}

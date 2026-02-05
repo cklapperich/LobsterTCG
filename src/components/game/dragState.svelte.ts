@@ -14,26 +14,19 @@ export interface DragState {
 export const dragStore = $state<{ current: DragState | null }>({ current: null });
 
 export function startDrag(
-  cardInstanceId: string,
+  card: CardInstance<CardTemplate>,
   fromZoneKey: string,
-  gameState: GameState<CardTemplate>,
-  initialX: number,
-  initialY: number
+  x: number,
+  y: number
 ): void {
-  const zone = gameState.zones[fromZoneKey];
-  if (zone) {
-    const card = zone.cards.find((c) => c.instanceId === cardInstanceId);
-    if (card) {
-      dragStore.current = {
-        cardInstanceId,
-        fromZoneKey,
-        originalVisibility: [...card.visibility] as Visibility,
-        card,
-        mouseX: initialX,
-        mouseY: initialY
-      };
-    }
-  }
+  dragStore.current = {
+    cardInstanceId: card.instanceId,
+    fromZoneKey,
+    originalVisibility: [...card.visibility] as Visibility,
+    card,
+    mouseX: x,
+    mouseY: y
+  };
 }
 
 export function updateDragPosition(x: number, y: number): void {
@@ -68,8 +61,6 @@ export function executeDrop(
   const to = parseZoneKey(toZoneKey);
 
   // Execute move action with optional position
-  // Note: moveCard uses a single player index for the action, but zones can be different players
-  // For cross-player moves, we use the source player as the actor
   const action = moveCard(from.playerIndex, cardInstanceId, from.zoneId, to.zoneId, position);
 
   // Manually update zone keys since moveCard assumes same player for both zones

@@ -8,7 +8,7 @@
   import PeekModal from './PeekModal.svelte';
   import ArrangeModal from './ArrangeModal.svelte';
   import DragOverlay from './DragOverlay.svelte';
-  import { dragStore, startDrag, updateDragPosition, endDrag, executeDrop } from './dragState.svelte';
+  import { dragStore, executeDrop } from './dragState.svelte';
 
   // Game state
   let gameState = $state<GameState<CardTemplate> | null>(null);
@@ -58,19 +58,6 @@
       loading = false;
     }
   });
-
-  function handleDragStart(cardInstanceId: string, fromZoneKey: string, x: number, y: number) {
-    if (!gameState) return;
-    startDrag(cardInstanceId, fromZoneKey, gameState, x, y);
-  }
-
-  function handleDrag(x: number, y: number) {
-    updateDragPosition(x, y);
-  }
-
-  function handleDragEnd() {
-    endDrag();
-  }
 
   function handleDrop(cardInstanceId: string, toZoneKey: string, position?: number) {
     if (!gameState) return;
@@ -125,7 +112,9 @@
 
   function handlePeekTop(count: number) {
     if (!contextMenu) return;
-    const cards = getZoneCards(contextMenu.zoneKey).slice(0, count);
+    const zoneCards = getZoneCards(contextMenu.zoneKey);
+    // Last cards in array = highest z-index = visually on TOP
+    const cards = zoneCards.slice(-count);
     peekModal = {
       cards,
       zoneName: contextMenu.zoneName,
@@ -135,8 +124,8 @@
 
   function handlePeekBottom(count: number) {
     if (!contextMenu) return;
-    const zoneCards = getZoneCards(contextMenu.zoneKey);
-    const cards = zoneCards.slice(-count);
+    // First cards in array = lowest z-index = visually at BOTTOM
+    const cards = getZoneCards(contextMenu.zoneKey).slice(0, count);
     peekModal = {
       cards,
       zoneName: contextMenu.zoneName,
@@ -150,7 +139,9 @@
 
   function handleArrangeTop(count: number) {
     if (!contextMenu) return;
-    const cards = getZoneCards(contextMenu.zoneKey).slice(0, count);
+    const zoneCards = getZoneCards(contextMenu.zoneKey);
+    // Last cards in array = highest z-index = visually on TOP
+    const cards = zoneCards.slice(-count);
     arrangeModal = {
       cards,
       zoneKey: contextMenu.zoneKey,
@@ -161,8 +152,8 @@
 
   function handleArrangeBottom(count: number) {
     if (!contextMenu) return;
-    const zoneCards = getZoneCards(contextMenu.zoneKey);
-    const cards = zoneCards.slice(-count);
+    // First cards in array = lowest z-index = visually at BOTTOM
+    const cards = getZoneCards(contextMenu.zoneKey).slice(0, count);
     arrangeModal = {
       cards,
       zoneKey: contextMenu.zoneKey,
@@ -180,11 +171,11 @@
     const count = reorderedCards.length;
 
     if (arrangeModal.position === 'top') {
-      // Replace top N cards with reordered cards
-      zone.cards.splice(0, count, ...reorderedCards as CardInstance<PlayingCardTemplate>[]);
-    } else {
-      // Replace bottom N cards with reordered cards
+      // Replace top N cards (last in array = highest z-index = visually on top)
       zone.cards.splice(-count, count, ...reorderedCards as CardInstance<PlayingCardTemplate>[]);
+    } else {
+      // Replace bottom N cards (first in array = lowest z-index = visually at bottom)
+      zone.cards.splice(0, count, ...reorderedCards as CardInstance<PlayingCardTemplate>[]);
     }
 
     gameState = { ...gameState };
@@ -231,9 +222,6 @@
           {gameState}
           {cardBack}
           onDrop={handleDrop}
-          onDragStart={handleDragStart}
-          onDrag={handleDrag}
-          onDragEnd={handleDragEnd}
           onPreview={handlePreview}
           onToggleVisibility={handleToggleVisibility}
           onZoneContextMenu={handleZoneContextMenu}
