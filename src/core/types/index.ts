@@ -14,7 +14,6 @@ export type {
   DrawAction,
   MoveCardAction,
   MoveCardStackAction,
-  PlayCardAction,
   PlaceOnZoneAction,
   ShuffleAction,
   SearchZoneAction,

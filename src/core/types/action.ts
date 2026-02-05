@@ -30,13 +30,6 @@ export interface MoveCardStackAction extends BaseAction {
   position?: number;
 }
 
-export interface PlayCardAction extends BaseAction {
-  type: 'play_card';
-  cardInstanceId: string;
-  toZone: string;
-  targetInstanceId?: string;
-}
-
 export interface PlaceOnZoneAction extends BaseAction {
   type: 'place_on_zone';
   cardInstanceIds: string[];
@@ -141,7 +134,6 @@ export type Action =
   | DrawAction
   | MoveCardAction
   | MoveCardStackAction
-  | PlayCardAction
   | PlaceOnZoneAction
   | ShuffleAction
   | SearchZoneAction

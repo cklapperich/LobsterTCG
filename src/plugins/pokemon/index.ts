@@ -10,11 +10,7 @@ import {
 } from '../../core';
 import type { GameLoop } from '../../core/game-loop';
 import { createDefaultTools } from '../../core/ai-tools';
-import { toReadableState, resolveCardName } from '../../core/readable';
-import { findCardInZones } from '../../core/engine';
-import {
-  addCounter,
-} from '../../core/action';
+import { toReadableState } from '../../core/readable';
 import { ZONE_IDS, PRIZE_ZONE_IDS } from './zones';
 import type { PokemonCardTemplate } from './cards';
 import {
@@ -205,14 +201,6 @@ function createPokemonTools(
 ): Tool[] {
   const p = playerIndex;
 
-  const submitAndReturn = (action: Parameters<typeof gameLoop.submit>[0]): string => {
-    gameLoop.submit(action);
-    gameLoop.processAll();
-    const state = gameLoop.getState();
-    const readable = toReadableState(state, p);
-    return JSON.stringify(readable);
-  };
-
   // Start with filtered defaults
   const tools = createDefaultTools(gameLoop, p).filter(
     t => !HIDDEN_DEFAULT_TOOLS.has(t.name)
@@ -221,14 +209,13 @@ function createPokemonTools(
   // ── Pokemon-specific tools ──────────────────────────────────
 
   tools.push({
-    name: 'attack',
-    description: 'Use your active Pokemon\'s attack. The attack is executed by name from the active Pokemon\'s available attacks.',
+    name: 'declare_attack',
+    description: 'Declare that your active Pokemon is using an attack. Logs the declaration to the game log.',
     inputSchema: {
       type: 'object' as const,
       properties: {
         attackName: { type: 'string', description: 'Name of the attack to use' },
-        targetCardName: { type: 'string', description: 'Optional: name of a target card (for attacks that target a specific Pokemon)' },
-        targetZoneId: { type: 'string', description: 'Optional: zone of the target card' },
+        targetCardName: { type: 'string', description: 'Optional: name of a target card' },
       },
       required: ['attackName'],
     },
@@ -236,138 +223,46 @@ function createPokemonTools(
       const state = gameLoop.getState();
       const activeKey = makeZoneKey(p, ZONE_IDS.ACTIVE);
       const activeZone = state.zones[activeKey];
-      if (!activeZone || activeZone.cards.length === 0) {
-        return JSON.stringify({ error: 'No active Pokemon' });
-      }
-
-      const activePokemon = activeZone.cards[0];
-      const template = activePokemon.template as PokemonCardTemplate;
-      const attack = template.attacks?.find(a => a.name === input.attackName);
-      if (!attack) {
-        const available = template.attacks?.map(a => a.name).join(', ') ?? 'none';
-        return JSON.stringify({ error: `Attack "${input.attackName}" not found. Available: ${available}` });
-      }
-
-      // Resolve damage to target
-      const damage = parseInt(attack.damage, 10) || 0;
-
-      if (damage > 0) {
-        // Default target is opponent's active Pokemon
-        const opponentIndex: PlayerIndex = p === 0 ? 1 : 0;
-        let targetZoneKey: string;
-        let targetCardId: string;
-
-        if (input.targetCardName && input.targetZoneId) {
-          targetZoneKey = makeZoneKey(opponentIndex, input.targetZoneId as string);
-          targetCardId = resolveCardName(state, input.targetCardName as string, targetZoneKey);
-        } else {
-          targetZoneKey = makeZoneKey(opponentIndex, ZONE_IDS.ACTIVE);
-          const opponentActive = state.zones[targetZoneKey];
-          if (!opponentActive || opponentActive.cards.length === 0) {
-            return JSON.stringify({ error: 'No target Pokemon' });
-          }
-          targetCardId = opponentActive.cards[0].instanceId;
-        }
-
-        // Apply damage as counters (10 damage = 1 counter of type "10")
-        const damageCounters = Math.floor(damage / 10);
-        return submitAndReturn(addCounter(p, targetCardId, '10', damageCounters));
-      }
-
-      // Non-damage attack: log it and return state
-      state.log.push(`${template.name} used ${attack.name}!`);
+      const activeName = activeZone?.cards[0]?.template?.name ?? 'Active Pokemon';
+      const target = input.targetCardName ? ` targeting ${input.targetCardName}` : '';
+      state.log.push(`${activeName} used ${input.attackName}!${target}`);
       const readable = toReadableState(state, p);
       return JSON.stringify(readable);
     },
   });
 
   tools.push({
-    name: 'retreat',
-    description: 'Retreat your active Pokemon to a bench slot, moving a benched Pokemon to active.',
+    name: 'declare_retreat',
+    description: 'Declare that your active Pokemon is retreating. Logs the declaration to the game log.',
     inputSchema: {
       type: 'object' as const,
       properties: {
-        benchZoneId: { type: 'string', description: 'Bench zone to swap with (e.g. "bench_1", "bench_2")' },
+        cardName: { type: 'string', description: 'Name of the Pokemon retreating' },
       },
-      required: ['benchZoneId'],
+      required: ['cardName'],
     },
     async run(input) {
       const state = gameLoop.getState();
-      const activeKey = makeZoneKey(p, ZONE_IDS.ACTIVE);
-      const benchKey = makeZoneKey(p, input.benchZoneId as string);
-
-      const activeZone = state.zones[activeKey];
-      const benchZone = state.zones[benchKey];
-
-      if (!activeZone || activeZone.cards.length === 0) {
-        return JSON.stringify({ error: 'No active Pokemon to retreat' });
-      }
-      if (!benchZone || benchZone.cards.length === 0) {
-        return JSON.stringify({ error: `No Pokemon in ${input.benchZoneId}` });
-      }
-
-      const activeCardId = activeZone.cards[0].instanceId;
-      const benchCardId = benchZone.cards[0].instanceId;
-
-      // Move active to bench, bench to active (two move_card actions)
-      gameLoop.submit(moveCard(p, activeCardId, ZONE_IDS.ACTIVE, input.benchZoneId as string));
-      gameLoop.submit(moveCard(p, benchCardId, input.benchZoneId as string, ZONE_IDS.ACTIVE));
-      gameLoop.processAll();
-
+      state.log.push(`${input.cardName} retreated!`);
       const readable = toReadableState(state, p);
       return JSON.stringify(readable);
     },
   });
 
   tools.push({
-    name: 'attach_energy',
-    description: 'Attach an energy card from your hand to a Pokemon in play.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        energyCardName: { type: 'string', description: 'Name of the energy card in your hand' },
-        targetZoneId: { type: 'string', description: 'Zone of the Pokemon to attach to (e.g. "active", "bench_1")' },
-      },
-      required: ['energyCardName', 'targetZoneId'],
-    },
-    async run(input) {
-      const handKey = makeZoneKey(p, ZONE_IDS.HAND);
-      const cardId = resolveCardName(gameLoop.getState(), input.energyCardName as string, handKey);
-      // Energy attachment is a move from hand to the target zone
-      return submitAndReturn(moveCard(p, cardId, ZONE_IDS.HAND, input.targetZoneId as string));
-    },
-  });
-
-  tools.push({
-    name: 'use_ability',
-    description: 'Use a Pokemon\'s ability. Logs the ability use for the opponent to see.',
+    name: 'declare_ability',
+    description: 'Declare that a Pokemon is using an ability. Logs the declaration to the game log.',
     inputSchema: {
       type: 'object' as const,
       properties: {
         cardName: { type: 'string', description: 'Name of the Pokemon with the ability' },
-        zoneId: { type: 'string', description: 'Zone the Pokemon is in (e.g. "active", "bench_1")' },
         abilityName: { type: 'string', description: 'Name of the ability to use' },
       },
-      required: ['cardName', 'zoneId', 'abilityName'],
+      required: ['cardName', 'abilityName'],
     },
     async run(input) {
       const state = gameLoop.getState();
-      const zoneKey = makeZoneKey(p, input.zoneId as string);
-      const cardId = resolveCardName(state, input.cardName as string, zoneKey);
-      const result = findCardInZones(state, cardId);
-
-      if (!result) {
-        return JSON.stringify({ error: `Card "${input.cardName}" not found` });
-      }
-
-      const template = result.card.template as PokemonCardTemplate;
-      const ability = template.abilities?.find(a => a.name === input.abilityName);
-      if (!ability) {
-        const available = template.abilities?.map(a => a.name).join(', ') ?? 'none';
-        return JSON.stringify({ error: `Ability "${input.abilityName}" not found. Available: ${available}` });
-      }
-
-      state.log.push(`${template.name} used ability: ${ability.name} — ${ability.effect}`);
+      state.log.push(`${input.cardName} used ability: ${input.abilityName}`);
       const readable = toReadableState(state, p);
       return JSON.stringify(readable);
     },

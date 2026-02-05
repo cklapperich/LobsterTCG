@@ -9,7 +9,6 @@ import type {
   DrawAction,
   MoveCardAction,
   MoveCardStackAction,
-  PlayCardAction,
   PlaceOnZoneAction,
   ShuffleAction,
   FlipCardAction,
@@ -339,25 +338,6 @@ function executeMoveCardStack<T extends CardTemplate>(
   }
 }
 
-function executePlayCard<T extends CardTemplate>(
-  state: GameState<T>,
-  action: PlayCardAction
-): void {
-  const hand = getZone(state, 'hand', action.player);
-  const toZone = getZone(state, action.toZone, action.player);
-
-  if (!hand || !toZone) return;
-
-  const card = removeCardFromZone(hand, action.cardInstanceId);
-  if (!card) return;
-
-  // Cards in play are typically public
-  card.visibility = toZone.config.defaultVisibility;
-  card.flags.push('played_this_turn');
-
-  toZone.cards.push(card);
-}
-
 function executePlaceOnZone<T extends CardTemplate>(
   state: GameState<T>,
   action: PlaceOnZoneAction
@@ -600,12 +580,6 @@ function checkZoneCapacity<T extends CardTemplate>(
         return `Move blocked: ${toZone.config.name} is full (${toZone.config.maxCards}/${toZone.config.maxCards} cards)`;
       return null;
     }
-    case 'play_card': {
-      const toZone = getZone(state, action.toZone, action.player);
-      if (toZone && isZoneAtCapacity(toZone))
-        return `Play blocked: ${toZone.config.name} is full (${toZone.config.maxCards}/${toZone.config.maxCards} cards)`;
-      return null;
-    }
     case 'place_on_zone': {
       const zone = getZone(state, action.zoneId, action.player);
       if (zone && isZoneAtCapacity(zone, action.cardInstanceIds.length))
@@ -640,9 +614,6 @@ export function checkOpponentZone<T extends CardTemplate>(
       toZoneId = action.toZone;
       break;
     case 'move_card_stack':
-      toZoneId = action.toZone;
-      break;
-    case 'play_card':
       toZoneId = action.toZone;
       break;
     case 'place_on_zone':
@@ -696,9 +667,6 @@ export function executeAction<T extends CardTemplate>(
       break;
     case 'move_card_stack':
       executeMoveCardStack(state, action);
-      break;
-    case 'play_card':
-      executePlayCard(state, action);
       break;
     case 'place_on_zone':
       executePlaceOnZone(state, action);
