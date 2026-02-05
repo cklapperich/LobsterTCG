@@ -1,4 +1,4 @@
-import type { GameState, Playmat, DeckList, PlayerIndex, CardTemplate, GameConfig, GamePlugin } from '../../core';
+import type { GameState, Playmat, DeckList, PlayerIndex, CardTemplate, GameConfig, GamePlugin, CounterDefinition } from '../../core';
 import {
   createGameState,
   loadDeck,
@@ -16,7 +16,29 @@ import {
   getCardBack,
 } from './cards';
 
+// Import counter images
+import burnImg from './counters/burn.png';
+import poisonImg from './counters/poison.png';
+import damage10Img from './counters/damage-10.png';
+import damage50Img from './counters/damage-50.png';
+import damage100Img from './counters/damage-100.png';
+
 export type PokemonGameState = GameState<PokemonCardTemplate>;
+
+// Pokemon TCG Counter Definitions
+const POKEMON_COUNTERS: CounterDefinition[] = [
+  // Status conditions
+  { id: 'burn', name: 'Burned', imageUrl: burnImg, category: 'status', sortOrder: 1 },
+  { id: 'poison', name: 'Poisoned', imageUrl: poisonImg, category: 'status', sortOrder: 2 },
+  // Damage counters
+  { id: '10', name: '10 Damage', imageUrl: damage10Img, category: 'damage', sortOrder: 1 },
+  { id: '50', name: '50 Damage', imageUrl: damage50Img, category: 'damage', sortOrder: 2 },
+  { id: '100', name: '100 Damage', imageUrl: damage100Img, category: 'damage', sortOrder: 3 },
+];
+
+export function getCounterDefinitions(): CounterDefinition[] {
+  return POKEMON_COUNTERS;
+}
 
 // Cached playmat instance
 let cachedPlaymat: Playmat | null = null;
@@ -149,6 +171,7 @@ export const plugin: GamePlugin<PokemonCardTemplate> = {
   startGame: startPokemonGame,
   getCardInfo,
   getCardBack,
+  getCounterDefinitions,
 };
 
 // Re-exports

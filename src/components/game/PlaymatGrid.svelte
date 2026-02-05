@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Playmat, CardInstance, GameState, CardTemplate } from '../../core';
+  import type { Playmat, CardInstance, GameState, CardTemplate, CounterDefinition } from '../../core';
   import { makeZoneKey } from '../../core';
   import Zone from './Zone.svelte';
 
@@ -7,6 +7,7 @@
     playmat: Playmat;
     gameState: GameState<CardTemplate>;
     cardBack?: string;
+    counterDefinitions?: CounterDefinition[];
     shufflingZoneKey?: string | null;
     shufflePacketStart?: number;
     renderFace?: (template: CardTemplate) => { rank?: string; suit?: string; color?: string };
@@ -14,12 +15,14 @@
     onPreview?: (card: CardInstance<CardTemplate>) => void;
     onToggleVisibility?: (cardInstanceId: string) => void;
     onZoneContextMenu?: (zoneKey: string, zoneName: string, cardCount: number, x: number, y: number) => void;
+    onCounterDrop?: (counterId: string, cardInstanceId: string) => void;
   }
 
   let {
     playmat,
     gameState,
     cardBack,
+    counterDefinitions = [],
     shufflingZoneKey = null,
     shufflePacketStart = -1,
     renderFace,
@@ -27,6 +30,7 @@
     onPreview,
     onToggleVisibility,
     onZoneContextMenu,
+    onCounterDrop,
   }: Props = $props();
 
   const layout = $derived(playmat.layout);
@@ -79,6 +83,7 @@
           {zone}
           {slot}
           {cardBack}
+          {counterDefinitions}
           {renderFace}
           isShuffling={shufflingZoneKey === zone.key}
           {shufflePacketStart}
@@ -86,6 +91,7 @@
           {onPreview}
           {onToggleVisibility}
           {onZoneContextMenu}
+          {onCounterDrop}
         />
       </div>
     {/if}
@@ -102,6 +108,7 @@
         zone={stagingZone}
         slot={{ id: 'staging', zoneId: 'staging', position: { row: layout.rows, col: 0 }, stackDirection: 'down' }}
         {cardBack}
+        {counterDefinitions}
         {renderFace}
         isShuffling={shufflingZoneKey === stagingZone.key}
         {shufflePacketStart}
@@ -109,6 +116,7 @@
         {onPreview}
         {onToggleVisibility}
         {onZoneContextMenu}
+        {onCounterDrop}
       />
     </div>
   {/if}

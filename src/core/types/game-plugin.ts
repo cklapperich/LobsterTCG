@@ -1,6 +1,7 @@
 import type { Playmat } from './playmat';
 import type { GameState } from './game';
 import type { CardTemplate } from './card';
+import type { CounterDefinition } from './counter';
 
 /**
  * Interface for game plugins (Pokemon, Solitaire, etc.)
@@ -19,4 +20,7 @@ export interface GamePlugin<T extends CardTemplate = CardTemplate> {
 
   /** Get card back image URL (optional) */
   getCardBack?(): string;
+
+  /** Get counter definitions for this game (optional) */
+  getCounterDefinitions?(): CounterDefinition[];
 }

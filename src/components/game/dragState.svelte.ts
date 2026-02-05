@@ -89,6 +89,16 @@ export function executeDrop(
   const flipAction = flipCard(from.playerIndex, cardInstanceId, newVisibility);
   executeAction(gameState, flipAction);
 
+  // Clear counters when moving to hand zone
+  if (isHandZone) {
+    // Find the card in the destination zone and clear its counters
+    const toZone = gameState.zones[toZoneKey];
+    const movedCard = toZone?.cards.find(c => c.instanceId === cardInstanceId);
+    if (movedCard) {
+      movedCard.counters = {};
+    }
+  }
+
   // Clear drag state
   dragStore.current = null;
   playSfx('cardDrop');

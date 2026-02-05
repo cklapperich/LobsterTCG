@@ -1,13 +1,21 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Playmat, CardInstance, CardTemplate, GameState } from '../../core';
+  import type { Playmat, CardInstance, CardTemplate, GameState, CounterDefinition } from '../../core';
   import { executeAction, shuffle, VISIBILITY, flipCard, parseZoneKey, endTurn } from '../../core';
   import { plugin } from '../../plugins/pokemon';
   import PlaymatGrid from './PlaymatGrid.svelte';
   import ZoneContextMenu from './ZoneContextMenu.svelte';
   import ArrangeModal from './ArrangeModal.svelte';
   import DragOverlay from './DragOverlay.svelte';
+  import CounterTray from './CounterTray.svelte';
+  import CounterDragOverlay from './CounterDragOverlay.svelte';
   import { dragStore, executeDrop } from './dragState.svelte';
+  import {
+    counterDragStore,
+    executeCounterDrop,
+    executeCounterReturn,
+    clearZoneCounters,
+  } from './counterDragState.svelte';
   import { playSfx } from '../../lib/audio.svelte';
 
   // Game state
@@ -18,6 +26,15 @@
 
   // Reactive drag state from external module
   const dragState = $derived(dragStore.current);
+  const counterDragState = $derived(counterDragStore.current);
+
+  // Counter definitions from plugin
+  const counterDefinitions = $derived<CounterDefinition[]>(plugin.getCounterDefinitions?.() ?? []);
+
+  // Get counter definition by ID
+  function getCounterById(id: string): CounterDefinition | undefined {
+    return counterDefinitions.find((c) => c.id === id);
+  }
 
   // Preview state
   let previewCard = $state<CardInstance<CardTemplate> | null>(null);
@@ -266,6 +283,56 @@
     addLogEntry(`[Player ${currentPlayer + 1}] Ended turn`);
     playSfx('confirm');
   }
+
+  // Counter handlers
+  function handleCounterDrop(counterId: string, cardInstanceId: string) {
+    if (!gameState) return;
+    const updatedState = executeCounterDrop(counterId, cardInstanceId, gameState);
+    if (updatedState) {
+      gameState = updatedState;
+      // Find the card name for logging
+      let cardName = 'Card';
+      for (const zone of Object.values(gameState.zones)) {
+        const card = zone.cards.find((c) => c.instanceId === cardInstanceId);
+        if (card) {
+          cardName = card.template.name;
+          break;
+        }
+      }
+      const counter = getCounterById(counterId);
+      addLogEntry(`Added ${counter?.name ?? counterId} to ${cardName}`);
+    }
+  }
+
+  function handleCounterReturn() {
+    if (!gameState) return;
+    const counterId = counterDragStore.current?.counterId;
+    const sourceCardId = counterDragStore.current?.source;
+    const updatedState = executeCounterReturn(gameState);
+    if (updatedState && sourceCardId && sourceCardId !== 'tray') {
+      gameState = updatedState;
+      // Find the card name for logging
+      let cardName = 'Card';
+      for (const zone of Object.values(gameState.zones)) {
+        const card = zone.cards.find((c) => c.instanceId === sourceCardId);
+        if (card) {
+          cardName = card.template.name;
+          break;
+        }
+      }
+      const counter = getCounterById(counterId ?? '');
+      addLogEntry(`Removed ${counter?.name ?? counterId} from ${cardName}`);
+    }
+  }
+
+  function handleClearCounters() {
+    if (!gameState || !contextMenu) return;
+    const zoneKey = contextMenu.zoneKey;
+    const zoneName = contextMenu.zoneName;
+    gameState = clearZoneCounters(zoneKey, gameState);
+    addLogEntry(`Cleared all counters from ${zoneName}`);
+    playSfx('confirm');
+  }
 </script>
 
 <div class="game-container font-retro bg-gbc-bg min-h-screen w-screen p-4 box-border relative overflow-auto">
@@ -321,12 +388,14 @@
           {playmat}
           {gameState}
           {cardBack}
+          {counterDefinitions}
           {shufflingZoneKey}
           {shufflePacketStart}
           onDrop={handleDrop}
           onPreview={handlePreview}
           onToggleVisibility={handleToggleVisibility}
           onZoneContextMenu={handleZoneContextMenu}
+          onCounterDrop={handleCounterDrop}
         />
       </div>
 
@@ -347,6 +416,13 @@
             <div class="preview-placeholder"></div>
           {/if}
         </div>
+
+        {#if counterDefinitions.length > 0}
+          <CounterTray
+            counters={counterDefinitions}
+            onCounterReturn={handleCounterReturn}
+          />
+        {/if}
 
         <div class="gbc-panel log-panel">
           <div class="text-gbc-yellow text-[0.5rem] text-center mb-2 py-1 px-2 bg-gbc-border">LOG</div>
@@ -372,6 +448,7 @@
       onPeekBottom={(count) => handleCardModal('peek', 'bottom', count)}
       onArrangeTop={(count) => handleCardModal('arrange', 'top', count)}
       onArrangeBottom={(count) => handleCardModal('arrange', 'bottom', count)}
+      onClearCounters={handleClearCounters}
       onClose={closeContextMenu}
     />
   {/if}
@@ -397,6 +474,18 @@
       y={dragState.mouseY}
       {cardBack}
     />
+  {/if}
+
+  <!-- Counter Drag Overlay -->
+  {#if counterDragState}
+    {@const counter = getCounterById(counterDragState.counterId)}
+    {#if counter}
+      <CounterDragOverlay
+        {counter}
+        x={counterDragState.mouseX}
+        y={counterDragState.mouseY}
+      />
+    {/if}
   {/if}
 
   <!-- Coin Flip Modal -->
