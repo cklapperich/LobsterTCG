@@ -3,18 +3,19 @@ import type {
   CardInstance,
   GameState,
   Zone,
-  ZoneConfig,
   PlayerInfo,
   Turn,
-  GameConfig,
   GameResult,
-  Visibility,
+  PlayerIndex,
 } from './types';
 
-// Readable card: template flattened, instanceId replaced with human-readable name
-export type ReadableCard<T extends CardTemplate = CardTemplate> = T & {
-  name: string;  // display name with suffix: "Pikachu", "Pikachu_1", "Pikachu_2"
-  visibility: Visibility;
+/**
+ * Readable card: template fields (minus id/imageUrl) flattened,
+ * with a disambiguated display name. Only produced for cards
+ * visible to the viewing player.
+ */
+export type ReadableCard<T extends CardTemplate = CardTemplate> = Omit<T, 'id' | 'imageUrl' | 'name'> & {
+  name: string;
   orientation?: string;
   status: string[];
   counters: Record<string, number>;
@@ -22,113 +23,175 @@ export type ReadableCard<T extends CardTemplate = CardTemplate> = T & {
   evolutionStack?: ReadableCard<T>[];
 };
 
+/**
+ * Readable zone: total card count plus only the cards
+ * visible to the viewing player.
+ */
 export interface ReadableZone<T extends CardTemplate = CardTemplate> {
-  config: ZoneConfig;
-  owner: 0 | 1;
+  count: number;
   cards: ReadableCard<T>[];
 }
 
 export interface ReadableGameState<T extends CardTemplate = CardTemplate> {
-  id: string;
-  config: GameConfig;
   turnNumber: number;
   activePlayer: 0 | 1;
   zones: Record<string, ReadableZone<T>>;
   players: [PlayerInfo, PlayerInfo];
   currentTurn: Turn;
   result: GameResult | null;
-  startedAt: number;
-  lastActionAt: number;
 }
 
 /**
- * Convert a GameState to a ReadableGameState where card instanceIds
- * are replaced with human-readable template names.
- *
- * Duplicates within the same zone get suffixes: "Pikachu", "Pikachu_1", "Pikachu_2"
+ * Convert a GameState to a ReadableGameState from a specific player's
+ * perspective. Cards the player cannot see are omitted — only their
+ * count is preserved. Template ids, imageUrls, timestamps, and zone
+ * config are all stripped.
  */
 export function toReadableState<T extends CardTemplate>(
-  state: GameState<T>
+  state: GameState<T>,
+  playerIndex: PlayerIndex
 ): ReadableGameState<T> {
   const readableZones: Record<string, ReadableZone<T>> = {};
 
   for (const [zoneKey, zone] of Object.entries(state.zones)) {
-    readableZones[zoneKey] = convertZone(zone);
+    readableZones[zoneKey] = convertZone(zone, playerIndex);
   }
 
   return {
-    id: state.id,
-    config: state.config,
     turnNumber: state.turnNumber,
     activePlayer: state.activePlayer,
     zones: readableZones,
     players: state.players,
     currentTurn: state.currentTurn,
     result: state.result,
-    startedAt: state.startedAt,
-    lastActionAt: state.lastActionAt,
   };
 }
 
-function convertZone<T extends CardTemplate>(zone: Zone<T>): ReadableZone<T> {
-  // Track name occurrences to handle duplicates
-  const nameCount = new Map<string, number>();
+/**
+ * Build a name-disambiguation map for a list of cards.
+ * Returns a Set of template names that need "(templateId)" disambiguation.
+ */
+function findAmbiguousNames<T extends CardTemplate>(cards: CardInstance<T>[]): Set<string> {
+  const nameToTemplateIds = new Map<string, Set<string>>();
+
+  for (const card of cards) {
+    const name = card.template.name;
+    const ids = nameToTemplateIds.get(name);
+    if (ids) {
+      ids.add(card.template.id);
+    } else {
+      nameToTemplateIds.set(name, new Set([card.template.id]));
+    }
+  }
+
+  const ambiguous = new Set<string>();
+  for (const [name, ids] of nameToTemplateIds) {
+    if (ids.size > 1) {
+      ambiguous.add(name);
+    }
+  }
+  return ambiguous;
+}
+
+/**
+ * Compute the display name for a card given the set of ambiguous names.
+ */
+function computeDisplayName<T extends CardTemplate>(
+  card: CardInstance<T>,
+  ambiguousNames: Set<string>
+): string {
+  if (ambiguousNames.has(card.template.name)) {
+    return `${card.template.name} (${card.template.id})`;
+  }
+  return card.template.name;
+}
+
+function convertZone<T extends CardTemplate>(
+  zone: Zone<T>,
+  playerIndex: PlayerIndex
+): ReadableZone<T> {
+  // Only disambiguate among visible cards
+  const visibleCards = zone.cards.filter(c => c.visibility[playerIndex]);
+  const ambiguousNames = findAmbiguousNames(visibleCards);
   const readableCards: ReadableCard<T>[] = [];
 
-  for (const card of zone.cards) {
-    const baseName = card.template.name;
-    const count = nameCount.get(baseName) ?? 0;
-    nameCount.set(baseName, count + 1);
-
-    // First occurrence gets base name, subsequent get _1, _2, etc.
-    const displayName = count === 0 ? baseName : `${baseName}_${count}`;
-
-    readableCards.push(convertCard(card, displayName));
+  for (const card of visibleCards) {
+    const displayName = computeDisplayName(card, ambiguousNames);
+    readableCards.push(convertCard(card, displayName, playerIndex));
   }
 
   return {
-    config: zone.config,
-    owner: zone.owner,
+    count: zone.cards.length,
     cards: readableCards,
   };
 }
 
 function convertCard<T extends CardTemplate>(
   card: CardInstance<T>,
-  name: string
+  name: string,
+  playerIndex: PlayerIndex
 ): ReadableCard<T> {
-  // For attachments and evolution stacks, we create separate name counters
-  const attachments = convertCardList(card.attachments);
+  const attachments = convertCardList(card.attachments, playerIndex);
   const evolutionStack = card.evolutionStack
-    ? convertCardList(card.evolutionStack)
+    ? convertCardList(card.evolutionStack, playerIndex)
     : undefined;
 
+  // Spread template but strip id, imageUrl — display name is the only identifier
+  const { id: _id, imageUrl: _img, ...templateFields } = card.template as T & { imageUrl?: string };
+
   return {
-    ...card.template,
+    ...templateFields,
     name,  // display name overwrites template.name
-    visibility: card.visibility,
     orientation: card.orientation,
     status: card.status,
     counters: card.counters,
     attachments,
     evolutionStack,
-  };
+  } as ReadableCard<T>;
 }
 
 function convertCardList<T extends CardTemplate>(
-  cards: CardInstance<T>[]
+  cards: CardInstance<T>[],
+  playerIndex: PlayerIndex
 ): ReadableCard<T>[] {
-  const nameCount = new Map<string, number>();
+  const visibleCards = cards.filter(c => c.visibility[playerIndex]);
+  const ambiguousNames = findAmbiguousNames(visibleCards);
   const result: ReadableCard<T>[] = [];
 
-  for (const card of cards) {
-    const baseName = card.template.name;
-    const count = nameCount.get(baseName) ?? 0;
-    nameCount.set(baseName, count + 1);
-
-    const displayName = count === 0 ? baseName : `${baseName}_${count}`;
-    result.push(convertCard(card, displayName));
+  for (const card of visibleCards) {
+    const displayName = computeDisplayName(card, ambiguousNames);
+    result.push(convertCard(card, displayName, playerIndex));
   }
 
   return result;
+}
+
+/**
+ * Resolve a readable card name back to an instanceId within a zone.
+ * Uses the same disambiguation logic as convertZone, so display names
+ * produced by toReadableState() round-trip correctly.
+ *
+ * Returns the instanceId of the first card whose computed display name
+ * matches the given cardName. Throws if no match is found.
+ */
+export function resolveCardName<T extends CardTemplate>(
+  state: GameState<T>,
+  cardName: string,
+  zoneKey: string
+): string {
+  const zone = state.zones[zoneKey];
+  if (!zone) {
+    throw new Error(`Zone not found: ${zoneKey}`);
+  }
+
+  const ambiguousNames = findAmbiguousNames(zone.cards);
+
+  for (const card of zone.cards) {
+    const displayName = computeDisplayName(card, ambiguousNames);
+    if (displayName === cardName) {
+      return card.instanceId;
+    }
+  }
+
+  throw new Error(`Card "${cardName}" not found in zone "${zoneKey}"`);
 }

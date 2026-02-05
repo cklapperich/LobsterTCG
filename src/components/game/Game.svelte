@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { Playmat, CardInstance, CardTemplate, GameState, CounterDefinition, DeckList, ZoneConfig } from '../../core';
-  import { executeAction, shuffle, VISIBILITY, flipCard, parseZoneKey, endTurn, loadDeck, getCardName, findCardInZones } from '../../core';
+  import { executeAction, shuffle, VISIBILITY, flipCard, parseZoneKey, endTurn, loadDeck, getCardName, findCardInZones, toReadableState } from '../../core';
   import { plugin, executeSetup, ZONE_IDS } from '../../plugins/pokemon';
   import { getTemplate } from '../../plugins/pokemon/cards';
   import PlaymatGrid from './PlaymatGrid.svelte';
@@ -239,6 +239,17 @@
     onBackToMenu?.();
   }
 
+  // Debug modal
+  let showDebugModal = $state(false);
+  let debugJson = $state('');
+
+  function handleDebug() {
+    if (!gameState) return;
+    const readable = toReadableState(gameState);
+    debugJson = JSON.stringify(readable, null, 2);
+    showDebugModal = true;
+  }
+
   function handleEndTurn() {
     if (!gameState) return;
     const currentPlayer = gameState.activePlayer;
@@ -315,6 +326,9 @@
         disabled={coinFlipRef?.isFlipping()}
       >
         FLIP COIN
+      </button>
+      <button class="gbc-btn text-[0.5rem] py-1 px-3" onclick={handleDebug} disabled={!gameState}>
+        DEBUG
       </button>
       <button class="gbc-btn text-[0.5rem] py-1 px-3" onclick={resetGame}>
         NEW GAME
@@ -451,6 +465,19 @@
     coinBack={plugin.getCoinBack?.() ?? ''}
     onResult={handleCoinResult}
   />
+
+  <!-- Debug Modal -->
+  {#if showDebugModal}
+    <div class="debug-overlay" onclick={() => showDebugModal = false} onkeydown={(e) => e.key === 'Escape' && (showDebugModal = false)} role="button" tabindex="-1">
+      <div class="debug-modal gbc-panel" onclick={(e) => e.stopPropagation()} onkeydown={() => {}} role="dialog" tabindex="-1">
+        <div class="flex items-center justify-between mb-2 py-1 px-2 bg-gbc-border">
+          <span class="text-gbc-yellow text-[0.5rem]">READABLE STATE</span>
+          <button class="gbc-btn text-[0.45rem] py-0.5 px-2" onclick={() => showDebugModal = false}>CLOSE</button>
+        </div>
+        <pre class="debug-json">{debugJson}</pre>
+      </div>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -543,5 +570,20 @@
     width: 18rem;
     aspect-ratio: 5 / 7;
     @apply rounded-xl bg-gbc-border opacity-30;
+  }
+
+  .debug-overlay {
+    @apply fixed inset-0 z-[200] flex items-center justify-center;
+    background: rgba(0, 0, 0, 0.7);
+  }
+
+  .debug-modal {
+    @apply max-w-4xl w-[90vw] max-h-[80vh] flex flex-col;
+  }
+
+  .debug-json {
+    @apply overflow-auto px-3 py-2 text-[0.45rem] text-gbc-light font-retro leading-relaxed whitespace-pre m-0;
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-gbc-green) var(--color-gbc-border);
   }
 </style>

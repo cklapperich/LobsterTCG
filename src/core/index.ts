@@ -39,7 +39,7 @@ export type {
 } from './plugin';
 
 // Re-export readable state conversion
-export { toReadableState } from './readable';
+export { toReadableState, resolveCardName } from './readable';
 export type { ReadableCard, ReadableZone, ReadableGameState } from './readable';
 
 // Re-export playmat loader
