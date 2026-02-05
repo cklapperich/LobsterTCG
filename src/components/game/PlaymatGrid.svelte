@@ -88,7 +88,7 @@
     <div
       class="grid-slot staging-slot"
       class:has-cards={stagingHasCards}
-      style="grid-column: 7 / span 3; grid-row: {layout.rows};"
+      style="grid-column: 9 / span 3; grid-row: {layout.rows};"
     >
       <Zone
         zone={stagingZone}
