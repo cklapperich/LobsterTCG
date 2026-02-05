@@ -27,3 +27,5 @@ re-use or provide a link to, the simpledex deck builder
 # integrate AI agent feature to play against AI
 
 # 'read image' tool for claude
+
+# keyboard / gamepad support
