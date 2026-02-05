@@ -70,7 +70,8 @@
     isDragOver = false;
   }
 
-  // Zone background drop: hands add to end (rightmost), other zones add to bottom (position 0)
+  // Zone background drop: hands add to end (rightmost), other zones add to bottom of visual stack
+  // Array convention: index 0 = visual bottom, end of array = visual top
   function handleDrop(event: DragEvent) {
     event.preventDefault();
     isDragOver = false;
@@ -82,7 +83,7 @@
         // Hand zone: add to end (rightmost position)
         onDrop?.(cardInstanceId, zone.key);
       } else {
-        // Other zones: add to bottom of stack (insert at index 0)
+        // Other zones: add to bottom of visual stack (index 0 = visual bottom)
         onDrop?.(cardInstanceId, zone.key, 0);
       }
     }

@@ -194,15 +194,19 @@ export class PluginManager<T extends CardTemplate = CardTemplate> {
 
   runPreHooks(state: Readonly<GameState<T>>, action: Action): PreHookResult {
     const hooks = this.getPreHooksForAction(action.type);
+    let firstWarn: PreHookResult | null = null;
 
     for (const { hook } of hooks) {
       const result = hook(state, action);
-      if (result.outcome !== 'continue') {
+      if (result.outcome === 'block' || result.outcome === 'replace') {
         return result;
+      }
+      if (result.outcome === 'warn' && !firstWarn) {
+        firstWarn = result;
       }
     }
 
-    return { outcome: 'continue' };
+    return firstWarn ?? { outcome: 'continue' };
   }
 
   runPostHooks(

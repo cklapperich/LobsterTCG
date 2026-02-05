@@ -5,6 +5,7 @@ interface BaseAction {
   type: string;
   player: PlayerIndex;
   allowed_by_effect?: boolean;  // Card effect overrides normal rules
+  source?: 'ui' | 'ai';        // Origin of the action (ui = never blocked by warnings)
 }
 
 // Card Movement Actions

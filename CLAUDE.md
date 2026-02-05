@@ -21,10 +21,19 @@ All game state changes happen via discrete Action objects. `GameLoop` processes 
 Cards have `Visibility = [playerA_sees, playerB_sees]` tuples. `getPlayerView()` filters state per player. Hidden information is preserved in core state but invisible to UI.
 
 ### Plugin Hooks
-Pre-hooks can block or replace actions. Post-hooks emit follow-up actions. State observers watch for changes and generate auto-actions. This enables game-specific rules without modifying core.
+Pre-hooks can block, warn, or replace actions. Post-hooks emit follow-up actions. State observers watch for changes and generate auto-actions. This enables game-specific rules without modifying core.
+
+### Action Source & Warn vs Block
+Actions carry an optional `source?: 'ui' | 'ai'` field. `PreHookResult` supports `warn` in addition to `block`/`replace`/`continue`. Warnings log to `state.log` but never prevent the action. The `blockOrWarn()` helper in `warnings.ts` returns `block` for AI actions and `warn` for UI actions — human players are never blocked by warnings. AI tools in `ai-tools.ts` automatically tag actions with `source: 'ai'`.
 
 ### Zone Keys
 Format: `player{0|1}_{zoneId}` (e.g., "player0_hand"). Parsed/created via `makeZoneKey()` and `parseZoneKey()`.
+
+### Card Array Order
+`zone.cards` array: **index 0 = visual bottom, end of array = visual top.** The last element is the card rendered on top with the highest z-index. `position: 0` inserts underneath all existing cards. `push()` / no position appends to the visual top. This convention is consistent across Zone.svelte drops, CardStack rendering, and warning hooks.
+
+### Shared Zones & Opponent Interaction
+Zones with `config.shared: true` (e.g., stadium) can be interacted with by any player. Non-shared zones are protected by a core engine check (`checkOpponentZone` in engine.ts, enforced in both GameLoop and executeDrop) that warns UI / blocks AI when targeting an opponent's zone. Counter actions (add/remove/set counter) are exempt — placing damage on opponent Pokemon is normal gameplay. Card effects can bypass with `allowed_by_effect: true`.
 
 ### Playmat as JSON Config
 Playmats define visual grid layout separately from game logic. Zones are decoupled from visual slots.
@@ -65,7 +74,7 @@ Tools extract SFX from Pokemon TCG GB ROM using PyBoy emulator. Memory addresses
 | `game-loop.ts` | Turn sequencing with plugin integration. Manages action queues, validation, pre/post hooks, event emission, history tracking. |
 | `action.ts` | Factory functions for all action types: `draw()`, `moveCard()`, `playCard()`, `shuffle()`, `addCounter()`, `coinFlip()`, `endTurn()`, `peek()`, `reveal()`, etc. |
 | `readable.ts` | Converts internal state to human-readable format. `toReadableState()`, `resolveCardName()`. Types: `ReadableCard`, `ReadableZone`, `ReadableGameState`, `ReadableAction`, `ReadableTurn`. |
-| `ai-tools.ts` | AI agent tool factory. `createDefaultTools(gameLoop, playerIndex)` returns Anthropic SDK-compatible tools for all built-in action types. |
+| `ai-tools.ts` | AI agent tool factory. `createDefaultTools(gameLoop, playerIndex)` returns Anthropic SDK-compatible tools for all built-in action types. Tags all actions with `source: 'ai'`. |
 | `playmat-loader.ts` | Fetches and parses playmat JSON files. `loadPlaymat()`, `parsePlaymat()`. |
 | `index.ts` | Barrel re-export of all core modules. |
 
@@ -75,7 +84,7 @@ Tools extract SFX from Pokemon TCG GB ROM using PyBoy emulator. Memory addresses
 |------|---------|
 | `card.ts` | `CardTemplate` (static card def), `CardInstance` (runtime state with visibility, counters, attachments, evolutionStack), `VISIBILITY` constants. |
 | `zone.ts` | `ZoneConfig` (zone rules), `Zone` (runtime zone with cards). |
-| `action.ts` | Discriminated union of all action types (`DrawAction`, `MoveCardAction`, `CoinFlipAction`, etc). |
+| `action.ts` | Discriminated union of all action types (`DrawAction`, `MoveCardAction`, `CoinFlipAction`, etc). `BaseAction` includes `source?: 'ui' \| 'ai'`. |
 | `game.ts` | `GameState`, `GameConfig`, `PlayerInfo`, `Turn`, `GameResult`. |
 | `playmat.ts` | `Playmat`, `PlaymatSlot`, `PlaymatZoneGroup`, `PlaymatLayout`, `PlaymatPosition`. |
 | `counter.ts` | `CounterDefinition` for counter metadata. |
@@ -88,7 +97,7 @@ Tools extract SFX from Pokemon TCG GB ROM using PyBoy emulator. Memory addresses
 
 | File | Purpose |
 |------|---------|
-| `types.ts` | Plugin interface: `PreHookResult`, `PostHookResult`, hooks, observers, blockers, custom action executors. |
+| `types.ts` | Plugin interface: `PreHookResult` (continue/warn/block/replace), `PostHookResult`, hooks, observers, blockers, custom action executors. |
 | `plugin-manager.ts` | Registers plugins, executes hooks with priority, manages state observers. |
 | `index.ts` | Barrel re-export. |
 
@@ -124,7 +133,7 @@ Tools extract SFX from Pokemon TCG GB ROM using PyBoy emulator. Memory addresses
 | `cards.ts` | Card database backed by `cards-western.json`. `PokemonCardTemplate`, `PokemonAttack`, `PokemonAbility`, `POKEMON_TEMPLATE_MAP`, `getTemplate()`, `getCardBack()`, `parsePTCGODeck()`. |
 | `cards-western.json` | Western card database (all sets). Card data including names, images, attacks, abilities, HP, types. |
 | `set-codes.json` | Mapping of Pokemon TCG set names to set code prefixes for image lookup. |
-| `warnings.ts` | Pokemon warnings plugin (validation rules). Exported as `pokemonWarningsPlugin`. |
+| `warnings.ts` | Pokemon warnings plugin (validation rules). Uses `blockOrWarn()` — blocks AI, warns UI. Exported as `pokemonWarningsPlugin`. |
 | `warnings.test.ts` | Tests for Pokemon warnings plugin. |
 | `zones.ts` | Pokemon zone IDs: deck, hand, active, bench_1-5, discard, prize_1-6, lost_zone, stadium. |
 | `decks/*.txt` | PTCGO-format deck lists (brushfire, overgrowth, raindance). |

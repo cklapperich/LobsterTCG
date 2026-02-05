@@ -39,3 +39,7 @@ export function isEnergy(t: PokemonCardTemplate): boolean {
 export function isFieldZone(zoneId: string): boolean {
   return zoneId === 'active' || /^bench_\d+$/.test(zoneId);
 }
+
+export function isStadiumZone(zoneId: string): boolean {
+  return zoneId === 'stadium';
+}

@@ -4,6 +4,7 @@ import type { PluginManager } from './plugin-manager';
 // Hook result types
 export type PreHookResult =
   | { outcome: 'continue' }
+  | { outcome: 'warn'; reason: string }
   | { outcome: 'block'; reason: string }
   | { outcome: 'replace'; action: Action };
 

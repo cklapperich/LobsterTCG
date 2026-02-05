@@ -1,5 +1,5 @@
 import type { CardTemplate, Action, GameState } from './types';
-import { executeAction } from './engine';
+import { executeAction, checkOpponentZone } from './engine';
 import type { PluginManager } from './plugin';
 
 export type GameEventType =
@@ -88,6 +88,18 @@ export class GameLoop<T extends CardTemplate = CardTemplate> {
       }
     }
 
+    // Opponent zone check (game-universal, not plugin-specific)
+    const opponentCheck = checkOpponentZone(this.state, action);
+    if (opponentCheck) {
+      if (opponentCheck.shouldBlock) {
+        this.state.log.push(`Action blocked: ${opponentCheck.reason}`);
+        this.emit('action:blocked', { state: this.state, action, reason: opponentCheck.reason });
+        return;
+      } else {
+        this.state.log.push(`Warning: ${opponentCheck.reason}`);
+      }
+    }
+
     // Standard validation
     if (this.validator) {
       const error = this.validator(this.state, action);
@@ -104,6 +116,9 @@ export class GameLoop<T extends CardTemplate = CardTemplate> {
         this.state.log.push(`Action blocked: ${preResult.reason ?? 'Unknown reason'}`);
         this.emit('action:blocked', { state: this.state, action, reason: preResult.reason });
         return;
+      }
+      if (preResult.outcome === 'warn') {
+        this.state.log.push(`Warning: ${preResult.reason}`);
       }
       if (preResult.outcome === 'replace') {
         const originalAction = action;

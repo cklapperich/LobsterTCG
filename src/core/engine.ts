@@ -618,6 +618,56 @@ function checkZoneCapacity<T extends CardTemplate>(
 }
 
 // ============================================================================
+// Opponent Zone Check
+// ============================================================================
+
+/**
+ * Check if an action targets an opponent's zone. Returns null if allowed,
+ * otherwise returns { shouldBlock, reason }. Counter actions are always
+ * allowed (placing damage on opponent's Pokemon is normal gameplay).
+ * Shared zones (e.g., stadium) are also allowed for any player.
+ */
+export function checkOpponentZone<T extends CardTemplate>(
+  state: GameState<T>,
+  action: Action
+): { shouldBlock: boolean; reason: string } | null {
+  if (action.allowed_by_effect) return null;
+
+  // Only check actions that place/move cards into zones
+  let toZoneId: string | undefined;
+  switch (action.type) {
+    case 'move_card':
+      toZoneId = action.toZone;
+      break;
+    case 'move_card_stack':
+      toZoneId = action.toZone;
+      break;
+    case 'play_card':
+      toZoneId = action.toZone;
+      break;
+    case 'place_on_zone':
+      toZoneId = action.zoneId;
+      break;
+    default:
+      return null;
+  }
+
+  if (!toZoneId) return null;
+  if (action.player === state.activePlayer) return null;
+
+  // Check if the target zone is shared
+  const zoneKey = makeZoneKey(action.player, toZoneId);
+  const zone = state.zones[zoneKey];
+  if (zone?.config.shared) return null;
+
+  const reason = `Cannot move cards to opponent's ${toZoneId}. Set allowed_by_effect if a card effect permits this.`;
+  return {
+    shouldBlock: action.source === 'ai',
+    reason,
+  };
+}
+
+// ============================================================================
 // Main Action Executor
 // ============================================================================
 

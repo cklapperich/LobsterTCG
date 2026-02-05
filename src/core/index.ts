@@ -13,6 +13,7 @@ export {
   parseZoneKey,
   findCardInZones,
   getCardName,
+  checkOpponentZone,
   STAGING_ZONE_CONFIG,
 } from './engine';
 
