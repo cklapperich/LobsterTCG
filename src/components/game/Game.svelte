@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { Playmat, CardInstance, CardTemplate, GameState } from '../../core';
-  import { executeAction, shuffle, VISIBILITY, flipCard, parseZoneKey } from '../../core';
+  import { executeAction, shuffle, VISIBILITY, flipCard, parseZoneKey, endTurn } from '../../core';
   import { plugin } from '../../plugins/pokemon';
   import PlaymatGrid from './PlaymatGrid.svelte';
   import ZoneContextMenu from './ZoneContextMenu.svelte';
@@ -105,7 +105,8 @@
     playSfx(isHeads ? 'coinHeads' : 'coinTails');
 
     // Log the result
-    addLogEntry(`Coin flip: ${isHeads ? 'HEADS' : 'TAILS'}`);
+    const flipPlayer = gameState?.activePlayer ?? 0;
+    addLogEntry(`[Player ${flipPlayer + 1}] Coin flip: ${isHeads ? 'HEADS' : 'TAILS'}`);
 
     // Keep result visible briefly, then reset
     await new Promise(r => setTimeout(r, 800));
@@ -139,9 +140,9 @@
     const updatedState = executeDrop(cardInstanceId, toZoneKey, gameState, position);
     if (updatedState) {
       gameState = updatedState;
-      // Get zone name for logging
-      const { zoneId } = parseZoneKey(toZoneKey);
-      addLogEntry(`Moved ${cardName} to ${zoneId}`);
+      // Get zone name and player for logging
+      const { playerIndex, zoneId } = parseZoneKey(toZoneKey);
+      addLogEntry(`[Player ${playerIndex + 1}] Moved ${cardName} to ${zoneId}`);
     }
   }
 
@@ -158,11 +159,12 @@
         const newVisibility = card.visibility[0]
           ? VISIBILITY.HIDDEN
           : VISIBILITY.PUBLIC;
-        const action = flipCard(0, cardInstanceId, newVisibility);
+        const activePlayer = gameState.activePlayer;
+        const action = flipCard(activePlayer, cardInstanceId, newVisibility);
         executeAction(gameState, action);
         gameState = { ...gameState };
         const flipDirection = newVisibility === VISIBILITY.PUBLIC ? 'face up' : 'face down';
-        addLogEntry(`Flipped ${card.template.name} ${flipDirection}`);
+        addLogEntry(`[Player ${activePlayer + 1}] Flipped ${card.template.name} ${flipDirection}`);
         break;
       }
     }
@@ -208,7 +210,7 @@
     const action = shuffle(playerIndex, zoneId);
     executeAction(gameState, action);
     gameState = { ...gameState };
-    addLogEntry(`Shuffled ${zoneId}`);
+    addLogEntry(`[Player ${playerIndex + 1}] Shuffled ${zoneId}`);
 
     // Clear animation state
     shufflingZoneKey = null;
@@ -254,17 +256,43 @@
       gameLog = ['Game started'];
     });
   }
+
+  function handleEndTurn() {
+    if (!gameState) return;
+    const currentPlayer = gameState.activePlayer;
+    const action = endTurn(currentPlayer);
+    executeAction(gameState, action);
+    gameState = { ...gameState };
+    addLogEntry(`[Player ${currentPlayer + 1}] Ended turn`);
+    playSfx('confirm');
+  }
 </script>
 
 <div class="game-container font-retro bg-gbc-bg min-h-screen w-screen p-4 box-border relative overflow-auto">
   <div class="scanlines"></div>
 
   <header class="gbc-panel text-center mb-4 flex items-center justify-between px-4">
-    <div class="flex-1"></div>
+    <div class="flex-1 flex justify-start">
+      {#if gameState}
+        <div class="turn-info text-[0.5rem]">
+          <span class="text-gbc-light">TURN</span>
+          <span class="text-gbc-yellow ml-1">{gameState.turnNumber}</span>
+          <span class="text-gbc-light ml-2">PLAYER</span>
+          <span class="text-gbc-green ml-1">{gameState.activePlayer + 1}</span>
+        </div>
+      {/if}
+    </div>
     <h1 class="text-gbc-yellow text-xl max-sm:text-sm m-0 tracking-wide title-shadow">
       {playmat?.name ?? 'LOADING...'}
     </h1>
     <div class="flex-1 flex justify-end gap-2">
+      <button
+        class="gbc-btn text-[0.5rem] py-1 px-3"
+        onclick={handleEndTurn}
+        disabled={!gameState}
+      >
+        END TURN
+      </button>
       <button
         class="gbc-btn text-[0.5rem] py-1 px-3"
         onclick={handleCoinFlip}
@@ -411,6 +439,10 @@
     text-shadow:
       0.125rem 0.125rem 0 var(--color-gbc-red),
       0.25rem 0.25rem 0 var(--color-gbc-border);
+  }
+
+  .turn-info {
+    @apply font-retro tracking-wide;
   }
 
   .game-layout {

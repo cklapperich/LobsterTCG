@@ -142,6 +142,10 @@
     width: 100%;
   }
 
+  .grid-slot.hand-zone :global(.empty-zone) {
+    @apply border-0;
+  }
+
   .staging-slot.has-cards :global(.zone) {
     @apply border-gbc-red;
   }
