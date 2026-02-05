@@ -9,13 +9,10 @@ import type {
   DrawAction,
   MoveCardAction,
   PlayCardAction,
-  AttachCardAction,
   PlaceOnZoneAction,
   ShuffleAction,
   FlipCardAction,
   SetOrientationAction,
-  AddStatusAction,
-  RemoveStatusAction,
   AddCounterAction,
   RemoveCounterAction,
   SetCounterAction,
@@ -67,10 +64,8 @@ export function createCardInstance<T extends CardTemplate>(
     template,
     visibility,
     orientation: 'normal',
-    status: [],
+    flags: [],
     counters: {},
-    attachments: [],
-    evolutionStack: [],
   };
 }
 
@@ -232,27 +227,6 @@ export function findCardInZones<T extends CardTemplate>(
     if (index !== -1) {
       return { card: zone.cards[index], zone, index };
     }
-    // Check attachments and evolution stacks
-    for (const card of zone.cards) {
-      const attachmentIndex = card.attachments.findIndex(
-        (a) => a.instanceId === cardInstanceId
-      );
-      if (attachmentIndex !== -1) {
-        return {
-          card: card.attachments[attachmentIndex],
-          zone,
-          index: attachmentIndex,
-        };
-      }
-      if (card.evolutionStack) {
-        const evoIndex = card.evolutionStack.findIndex(
-          (e) => e.instanceId === cardInstanceId
-        );
-        if (evoIndex !== -1) {
-          return { card: card.evolutionStack[evoIndex], zone, index: evoIndex };
-        }
-      }
-    }
   }
   return null;
 }
@@ -352,26 +326,9 @@ function executePlayCard<T extends CardTemplate>(
 
   // Cards in play are typically public
   card.visibility = toZone.config.defaultVisibility;
-  card.status.push('played_this_turn');
+  card.flags.push('played_this_turn');
 
   toZone.cards.push(card);
-}
-
-function executeAttachCard<T extends CardTemplate>(
-  state: GameState<T>,
-  action: AttachCardAction
-): void {
-  const cardResult = findCardInZones(state, action.cardInstanceId);
-  const targetResult = findCardInZones(state, action.targetInstanceId);
-
-  if (!cardResult || !targetResult) return;
-
-  // Remove from current location
-  const removed = removeCardFromZone(cardResult.zone, action.cardInstanceId);
-  if (!removed) return;
-
-  // Attach to target
-  targetResult.card.attachments.push(removed);
 }
 
 function executePlaceOnZone<T extends CardTemplate>(
@@ -429,31 +386,6 @@ function executeSetOrientation<T extends CardTemplate>(
   if (!result) return;
 
   result.card.orientation = action.orientation;
-}
-
-function executeAddStatus<T extends CardTemplate>(
-  state: GameState<T>,
-  action: AddStatusAction
-): void {
-  const result = findCardInZones(state, action.cardInstanceId);
-  if (!result) return;
-
-  if (!result.card.status.includes(action.status)) {
-    result.card.status.push(action.status);
-  }
-}
-
-function executeRemoveStatus<T extends CardTemplate>(
-  state: GameState<T>,
-  action: RemoveStatusAction
-): void {
-  const result = findCardInZones(state, action.cardInstanceId);
-  if (!result) return;
-
-  const index = result.card.status.indexOf(action.status);
-  if (index !== -1) {
-    result.card.status.splice(index, 1);
-  }
 }
 
 function executeAddCounter<T extends CardTemplate>(
@@ -537,12 +469,12 @@ function executeEndTurn<T extends CardTemplate>(
   state.activePlayer = state.activePlayer === 0 ? 1 : 0;
   state.currentTurn = createTurn(state.turnNumber, state.activePlayer);
 
-  // Clear "played_this_turn" status from all cards
+  // Clear "played_this_turn" flag from all cards
   for (const zone of Object.values(state.zones)) {
     for (const card of zone.cards) {
-      const idx = card.status.indexOf('played_this_turn');
+      const idx = card.flags.indexOf('played_this_turn');
       if (idx !== -1) {
-        card.status.splice(idx, 1);
+        card.flags.splice(idx, 1);
       }
     }
   }
@@ -636,9 +568,6 @@ export function executeAction<T extends CardTemplate>(
     case 'play_card':
       executePlayCard(state, action);
       break;
-    case 'attach_card':
-      executeAttachCard(state, action);
-      break;
     case 'place_on_zone':
       executePlaceOnZone(state, action);
       break;
@@ -653,12 +582,6 @@ export function executeAction<T extends CardTemplate>(
       break;
     case 'set_orientation':
       executeSetOrientation(state, action);
-      break;
-    case 'add_status':
-      executeAddStatus(state, action);
-      break;
-    case 'remove_status':
-      executeRemoveStatus(state, action);
       break;
     case 'add_counter':
       executeAddCounter(state, action);
@@ -726,21 +649,10 @@ function filterCardForPlayer<T extends CardTemplate>(
       } as unknown as T,
       visibility: card.visibility,
       orientation: card.orientation,
-      status: [], // Hide status for hidden cards
-      counters: {}, // Hide counters for hidden cards
-      attachments: card.attachments.map((a) => filterCardForPlayer(a, viewingPlayer)),
-      evolutionStack: card.evolutionStack?.map((e) =>
-        filterCardForPlayer(e, viewingPlayer)
-      ),
+      flags: [],
+      counters: {},
     };
   }
 
-  // Card is visible, filter attachments and evolution stack recursively
-  return {
-    ...card,
-    attachments: card.attachments.map((a) => filterCardForPlayer(a, viewingPlayer)),
-    evolutionStack: card.evolutionStack?.map((e) =>
-      filterCardForPlayer(e, viewingPlayer)
-    ),
-  };
+  return { ...card };
 }

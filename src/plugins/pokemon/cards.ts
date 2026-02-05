@@ -5,11 +5,39 @@ import setCodes from './set-codes.json';
 import cardbackImg from './cardback.png';
 
 /**
+ * Attack data from the card database.
+ */
+export interface PokemonAttack {
+  name: string;
+  cost: string[];
+  damage: string;
+  effect?: string;
+}
+
+/**
+ * Ability data from the card database.
+ */
+export interface PokemonAbility {
+  name: string;
+  effect: string;
+  type: string;
+}
+
+/**
  * Pokemon card template extending the base CardTemplate.
+ * Includes game-relevant text from the card database.
  */
 export interface PokemonCardTemplate extends CardTemplate {
-  setId: string;
-  number: number;
+  supertype: string;
+  subtypes: string[];
+  types: string[];
+  hp?: number;
+  attacks?: PokemonAttack[];
+  abilities?: PokemonAbility[];
+  weaknesses?: Array<{ type: string; value: string }>;
+  resistances?: Array<{ type: string; value: string }>;
+  retreatCost?: string[];
+  rules?: string[];
 }
 
 /**
@@ -30,6 +58,16 @@ interface WesternCard {
   setId?: string;
   seriesId?: string;
   images?: CardImage[];
+  supertype?: string;
+  subtypes?: string[];
+  types?: string[];
+  hp?: number;
+  attacks?: PokemonAttack[];
+  abilities?: PokemonAbility[];
+  weaknesses?: Array<{ type: string; value: string }>;
+  resistances?: Array<{ type: string; value: string }>;
+  retreatCost?: string[];
+  rules?: string[];
 }
 
 // Lazy-loaded western card maps
@@ -133,8 +171,23 @@ const BASE_SET_CARDS: Array<{ number: number; name: string }> = [
 ];
 
 /**
+ * Extract game-relevant fields from a western card entry.
+ */
+function extractGameFields(card: WesternCard): Partial<PokemonCardTemplate> {
+  const fields: Partial<PokemonCardTemplate> = {};
+  if (card.hp) fields.hp = card.hp;
+  if (card.attacks?.length) fields.attacks = card.attacks;
+  if (card.abilities?.length) fields.abilities = card.abilities;
+  if (card.weaknesses?.length) fields.weaknesses = card.weaknesses;
+  if (card.resistances?.length) fields.resistances = card.resistances;
+  if (card.retreatCost?.length) fields.retreatCost = card.retreatCost;
+  if (card.rules?.length) fields.rules = card.rules;
+  return fields;
+}
+
+/**
  * Create a Pokemon card template.
- * Uses external image URLs from the western card database.
+ * Pulls image URL and game-relevant text from the western card database.
  */
 function createTemplate(setId: string, number: number, name: string): PokemonCardTemplate {
   ensureWesternCardsLoaded();
@@ -146,8 +199,10 @@ function createTemplate(setId: string, number: number, name: string): PokemonCar
     id: cardId,
     name,
     imageUrl,
-    setId,
-    number,
+    supertype: westernCard?.supertype || 'Pokemon',
+    subtypes: westernCard?.subtypes || [],
+    types: westernCard?.types || [],
+    ...extractGameFields(westernCard!),
   };
 }
 
@@ -177,8 +232,10 @@ export function getTemplate(id: string): PokemonCardTemplate | undefined {
     id: card.id,
     name: card.names.en || Object.values(card.names)[0] || 'Unknown',
     imageUrl: getWesternCardImageUrl(card),
-    setId: card.setId || '',
-    number: parseInt(card.number, 10) || 0,
+    supertype: card.supertype || 'Pokemon',
+    subtypes: card.subtypes || [],
+    types: card.types || [],
+    ...extractGameFields(card),
   };
 }
 

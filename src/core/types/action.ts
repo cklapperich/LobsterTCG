@@ -27,12 +27,6 @@ export interface PlayCardAction extends BaseAction {
   targetInstanceId?: string;
 }
 
-export interface AttachCardAction extends BaseAction {
-  type: 'attach_card';
-  cardInstanceId: string;
-  targetInstanceId: string;
-}
-
 export interface PlaceOnZoneAction extends BaseAction {
   type: 'place_on_zone';
   cardInstanceIds: string[];
@@ -65,18 +59,6 @@ export interface SetOrientationAction extends BaseAction {
   type: 'set_orientation';
   cardInstanceId: string;
   orientation: string;
-}
-
-export interface AddStatusAction extends BaseAction {
-  type: 'add_status';
-  cardInstanceId: string;
-  status: string;
-}
-
-export interface RemoveStatusAction extends BaseAction {
-  type: 'remove_status';
-  cardInstanceId: string;
-  status: string;
 }
 
 // Counter Actions
@@ -149,14 +131,11 @@ export type Action =
   | DrawAction
   | MoveCardAction
   | PlayCardAction
-  | AttachCardAction
   | PlaceOnZoneAction
   | ShuffleAction
   | SearchZoneAction
   | FlipCardAction
   | SetOrientationAction
-  | AddStatusAction
-  | RemoveStatusAction
   | AddCounterAction
   | RemoveCounterAction
   | SetCounterAction

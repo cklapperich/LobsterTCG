@@ -3,68 +3,138 @@ import type {
   CardInstance,
   GameState,
   Zone,
+  Action,
   PlayerInfo,
-  Turn,
   GameResult,
   PlayerIndex,
 } from './types';
 
 /**
- * Readable card: template fields (minus id/imageUrl) flattened,
- * with a disambiguated display name. Only produced for cards
- * visible to the viewing player.
+ * Readable card: template fields (minus id/imageUrl) with a
+ * disambiguated display name. Empty arrays/objects are omitted.
+ * Only produced for cards visible to the viewing player.
  */
-export type ReadableCard<T extends CardTemplate = CardTemplate> = Omit<T, 'id' | 'imageUrl' | 'name'> & {
+export type ReadableCard = {
   name: string;
-  orientation?: string;
-  status: string[];
-  counters: Record<string, number>;
-  attachments: ReadableCard<T>[];
-  evolutionStack?: ReadableCard<T>[];
+  [key: string]: unknown;
 };
 
 /**
  * Readable zone: total card count plus only the cards
  * visible to the viewing player.
  */
-export interface ReadableZone<T extends CardTemplate = CardTemplate> {
+export interface ReadableZone {
   count: number;
-  cards: ReadableCard<T>[];
+  cards: ReadableCard[];
 }
 
-export interface ReadableGameState<T extends CardTemplate = CardTemplate> {
+/**
+ * A readable action where cardInstanceIds have been replaced
+ * with human-readable card names.
+ */
+export type ReadableAction = Record<string, unknown>;
+
+export interface ReadableTurn {
+  number: number;
+  activePlayer: PlayerIndex;
+  actions: ReadableAction[];
+  ended: boolean;
+}
+
+export interface ReadableGameState {
   turnNumber: number;
   activePlayer: 0 | 1;
-  zones: Record<string, ReadableZone<T>>;
+  zones: Record<string, ReadableZone>;
   players: [PlayerInfo, PlayerInfo];
-  currentTurn: Turn;
+  currentTurn: ReadableTurn;
   result: GameResult | null;
 }
 
 /**
  * Convert a GameState to a ReadableGameState from a specific player's
  * perspective. Cards the player cannot see are omitted — only their
- * count is preserved. Template ids, imageUrls, timestamps, and zone
- * config are all stripped.
+ * count is preserved. Template ids, imageUrls, timestamps, zone
+ * config, and empty fields are all stripped. Actions use card names
+ * instead of instanceIds.
  */
 export function toReadableState<T extends CardTemplate>(
   state: GameState<T>,
   playerIndex: PlayerIndex
-): ReadableGameState<T> {
-  const readableZones: Record<string, ReadableZone<T>> = {};
+): ReadableGameState {
+  const readableZones: Record<string, ReadableZone> = {};
 
   for (const [zoneKey, zone] of Object.entries(state.zones)) {
     readableZones[zoneKey] = convertZone(zone, playerIndex);
   }
+
+  // Build instanceId → card name lookup for action conversion
+  const idToName = buildCardNameMap(state);
 
   return {
     turnNumber: state.turnNumber,
     activePlayer: state.activePlayer,
     zones: readableZones,
     players: state.players,
-    currentTurn: state.currentTurn,
+    currentTurn: convertTurn(state.currentTurn, idToName),
     result: state.result,
   };
+}
+
+/**
+ * Build a map from instanceId → card display name for all cards in the game.
+ */
+function buildCardNameMap<T extends CardTemplate>(state: GameState<T>): Map<string, string> {
+  const map = new Map<string, string>();
+
+  // Build disambiguation across ALL zones so names are globally consistent
+  const allCards = Object.values(state.zones).flatMap(z => z.cards);
+  const ambiguousNames = findAmbiguousNames(allCards);
+
+  for (const card of allCards) {
+    map.set(card.instanceId, computeDisplayName(card, ambiguousNames));
+  }
+
+  return map;
+}
+
+/**
+ * Convert a Turn to a ReadableTurn, replacing all instanceIds with card names.
+ */
+function convertTurn(
+  turn: { number: number; activePlayer: PlayerIndex; actions: Action[]; ended: boolean },
+  idToName: Map<string, string>
+): ReadableTurn {
+  return {
+    number: turn.number,
+    activePlayer: turn.activePlayer,
+    actions: turn.actions.map(a => convertAction(a, idToName)),
+    ended: turn.ended,
+  };
+}
+
+/** Keys in action objects that hold card instance IDs. */
+const INSTANCE_ID_KEYS = new Set(['cardInstanceId', 'targetInstanceId']);
+const INSTANCE_ID_ARRAY_KEYS = new Set(['cardInstanceIds']);
+
+/**
+ * Convert an action, replacing instanceId fields with card names.
+ */
+function convertAction(action: Action, idToName: Map<string, string>): ReadableAction {
+  const result: ReadableAction = {};
+
+  for (const [key, value] of Object.entries(action)) {
+    if (INSTANCE_ID_KEYS.has(key) && typeof value === 'string') {
+      const newKey = key.replace('InstanceId', 'Name').replace('instanceId', 'Name');
+      result[newKey] = idToName.get(value) ?? value;
+    } else if (INSTANCE_ID_ARRAY_KEYS.has(key) && Array.isArray(value)) {
+      const newKey = key.replace('InstanceIds', 'Names').replace('instanceIds', 'Names');
+      result[newKey] = value.map(id => idToName.get(id) ?? id);
+    } else {
+      result[key] = value;
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -106,18 +176,20 @@ function computeDisplayName<T extends CardTemplate>(
   return card.template.name;
 }
 
+/** Fields to strip from the template when building readable cards. */
+const STRIP_TEMPLATE_KEYS = new Set(['id', 'imageUrl', 'name']);
+
 function convertZone<T extends CardTemplate>(
   zone: Zone<T>,
   playerIndex: PlayerIndex
-): ReadableZone<T> {
-  // Only disambiguate among visible cards
+): ReadableZone {
   const visibleCards = zone.cards.filter(c => c.visibility[playerIndex]);
   const ambiguousNames = findAmbiguousNames(visibleCards);
-  const readableCards: ReadableCard<T>[] = [];
+  const readableCards: ReadableCard[] = [];
 
   for (const card of visibleCards) {
     const displayName = computeDisplayName(card, ambiguousNames);
-    readableCards.push(convertCard(card, displayName, playerIndex));
+    readableCards.push(convertCard(card, displayName));
   }
 
   return {
@@ -128,42 +200,44 @@ function convertZone<T extends CardTemplate>(
 
 function convertCard<T extends CardTemplate>(
   card: CardInstance<T>,
-  name: string,
-  playerIndex: PlayerIndex
-): ReadableCard<T> {
-  const attachments = convertCardList(card.attachments, playerIndex);
-  const evolutionStack = card.evolutionStack
-    ? convertCardList(card.evolutionStack, playerIndex)
-    : undefined;
+  name: string
+): ReadableCard {
+  const result: ReadableCard = { name };
 
-  // Spread template but strip id, imageUrl — display name is the only identifier
-  const { id: _id, imageUrl: _img, ...templateFields } = card.template as T & { imageUrl?: string };
+  // Copy template fields, skipping stripped keys and empty values
+  for (const [key, value] of Object.entries(card.template)) {
+    if (STRIP_TEMPLATE_KEYS.has(key)) continue;
+    if (isEmptyValue(value)) continue;
+    result[key] = value;
+  }
 
-  return {
-    ...templateFields,
-    name,  // display name overwrites template.name
-    orientation: card.orientation,
-    status: card.status,
-    counters: card.counters,
-    attachments,
-    evolutionStack,
-  } as ReadableCard<T>;
-}
+  // Only include counters if non-empty
+  if (Object.keys(card.counters).length > 0) {
+    result.counters = card.counters;
+  }
 
-function convertCardList<T extends CardTemplate>(
-  cards: CardInstance<T>[],
-  playerIndex: PlayerIndex
-): ReadableCard<T>[] {
-  const visibleCards = cards.filter(c => c.visibility[playerIndex]);
-  const ambiguousNames = findAmbiguousNames(visibleCards);
-  const result: ReadableCard<T>[] = [];
+  // Only include orientation if not default
+  if (card.orientation && card.orientation !== 'normal') {
+    result.orientation = card.orientation;
+  }
 
-  for (const card of visibleCards) {
-    const displayName = computeDisplayName(card, ambiguousNames);
-    result.push(convertCard(card, displayName, playerIndex));
+  // Only include flags if non-empty
+  if (card.flags.length > 0) {
+    result.flags = card.flags;
   }
 
   return result;
+}
+
+/**
+ * Returns true for values that should be omitted from output:
+ * empty arrays, empty objects, null, undefined.
+ */
+function isEmptyValue(value: unknown): boolean {
+  if (value == null) return true;
+  if (Array.isArray(value) && value.length === 0) return true;
+  if (typeof value === 'object' && Object.keys(value as object).length === 0) return true;
+  return false;
 }
 
 /**

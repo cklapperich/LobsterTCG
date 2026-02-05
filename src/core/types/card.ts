@@ -24,8 +24,6 @@ export interface CardInstance<T extends CardTemplate = CardTemplate> {
   template: T;
   visibility: Visibility;
   orientation?: string; // "normal", "tapped", etc.
-  status: string[]; // flags: "played_this_turn", "cant_attack"
+  flags: string[]; // engine flags: "played_this_turn", etc.
   counters: Record<string, number>; // { "damage": 50, "poison": 2 }
-  attachments: CardInstance<T>[]; // energy, tools, etc.
-  evolutionStack?: CardInstance<T>[]; // cards underneath
 }

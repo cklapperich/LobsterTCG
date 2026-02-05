@@ -4,14 +4,11 @@ import type {
   DrawAction,
   MoveCardAction,
   PlayCardAction,
-  AttachCardAction,
   PlaceOnZoneAction,
   ShuffleAction,
   SearchZoneAction,
   FlipCardAction,
   SetOrientationAction,
-  AddStatusAction,
-  RemoveStatusAction,
   AddCounterAction,
   RemoveCounterAction,
   SetCounterAction,
@@ -49,14 +46,6 @@ export function playCard(
   targetInstanceId?: string
 ): PlayCardAction {
   return { type: 'play_card', player, cardInstanceId, toZone, targetInstanceId };
-}
-
-export function attachCard(
-  player: PlayerIndex,
-  cardInstanceId: string,
-  targetInstanceId: string
-): AttachCardAction {
-  return { type: 'attach_card', player, cardInstanceId, targetInstanceId };
 }
 
 export function placeOnZone(
@@ -136,22 +125,6 @@ export function tap(player: PlayerIndex, cardInstanceId: string): SetOrientation
 
 export function untap(player: PlayerIndex, cardInstanceId: string): SetOrientationAction {
   return setOrientation(player, cardInstanceId, 'normal');
-}
-
-export function addStatus(
-  player: PlayerIndex,
-  cardInstanceId: string,
-  status: string
-): AddStatusAction {
-  return { type: 'add_status', player, cardInstanceId, status };
-}
-
-export function removeStatus(
-  player: PlayerIndex,
-  cardInstanceId: string,
-  status: string
-): RemoveStatusAction {
-  return { type: 'remove_status', player, cardInstanceId, status };
 }
 
 export function addCounter(
