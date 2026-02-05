@@ -1,4 +1,6 @@
-import type { CardTemplate, Action, GameState } from './types';
+import type { CardTemplate, Action, GameState, PlayerIndex } from './types';
+import type { ReadableGameState } from './readable';
+import { toReadableState } from './readable';
 import { executeAction, checkOpponentZone } from './engine';
 import type { PluginManager } from './plugin';
 
@@ -224,6 +226,13 @@ export class GameLoop<T extends CardTemplate = CardTemplate> {
 
   getState(): GameState<T> {
     return this.state;
+  }
+
+  getReadableState(playerIndex: PlayerIndex): ReadableGameState {
+    const readable = toReadableState(this.state, playerIndex);
+    return this.pluginManager
+      ? this.pluginManager.applyReadableStateModifier(readable)
+      : readable;
   }
 
   getHistory(): { states: GameState<T>[]; actions: Action[] } {

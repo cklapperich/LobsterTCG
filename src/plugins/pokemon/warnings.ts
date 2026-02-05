@@ -12,6 +12,7 @@ import {
   isFieldZone,
   isStadiumZone,
 } from './helpers';
+import type { ReadableGameState } from '../../core/readable';
 
 type PokemonState = Readonly<GameState<PokemonCardTemplate>>;
 
@@ -373,10 +374,45 @@ function warnStadiumOnly(state: PokemonState, action: Action): PreHookResult {
   return blockOrWarn(action, `Cannot place ${template.name} (${template.supertype}) in stadium zone. Only Stadium cards can be placed there. Set allowed_by_effect if a card effect permits this.`);
 }
 
+// ── Readable State Modifier ──────────────────────────────────────
+
+/** Damage counter IDs and their point values. */
+const DAMAGE_COUNTER_VALUES: Record<string, number> = { '10': 10, '50': 50, '100': 100 };
+
+/**
+ * Modify readable state for Pokemon TCG:
+ * - Compute totalDamage from damage counters (10/50/100)
+ * - Convert retreatCost from string[] to integer (count)
+ */
+export function modifyReadableState(
+  readable: ReadableGameState,
+): ReadableGameState {
+  for (const zone of Object.values(readable.zones)) {
+    for (const card of zone.cards) {
+      // Auto-count total damage from damage counters
+      const counters = card.counters as Record<string, number> | undefined;
+      if (counters) {
+        let total = 0;
+        for (const [id, value] of Object.entries(DAMAGE_COUNTER_VALUES)) {
+          if (counters[id]) total += counters[id] * value;
+        }
+        if (total > 0) card.totalDamage = total;
+      }
+
+      // Convert retreatCost from list to integer
+      if (Array.isArray(card.retreatCost)) {
+        card.retreatCost = card.retreatCost.length;
+      }
+    }
+  }
+  return readable;
+}
+
 export const pokemonWarningsPlugin: Plugin<PokemonCardTemplate> = {
   id: 'pokemon-warnings',
   name: 'Pokemon TCG Warnings',
   version: '1.0.0',
+  readableStateModifier: modifyReadableState,
   preHooks: {
     'move_card': [
       { hook: warnOneSupporter, priority: 100 },

@@ -135,7 +135,7 @@ Tools extract SFX from Pokemon TCG GB ROM using PyBoy emulator. Memory addresses
 | `set-codes.json` | Mapping of Pokemon TCG set names to set code prefixes for image lookup. |
 | `warnings.ts` | Pokemon warnings plugin (validation rules). Uses `blockOrWarn()` — blocks AI, warns UI. Exported as `pokemonWarningsPlugin`. |
 | `warnings.test.ts` | Tests for Pokemon warnings plugin. |
-| `zones.ts` | Pokemon zone IDs: deck, hand, active, bench_1-5, discard, prize_1-6, lost_zone, stadium. |
+| `zones.ts` | Pokemon zone IDs: deck, hand, active, bench_1-5, discard, prizes, lost_zone, stadium. |
 | `decks/*.txt` | PTCGO-format deck lists (brushfire, overgrowth, raindance). |
 | `counters/*.png` | Counter images: burn, poison, damage-10/50/100. |
 | `cardback.png` | Pokemon card back image. |
