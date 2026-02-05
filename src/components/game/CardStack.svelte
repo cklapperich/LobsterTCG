@@ -30,7 +30,7 @@
   const isDropTarget = true;
 
   // Dynamic layout: switch fan to right stacking when too many cards
-  const FAN_THRESHOLD = 7;
+  const FAN_THRESHOLD = 8;
   const effectiveDirection = $derived(
     stackDirection === 'fan' && cards.length > FAN_THRESHOLD ? 'right' : stackDirection
   );

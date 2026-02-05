@@ -62,8 +62,10 @@
   {#each layout.slots as slot (slot.id)}
     {@const zone = getZone(slot)}
     {#if zone}
+      {@const isHandZone = slot.zoneId === 'hand'}
       <div
         class="grid-slot"
+        class:hand-zone={isHandZone}
         style="
           grid-column: {slot.position.col + 1} / span {slot.position.colSpan ?? 1};
           grid-row: {slot.position.row + 1} / span {slot.position.rowSpan ?? 1};
@@ -118,6 +120,18 @@
 
   .grid-slot {
     @apply flex justify-center items-start;
+  }
+
+  .grid-slot.hand-zone {
+    @apply justify-start;
+  }
+
+  .grid-slot.hand-zone :global(.zone) {
+    width: 100%;
+  }
+
+  .grid-slot.hand-zone :global(.zone-content) {
+    width: 100%;
   }
 
   .staging-slot.has-cards :global(.zone) {
