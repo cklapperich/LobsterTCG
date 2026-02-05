@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { Playmat, CardInstance, CardTemplate, GameState, CounterDefinition, DeckList, ZoneConfig } from '../../core';
-  import { executeAction, shuffle, VISIBILITY, flipCard, parseZoneKey, endTurn, loadDeck } from '../../core';
+  import { executeAction, shuffle, VISIBILITY, flipCard, parseZoneKey, endTurn, loadDeck, getCardName, findCardInZones } from '../../core';
   import { plugin, executeSetup, ZONE_IDS } from '../../plugins/pokemon';
   import { getTemplate } from '../../plugins/pokemon/cards';
   import PlaymatGrid from './PlaymatGrid.svelte';
@@ -10,6 +10,7 @@
   import DragOverlay from './DragOverlay.svelte';
   import CounterTray from './CounterTray.svelte';
   import CounterDragOverlay from './CounterDragOverlay.svelte';
+  import CoinFlip from './CoinFlip.svelte';
   import { dragStore, executeDrop } from './dragState.svelte';
   import {
     counterDragStore,
@@ -18,6 +19,9 @@
     clearZoneCounters,
   } from './counterDragState.svelte';
   import { playSfx } from '../../lib/audio.svelte';
+  import { gameLogStore, addLogEntry, resetLog } from './gameLog.svelte';
+  import { contextMenuStore, openContextMenu, closeContextMenu as closeContextMenuStore } from './contextMenu.svelte';
+  import { cardModalStore, openCardModal, closeCardModal as closeCardModalStore } from './cardModal.svelte';
 
   // Props
   interface Props {
@@ -49,13 +53,9 @@
   // Preview state
   let previewCard = $state<CardInstance<CardTemplate> | null>(null);
 
-  // Game log state
-  let gameLog = $state<string[]>([]);
+  // Game log - use store, keep DOM ref for scrolling
+  const gameLog = $derived(gameLogStore.entries);
   let logContainer = $state<HTMLDivElement | null>(null);
-
-  function addLogEntry(message: string) {
-    gameLog = [...gameLog, message];
-  }
 
   // Auto-scroll log to bottom when new entries are added
   $effect(() => {
@@ -64,81 +64,24 @@
     }
   });
 
-  // Context menu state
-  let contextMenu = $state<{
-    zoneKey: string;
-    zoneName: string;
-    cardCount: number;
-    zoneConfig: ZoneConfig;
-    x: number;
-    y: number;
-  } | null>(null);
+  // Context menu - use store
+  const contextMenu = $derived(contextMenuStore.current);
 
-  // Shuffle animation state
-  let shufflingZoneKey = $state<string | null>(null);
-  let shufflePacketStart = $state(-1);
-  const PACKET_SIZE = 12;
-  const SHUFFLE_REPS = 4;
+  // Card modal - use store
+  const cardModal = $derived(cardModalStore.current);
 
-  // Card modal state (unified for peek and arrange)
-  let cardModal = $state<{
-    cards: CardInstance<CardTemplate>[];
-    zoneKey: string;
-    zoneName: string;
-    position: 'top' | 'bottom' | 'all';
-    mode: 'peek' | 'arrange';
-  } | null>(null);
+  // PlaymatGrid ref for shuffle
+  let playmatGridRef: PlaymatGrid | undefined = $state();
 
   // Card back from plugin
   const cardBack = plugin.getCardBack?.() ?? '';
 
-  // Coin images from plugin
-  const coinFront = plugin.getCoinFront?.() ?? '';
-  const coinBackImg = plugin.getCoinBack?.() ?? '';
+  // CoinFlip component reference
+  let coinFlipRef: CoinFlip | undefined = $state();
 
-  // Coin flip state
-  let coinFlipping = $state(false);
-  let coinResult = $state<'heads' | 'tails' | null>(null);
-  let coinShowingFront = $state(true);
-
-  async function handleCoinFlip() {
-    if (coinFlipping) return;
-
-    // Reset state and start animation
-    coinFlipping = true;
-    coinResult = null;
-
-    // Play initial toss sound
-    playSfx('coinToss');
-
-    // Determine result randomly
-    const isHeads = Math.random() < 0.5;
-
-    // Animate several flips (12 half-rotations over ~1.5 seconds)
-    const flipCount = 12;
-    const baseDelay = 80;
-
-    for (let i = 0; i < flipCount; i++) {
-      coinShowingFront = !coinShowingFront;
-      // Slow down towards the end
-      const delay = baseDelay + (i > flipCount - 4 ? (i - (flipCount - 4)) * 40 : 0);
-      await new Promise(r => setTimeout(r, delay));
-    }
-
-    // Set final result
-    coinResult = isHeads ? 'heads' : 'tails';
-    coinShowingFront = isHeads;
-
-    // Play result sound
-    playSfx(isHeads ? 'coinHeads' : 'coinTails');
-
-    // Log the result
+  function handleCoinResult(result: 'heads' | 'tails') {
     const flipPlayer = gameState?.activePlayer ?? 0;
-    addLogEntry(`[Player ${flipPlayer + 1}] Coin flip: ${isHeads ? 'HEADS' : 'TAILS'}`);
-
-    // Keep result visible briefly, then reset
-    await new Promise(r => setTimeout(r, 800));
-    coinFlipping = false;
+    addLogEntry(`[Player ${flipPlayer + 1}] Coin flip: ${result === 'heads' ? 'HEADS' : 'TAILS'}`);
   }
 
   onMount(async () => {
@@ -155,7 +98,7 @@
       executeSetup(gameState, 1);
 
       gameState = { ...gameState };
-      gameLog = ['Game started'];
+      resetLog('Game started');
       loading = false;
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to load game';
@@ -166,20 +109,10 @@
   function handleDrop(cardInstanceId: string, toZoneKey: string, position?: number) {
     if (!gameState) return;
 
-    // Find the card and source zone for logging
-    let cardName = 'Card';
-    for (const zone of Object.values(gameState.zones)) {
-      const card = zone.cards.find((c) => c.instanceId === cardInstanceId);
-      if (card) {
-        cardName = card.template.name;
-        break;
-      }
-    }
-
+    const cardName = getCardName(gameState, cardInstanceId);
     const updatedState = executeDrop(cardInstanceId, toZoneKey, gameState, position);
     if (updatedState) {
       gameState = updatedState;
-      // Get zone name and player for logging
       const { playerIndex, zoneId } = parseZoneKey(toZoneKey);
       addLogEntry(`[Player ${playerIndex + 1}] Moved ${cardName} to ${zoneId}`);
     }
@@ -192,35 +125,30 @@
   function handleToggleVisibility(cardInstanceId: string) {
     if (!gameState) return;
 
-    for (const zone of Object.values(gameState.zones)) {
-      const card = zone.cards.find((c) => c.instanceId === cardInstanceId);
-      if (card) {
-        const newVisibility = card.visibility[0]
-          ? VISIBILITY.HIDDEN
-          : VISIBILITY.PUBLIC;
-        const activePlayer = gameState.activePlayer;
-        const action = flipCard(activePlayer, cardInstanceId, newVisibility);
-        executeAction(gameState, action);
-        gameState = { ...gameState };
-        const flipDirection = newVisibility === VISIBILITY.PUBLIC ? 'face up' : 'face down';
-        addLogEntry(`[Player ${activePlayer + 1}] Flipped ${card.template.name} ${flipDirection}`);
-        break;
-      }
-    }
+    const result = findCardInZones(gameState, cardInstanceId);
+    if (!result) return;
+
+    const { card } = result;
+    const newVisibility = card.visibility[0] ? VISIBILITY.HIDDEN : VISIBILITY.PUBLIC;
+    const activePlayer = gameState.activePlayer;
+    executeAction(gameState, flipCard(activePlayer, cardInstanceId, newVisibility));
+    gameState = { ...gameState };
+    const flipDirection = newVisibility === VISIBILITY.PUBLIC ? 'face up' : 'face down';
+    addLogEntry(`[Player ${activePlayer + 1}] Flipped ${card.template.name} ${flipDirection}`);
   }
 
   // Context menu handlers
   function handleZoneContextMenu(zoneKey: string, zoneName: string, cardCount: number, zoneConfig: ZoneConfig, x: number, y: number) {
-    contextMenu = { zoneKey, zoneName, cardCount, zoneConfig, x, y };
+    openContextMenu({ zoneKey, zoneName, cardCount, zoneConfig, x, y });
   }
 
-  function closeContextMenu() {
+  function handleCloseContextMenu() {
     playSfx('cancel');
-    contextMenu = null;
+    closeContextMenuStore();
   }
 
   async function handleShuffle() {
-    if (!gameState || !contextMenu) return;
+    if (!gameState || !contextMenu || !playmatGridRef) return;
 
     const zoneKey = contextMenu.zoneKey;
     const zone = gameState.zones[zoneKey];
@@ -229,30 +157,15 @@
     // Play shuffle sound
     playSfx('shuffle');
 
-    // Start animation
-    shufflingZoneKey = zoneKey;
+    // Run animation via PlaymatGrid
+    await playmatGridRef.shuffleZone(zoneKey);
 
-    // Do multiple overhand motions
-    for (let rep = 0; rep < SHUFFLE_REPS; rep++) {
-      // Mark which cards are in the current packet (top cards)
-      shufflePacketStart = Math.max(0, zone.cards.length - PACKET_SIZE);
-
-      // Wait for animation
-      await new Promise(r => setTimeout(r, 300));
-
-      shufflePacketStart = -1;
-      await new Promise(r => setTimeout(r, 100)); // Brief pause between reps
-    }
-
-    // Execute actual shuffle
+    // Execute actual shuffle after animation completes
     const { playerIndex, zoneId } = parseZoneKey(zoneKey);
     const action = shuffle(playerIndex, zoneId);
     executeAction(gameState, action);
     gameState = { ...gameState };
     addLogEntry(`[Player ${playerIndex + 1}] Shuffled ${zoneId}`);
-
-    // Clear animation state
-    shufflingZoneKey = null;
   }
 
   function handleCardModal(mode: 'peek' | 'arrange', position: 'top' | 'bottom', count: number) {
@@ -260,21 +173,21 @@
     const zoneCards = gameState.zones[contextMenu.zoneKey]?.cards ?? [];
     // top = last cards in array (highest z-index), bottom = first cards
     const cards = position === 'top' ? zoneCards.slice(-count) : zoneCards.slice(0, count);
-    cardModal = { cards, zoneKey: contextMenu.zoneKey, zoneName: contextMenu.zoneName, position, mode };
+    openCardModal({ cards, zoneKey: contextMenu.zoneKey, zoneName: contextMenu.zoneName, position, mode });
   }
 
   function handleViewAll() {
     if (!contextMenu || !gameState) return;
     const zoneCards = gameState.zones[contextMenu.zoneKey]?.cards ?? [];
     if (zoneCards.length === 0) return;
-    cardModal = { cards: [...zoneCards], zoneKey: contextMenu.zoneKey, zoneName: contextMenu.zoneName, position: 'all', mode: 'peek' };
+    openCardModal({ cards: [...zoneCards], zoneKey: contextMenu.zoneKey, zoneName: contextMenu.zoneName, position: 'all', mode: 'peek' });
   }
 
   function handleArrangeAll() {
     if (!contextMenu || !gameState) return;
     const zoneCards = gameState.zones[contextMenu.zoneKey]?.cards ?? [];
     if (zoneCards.length < 2) return;
-    cardModal = { cards: [...zoneCards], zoneKey: contextMenu.zoneKey, zoneName: contextMenu.zoneName, position: 'all', mode: 'arrange' };
+    openCardModal({ cards: [...zoneCards], zoneKey: contextMenu.zoneKey, zoneName: contextMenu.zoneName, position: 'all', mode: 'arrange' });
   }
 
   function handleCardModalConfirm(reorderedCards: CardInstance<CardTemplate>[]) {
@@ -295,12 +208,12 @@
     }
 
     gameState = { ...gameState };
-    cardModal = null;
+    closeCardModalStore();
   }
 
-  function closeCardModal() {
+  function handleCloseCardModal() {
     playSfx('cancel');
-    cardModal = null;
+    closeCardModalStore();
   }
 
   function resetGame() {
@@ -315,9 +228,9 @@
 
       gameState = state;
       previewCard = null;
-      contextMenu = null;
-      cardModal = null;
-      gameLog = ['Game started'];
+      closeContextMenuStore();
+      closeCardModalStore();
+      resetLog('Game started');
     });
   }
 
@@ -342,15 +255,7 @@
     const updatedState = executeCounterDrop(counterId, cardInstanceId, gameState);
     if (updatedState) {
       gameState = updatedState;
-      // Find the card name for logging
-      let cardName = 'Card';
-      for (const zone of Object.values(gameState.zones)) {
-        const card = zone.cards.find((c) => c.instanceId === cardInstanceId);
-        if (card) {
-          cardName = card.template.name;
-          break;
-        }
-      }
+      const cardName = getCardName(gameState, cardInstanceId);
       const counter = getCounterById(counterId);
       addLogEntry(`Added ${counter?.name ?? counterId} to ${cardName}`);
     }
@@ -363,15 +268,7 @@
     const updatedState = executeCounterReturn(gameState);
     if (updatedState && sourceCardId && sourceCardId !== 'tray') {
       gameState = updatedState;
-      // Find the card name for logging
-      let cardName = 'Card';
-      for (const zone of Object.values(gameState.zones)) {
-        const card = zone.cards.find((c) => c.instanceId === sourceCardId);
-        if (card) {
-          cardName = card.template.name;
-          break;
-        }
-      }
+      const cardName = getCardName(gameState, sourceCardId);
       const counter = getCounterById(counterId ?? '');
       addLogEntry(`Removed ${counter?.name ?? counterId} from ${cardName}`);
     }
@@ -414,8 +311,8 @@
       </button>
       <button
         class="gbc-btn text-[0.5rem] py-1 px-3"
-        onclick={handleCoinFlip}
-        disabled={coinFlipping}
+        onclick={() => coinFlipRef?.flip()}
+        disabled={coinFlipRef?.isFlipping()}
       >
         FLIP COIN
       </button>
@@ -442,12 +339,11 @@
     <div class="game-layout">
       <div class="playmat-area">
         <PlaymatGrid
+          bind:this={playmatGridRef}
           {playmat}
           {gameState}
           {cardBack}
           {counterDefinitions}
-          {shufflingZoneKey}
-          {shufflePacketStart}
           onDrop={handleDrop}
           onPreview={handlePreview}
           onToggleVisibility={handleToggleVisibility}
@@ -509,7 +405,7 @@
       onViewAll={handleViewAll}
       onArrangeAll={handleArrangeAll}
       onClearCounters={handleClearCounters}
-      onClose={closeContextMenu}
+      onClose={handleCloseContextMenu}
     />
   {/if}
 
@@ -522,7 +418,7 @@
       mode={cardModal.mode}
       {cardBack}
       onConfirm={handleCardModalConfirm}
-      onClose={closeCardModal}
+      onClose={handleCloseCardModal}
     />
   {/if}
 
@@ -549,25 +445,12 @@
   {/if}
 
   <!-- Coin Flip Modal -->
-  {#if coinFlipping}
-    <div class="coin-modal-overlay">
-      <div class="coin-modal">
-        <div class="coin-container" class:showing-result={coinResult !== null}>
-          <img
-            src={coinShowingFront ? coinFront : coinBackImg}
-            alt="Coin"
-            class="coin-image"
-            class:flipping={coinResult === null}
-          />
-        </div>
-        {#if coinResult}
-          <div class="coin-result text-gbc-yellow text-lg mt-4">
-            {coinResult === 'heads' ? 'HEADS!' : 'TAILS!'}
-          </div>
-        {/if}
-      </div>
-    </div>
-  {/if}
+  <CoinFlip
+    bind:this={coinFlipRef}
+    coinFront={plugin.getCoinFront?.() ?? ''}
+    coinBack={plugin.getCoinBack?.() ?? ''}
+    onResult={handleCoinResult}
+  />
 </div>
 
 <style>
@@ -660,60 +543,5 @@
     width: 18rem;
     aspect-ratio: 5 / 7;
     @apply rounded-xl bg-gbc-border opacity-30;
-  }
-
-  .coin-modal-overlay {
-    @apply fixed inset-0 z-50 flex items-center justify-center;
-    background: rgba(0, 0, 0, 0.7);
-  }
-
-  .coin-modal {
-    @apply flex flex-col items-center justify-center p-8;
-  }
-
-  .coin-container {
-    @apply relative;
-    perspective: 1000px;
-  }
-
-  .coin-image {
-    width: 12rem;
-    height: 12rem;
-    @apply rounded-full object-cover;
-    box-shadow: 0 0.5rem 2rem rgba(0, 0, 0, 0.5);
-  }
-
-  .coin-image.flipping {
-    animation: coin-flip 0.15s linear infinite;
-  }
-
-  .coin-container.showing-result .coin-image {
-    animation: coin-land 0.3s ease-out forwards;
-  }
-
-  .coin-result {
-    @apply font-retro tracking-wider;
-    text-shadow:
-      0.125rem 0.125rem 0 var(--color-gbc-red),
-      0.25rem 0.25rem 0 var(--color-gbc-border);
-    animation: result-pop 0.3s ease-out;
-  }
-
-  @keyframes coin-flip {
-    0% { transform: rotateY(0deg) scale(1); }
-    50% { transform: rotateY(90deg) scale(1.1); }
-    100% { transform: rotateY(180deg) scale(1); }
-  }
-
-  @keyframes coin-land {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.1); }
-    100% { transform: scale(1); }
-  }
-
-  @keyframes result-pop {
-    0% { transform: scale(0); opacity: 0; }
-    50% { transform: scale(1.2); }
-    100% { transform: scale(1); opacity: 1; }
   }
 </style>

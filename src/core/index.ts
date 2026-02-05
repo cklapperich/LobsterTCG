@@ -11,6 +11,8 @@ export {
   getPlayerView,
   makeZoneKey,
   parseZoneKey,
+  findCardInZones,
+  getCardName,
   STAGING_ZONE_CONFIG,
 } from './engine';
 

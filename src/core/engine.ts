@@ -223,7 +223,7 @@ function deepClone<T>(obj: T): T {
   return JSON.parse(JSON.stringify(obj));
 }
 
-function findCardInZones<T extends CardTemplate>(
+export function findCardInZones<T extends CardTemplate>(
   state: GameState<T>,
   cardInstanceId: string
 ): { card: CardInstance<T>; zone: Zone<T>; index: number } | null {
@@ -255,6 +255,15 @@ function findCardInZones<T extends CardTemplate>(
     }
   }
   return null;
+}
+
+export function getCardName<T extends CardTemplate>(
+  state: GameState<T>,
+  cardInstanceId: string,
+  fallback: string = 'Card'
+): string {
+  const result = findCardInZones(state, cardInstanceId);
+  return result?.card.template.name ?? fallback;
 }
 
 function getZone<T extends CardTemplate>(
