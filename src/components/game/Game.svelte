@@ -1,12 +1,14 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Playmat, CardInstance, Visibility, CardTemplate, GameState } from '../../core';
-  import { executeAction, moveCard, flipCard, shuffle, VISIBILITY, parseZoneKey } from '../../core';
+  import type { Playmat, CardInstance, CardTemplate, GameState } from '../../core';
+  import { executeAction, shuffle, VISIBILITY, flipCard, parseZoneKey } from '../../core';
   import { plugin } from '../../plugins/pokemon';
   import PlaymatGrid from './PlaymatGrid.svelte';
   import ZoneContextMenu from './ZoneContextMenu.svelte';
   import PeekModal from './PeekModal.svelte';
   import ArrangeModal from './ArrangeModal.svelte';
+  import DragOverlay from './DragOverlay.svelte';
+  import { dragStore, startDrag, updateDragPosition, endDrag, executeDrop } from './dragState.svelte';
 
   // Game state
   let gameState = $state<GameState<CardTemplate> | null>(null);
@@ -14,12 +16,8 @@
   let loading = $state(true);
   let error = $state<string | null>(null);
 
-  // Drag state - includes original visibility to preserve it
-  let dragState = $state<{
-    cardInstanceId: string;
-    fromZoneKey: string;
-    originalVisibility: Visibility;
-  } | null>(null);
+  // Reactive drag state from external module
+  const dragState = $derived(dragStore.current);
 
   // Preview state
   let previewCard = $state<CardInstance<CardTemplate> | null>(null);
@@ -61,71 +59,25 @@
     }
   });
 
-  function handleDragStart(cardInstanceId: string, fromZoneKey: string) {
+  function handleDragStart(cardInstanceId: string, fromZoneKey: string, x: number, y: number) {
     if (!gameState) return;
+    startDrag(cardInstanceId, fromZoneKey, gameState, x, y);
+  }
 
-    // Find card and save its visibility
-    const zone = gameState.zones[fromZoneKey];
-    if (zone) {
-      const card = zone.cards.find((c) => c.instanceId === cardInstanceId);
-      if (card) {
-        dragState = {
-          cardInstanceId,
-          fromZoneKey,
-          originalVisibility: [...card.visibility] as Visibility
-        };
-      }
-    }
+  function handleDrag(x: number, y: number) {
+    updateDragPosition(x, y);
   }
 
   function handleDragEnd() {
-    dragState = null;
+    endDrag();
   }
 
   function handleDrop(cardInstanceId: string, toZoneKey: string, position?: number) {
-    if (!gameState || !dragState) return;
-
-    // Don't move to same zone (unless repositioning within zone)
-    if (dragState.fromZoneKey === toZoneKey && position === undefined) {
-      dragState = null;
-      return;
+    if (!gameState) return;
+    const updatedState = executeDrop(cardInstanceId, toZoneKey, gameState, position);
+    if (updatedState) {
+      gameState = updatedState;
     }
-
-    const savedVisibility = dragState.originalVisibility;
-
-    // Parse zone keys to get player indices and zone IDs
-    const from = parseZoneKey(dragState.fromZoneKey);
-    const to = parseZoneKey(toZoneKey);
-
-    // Execute move action with optional position
-    // Note: moveCard uses a single player index for the action, but zones can be different players
-    // For cross-player moves, we use the source player as the actor
-    const action = moveCard(from.playerIndex, cardInstanceId, from.zoneId, to.zoneId, position);
-    // Manually update zone keys since moveCard assumes same player for both zones
-    if (from.playerIndex !== to.playerIndex) {
-      // Direct zone manipulation for cross-player moves
-      const fromZone = gameState.zones[dragState.fromZoneKey];
-      const toZone = gameState.zones[toZoneKey];
-      const cardIndex = fromZone.cards.findIndex(c => c.instanceId === cardInstanceId);
-      if (cardIndex !== -1 && toZone) {
-        const [card] = fromZone.cards.splice(cardIndex, 1);
-        if (position !== undefined) {
-          toZone.cards.splice(position, 0, card);
-        } else {
-          toZone.cards.push(card);
-        }
-      }
-    } else {
-      executeAction(gameState, action);
-    }
-
-    // Restore original visibility (moveCard changes it to zone default)
-    const flipAction = flipCard(from.playerIndex, cardInstanceId, savedVisibility);
-    executeAction(gameState, flipAction);
-
-    // Force reactivity
-    gameState = { ...gameState };
-    dragState = null;
   }
 
   function handlePreview(card: CardInstance<CardTemplate>) {
@@ -280,6 +232,7 @@
           {cardBack}
           onDrop={handleDrop}
           onDragStart={handleDragStart}
+          onDrag={handleDrag}
           onDragEnd={handleDragEnd}
           onPreview={handlePreview}
           onToggleVisibility={handleToggleVisibility}
@@ -351,6 +304,16 @@
       {cardBack}
       onConfirm={handleArrangeConfirm}
       onCancel={closeArrangeModal}
+    />
+  {/if}
+
+  <!-- Drag Overlay -->
+  {#if dragState}
+    <DragOverlay
+      card={dragState.card}
+      x={dragState.mouseX}
+      y={dragState.mouseY}
+      {cardBack}
     />
   {/if}
 </div>
