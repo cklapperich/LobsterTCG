@@ -32,9 +32,20 @@
 
   // All cards can be drop targets
   const isDropTarget = true;
+
+  // Calculate stack size based on card count and offset (1.5rem = 24px at base, but use rem)
+  const stackOffset = 1.5; // rem
+  const extraHeight = $derived(Math.max(0, cards.length - 1) * stackOffset);
+  const extraWidth = $derived(Math.max(0, cards.length - 1) * stackOffset);
 </script>
 
-<div class="card-stack" class:stack-down={stackDirection === 'down' && !fixedSize} class:stack-right={stackDirection === 'right' && !fixedSize} class:stack-none={stackDirection === 'none' || stackDirection === 'fan' || fixedSize}>
+<div
+  class="card-stack"
+  class:stack-down={stackDirection === 'down' && !fixedSize}
+  class:stack-right={stackDirection === 'right' && !fixedSize}
+  class:stack-none={stackDirection === 'none' || stackDirection === 'fan' || fixedSize}
+  style="{stackDirection === 'down' && !fixedSize ? `min-height: calc(var(--spacing-card-w) * 1.4 + ${extraHeight}rem)` : ''}{stackDirection === 'right' && !fixedSize ? `min-width: calc(var(--spacing-card-w) + ${extraWidth}rem)` : ''}"
+>
   {#each cards as card, i (card.instanceId)}
     <div
       class="stack-card"
@@ -66,14 +77,6 @@
     @apply relative;
     min-width: var(--spacing-card-w);
     min-height: calc(var(--spacing-card-w) * 1.4);
-  }
-
-  .stack-down {
-    min-height: calc(var(--spacing-card-w) * 1.4 + 15rem);
-  }
-
-  .stack-right {
-    min-width: calc(var(--spacing-card-w) + 10rem);
   }
 
   .stack-card {
