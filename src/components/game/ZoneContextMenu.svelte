@@ -11,6 +11,7 @@
     onPeekBottom: (count: number) => void;
     onArrangeTop: (count: number) => void;
     onArrangeBottom: (count: number) => void;
+    onClearCounters?: () => void;
     onClose: () => void;
   }
 
@@ -24,6 +25,7 @@
     onPeekBottom,
     onArrangeTop,
     onArrangeBottom,
+    onClearCounters,
     onClose,
   }: Props = $props();
 
@@ -64,6 +66,12 @@
   <button class="menu-item" onclick={() => handleAction(onShuffle)} disabled={cardCount < 2}>
     Shuffle
   </button>
+
+  {#if onClearCounters}
+    <button class="menu-item" onclick={() => handleAction(onClearCounters)} disabled={cardCount < 1}>
+      Clear Counters
+    </button>
+  {/if}
 
   <!-- Peek submenu wrapper -->
   <div

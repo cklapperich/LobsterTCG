@@ -54,3 +54,6 @@ export type {
 
 // Game plugin interface
 export type { GamePlugin } from './game-plugin';
+
+// Counter types
+export type { CounterDefinition } from './counter';

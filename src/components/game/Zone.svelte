@@ -1,12 +1,13 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Zone as ZoneType, PlaymatSlot, CardInstance, CardTemplate } from '../../core';
+  import type { Zone as ZoneType, PlaymatSlot, CardInstance, CardTemplate, CounterDefinition } from '../../core';
   import CardStack from './CardStack.svelte';
 
   interface Props {
     zone: ZoneType<CardTemplate>;
     slot: PlaymatSlot;
     cardBack?: string;
+    counterDefinitions?: CounterDefinition[];
     renderFace?: (template: CardTemplate) => { rank?: string; suit?: string; color?: string };
     isShuffling?: boolean;
     shufflePacketStart?: number;
@@ -14,12 +15,14 @@
     onPreview?: (card: CardInstance<CardTemplate>) => void;
     onToggleVisibility?: (cardInstanceId: string) => void;
     onZoneContextMenu?: (zoneId: string, zoneName: string, cardCount: number, x: number, y: number) => void;
+    onCounterDrop?: (counterId: string, cardInstanceId: string) => void;
   }
 
   let {
     zone,
     slot,
     cardBack,
+    counterDefinitions = [],
     renderFace,
     isShuffling = false,
     shufflePacketStart = -1,
@@ -27,6 +30,7 @@
     onPreview,
     onToggleVisibility,
     onZoneContextMenu,
+    onCounterDrop,
   }: Props = $props();
 
   let isDragOver = $state(false);
@@ -95,12 +99,14 @@
         {fixedSize}
         zoneKey={zone.key}
         {cardBack}
+        {counterDefinitions}
         {renderFace}
         {isShuffling}
         {shufflePacketStart}
         {onPreview}
         {onToggleVisibility}
         onCardDrop={handleCardDrop}
+        {onCounterDrop}
       />
     {:else}
       <div class="empty-zone"></div>

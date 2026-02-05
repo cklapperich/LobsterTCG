@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { CardInstance, CardTemplate } from '../../core';
+  import type { CardInstance, CardTemplate, CounterDefinition } from '../../core';
   import Card from './Card.svelte';
 
   interface Props {
@@ -8,12 +8,14 @@
     fixedSize?: boolean;
     zoneKey: string;
     cardBack?: string;
+    counterDefinitions?: CounterDefinition[];
     renderFace?: (template: CardTemplate) => { rank?: string; suit?: string; color?: string };
     isShuffling?: boolean;
     shufflePacketStart?: number;
     onPreview?: (card: CardInstance<CardTemplate>) => void;
     onToggleVisibility?: (cardInstanceId: string) => void;
     onCardDrop?: (droppedCardId: string, targetCardId: string, targetIndex: number) => void;
+    onCounterDrop?: (counterId: string, cardInstanceId: string) => void;
   }
 
   let {
@@ -22,12 +24,14 @@
     fixedSize = false,
     zoneKey,
     cardBack,
+    counterDefinitions = [],
     renderFace,
     isShuffling = false,
     shufflePacketStart = -1,
     onPreview,
     onToggleVisibility,
     onCardDrop,
+    onCounterDrop,
   }: Props = $props();
 
   // Container width for dynamic fan layout
@@ -143,10 +147,12 @@
         {zoneKey}
         isDropTarget={true}
         {cardBack}
+        {counterDefinitions}
         {renderFace}
         {onPreview}
         {onToggleVisibility}
         {onCardDrop}
+        {onCounterDrop}
       />
     </div>
   {/each}

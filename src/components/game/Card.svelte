@@ -1,6 +1,13 @@
 <script lang="ts">
-  import type { CardInstance, CardTemplate } from '../../core';
+  import type { CardInstance, CardTemplate, CounterDefinition } from '../../core';
   import { startDrag, updateDragPosition, endDrag } from './dragState.svelte';
+  import {
+    startCounterDrag,
+    updateCounterDragPosition,
+    endCounterDrag,
+    counterDragStore,
+  } from './counterDragState.svelte';
+  import CounterIcon from './CounterIcon.svelte';
   import { playSfx } from '../../lib/audio.svelte';
 
   interface Props {
@@ -10,11 +17,13 @@
     zoneKey: string;
     isDropTarget?: boolean;
     cardBack?: string;
+    counterDefinitions?: CounterDefinition[];
     // For playing cards without images - render functions
     renderFace?: (template: CardTemplate) => { rank?: string; suit?: string; color?: string };
     onPreview?: (card: CardInstance<CardTemplate>) => void;
     onToggleVisibility?: (cardInstanceId: string) => void;
     onCardDrop?: (droppedCardId: string, targetCardId: string, targetIndex: number) => void;
+    onCounterDrop?: (counterId: string, cardInstanceId: string) => void;
   }
 
   let {
@@ -24,14 +33,17 @@
     zoneKey,
     isDropTarget = false,
     cardBack,
+    counterDefinitions = [],
     renderFace,
     onPreview,
     onToggleVisibility,
     onCardDrop,
+    onCounterDrop,
   }: Props = $props();
 
   let isDragging = $state(false);
   let isDragOver = $state(false);
+  let isCounterDragOver = $state(false);
 
   const isFaceUp = $derived(card.visibility[0]);
   const template = $derived(card.template);
@@ -39,6 +51,26 @@
   // Get render data if renderFace provided, otherwise use template.imageUrl
   const faceData = $derived(renderFace ? renderFace(template) : null);
   const hasImage = $derived(!!template.imageUrl);
+
+  // Get counters on this card with their definitions
+  const cardCounters = $derived(() => {
+    const result: { definition: CounterDefinition; quantity: number }[] = [];
+    for (const [counterId, quantity] of Object.entries(card.counters)) {
+      if (quantity > 0) {
+        const definition = counterDefinitions.find((c) => c.id === counterId);
+        if (definition) {
+          result.push({ definition, quantity });
+        }
+      }
+    }
+    // Sort by category then sortOrder
+    return result.sort((a, b) => {
+      const catA = a.definition.category ?? '';
+      const catB = b.definition.category ?? '';
+      if (catA !== catB) return catA.localeCompare(catB);
+      return (a.definition.sortOrder ?? 0) - (b.definition.sortOrder ?? 0);
+    });
+  });
 
   // Create a transparent 1x1 pixel image for suppressing native drag preview
   const transparentImg = new Image();
@@ -95,6 +127,51 @@
       onCardDrop?.(droppedCardId, card.instanceId, index);
     }
   }
+
+  // Counter drag handling on card
+  function handleCounterDragOver(event: DragEvent) {
+    const data = event.dataTransfer?.getData('text/plain');
+    // Check if it's a counter being dragged
+    if (counterDragStore.current) {
+      event.preventDefault();
+      event.stopPropagation();
+      isCounterDragOver = true;
+    }
+  }
+
+  function handleCounterDragLeave() {
+    isCounterDragOver = false;
+  }
+
+  function handleCounterDrop(event: DragEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    isCounterDragOver = false;
+    if (counterDragStore.current) {
+      onCounterDrop?.(counterDragStore.current.counterId, card.instanceId);
+    }
+  }
+
+  // Dragging a counter FROM this card
+  const counterTransparentImg = new Image();
+  counterTransparentImg.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
+  function handleCounterDragStart(event: DragEvent, counterId: string) {
+    event.stopPropagation();
+    event.dataTransfer?.setData('text/plain', `counter:${counterId}`);
+    event.dataTransfer?.setDragImage(counterTransparentImg, 0, 0);
+    startCounterDrag(counterId, card.instanceId, event.clientX, event.clientY);
+  }
+
+  function handleCounterDrag(event: DragEvent) {
+    if (event.clientX !== 0 || event.clientY !== 0) {
+      updateCounterDragPosition(event.clientX, event.clientY);
+    }
+  }
+
+  function handleCounterDragEnd() {
+    endCounterDrag();
+  }
 </script>
 
 <button
@@ -106,14 +183,15 @@
   class:black={isFaceUp && faceData?.color === 'black'}
   class:dragging={isDragging}
   class:drop-target={isDragOver}
+  class:counter-drop-target={isCounterDragOver}
   style="--i: {index}"
   {draggable}
   ondragstart={handleDragStart}
   ondrag={handleDrag}
   ondragend={handleDragEnd}
-  ondragover={handleDragOver}
-  ondragleave={handleDragLeave}
-  ondrop={handleDrop}
+  ondragover={(e) => { handleDragOver(e); handleCounterDragOver(e); }}
+  ondragleave={() => { handleDragLeave(); handleCounterDragLeave(); }}
+  ondrop={(e) => { handleDrop(e); handleCounterDrop(e); }}
   onclick={handleClick}
   ondblclick={handleDoubleClick}
 >
@@ -149,6 +227,25 @@
       {:else}
         <div class="back-pattern"></div>
       {/if}
+    </div>
+  {/if}
+
+  <!-- Counter overlay -->
+  {#if cardCounters().length > 0}
+    <div class="counter-overlay">
+      {#each cardCounters() as { definition, quantity } (definition.id)}
+        <div
+          class="counter-item"
+          draggable="true"
+          ondragstart={(e) => handleCounterDragStart(e, definition.id)}
+          ondrag={handleCounterDrag}
+          ondragend={handleCounterDragEnd}
+          role="button"
+          tabindex="0"
+        >
+          <CounterIcon counter={definition} {quantity} size="small" showQuantity={true} />
+        </div>
+      {/each}
     </div>
   {/if}
 </button>
@@ -262,5 +359,26 @@
       var(--color-gbc-blue) 0.25rem,
       var(--color-gbc-blue) 0.5rem
     );
+  }
+
+  .card.counter-drop-target {
+    @apply border-gbc-yellow;
+    box-shadow:
+      0 0.25rem 0 rgba(0,0,0,0.3),
+      0 0 0.5rem var(--color-gbc-yellow);
+  }
+
+  .counter-overlay {
+    @apply absolute top-0 left-0 flex flex-col gap-0.5 p-0.5;
+    pointer-events: auto;
+    z-index: 10;
+  }
+
+  .counter-item {
+    @apply cursor-grab;
+  }
+
+  .counter-item:active {
+    @apply cursor-grabbing;
   }
 </style>
