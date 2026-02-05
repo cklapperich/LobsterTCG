@@ -58,7 +58,7 @@
     isDragOver = false;
   }
 
-  // Zone drop = bottom of stack (position 0 = lowest z-index = visually behind)
+  // Zone background drop = bottom of stack (position 0 = lowest z-index = visually behind)
   function handleDrop(event: DragEvent) {
     event.preventDefault();
     isDragOver = false;
@@ -69,15 +69,9 @@
     }
   }
 
-  // Card drop behavior depends on stackDirection
-  // - "none": always go to top (position 0 = visually on top for unstacked)
-  // - others: insert after target card (targetIndex + 1 = higher z-index = visually on top)
+  // Card-to-card drop: insert after target card (higher z-index = visually on top)
   function handleCardDrop(droppedCardId: string, _targetCardId: string, targetIndex: number) {
-    if (stackDirection === 'none') {
-      onDrop?.(droppedCardId, zone.key, 0);
-    } else {
-      onDrop?.(droppedCardId, zone.key, targetIndex + 1);
-    }
+    onDrop?.(droppedCardId, zone.key, targetIndex + 1);
   }
 
 </script>
