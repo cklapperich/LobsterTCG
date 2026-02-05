@@ -4,4 +4,9 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   plugins: [svelte(), tailwindcss()],
+  server: {
+    watch: {
+      ignored: ['**/tools/poketcg/**'],
+    },
+  },
 })

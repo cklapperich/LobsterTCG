@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Playmat, CardInstance, CardTemplate, GameState, CounterDefinition } from '../../core';
-  import { executeAction, shuffle, VISIBILITY, flipCard, parseZoneKey, endTurn } from '../../core';
-  import { plugin } from '../../plugins/pokemon';
+  import type { Playmat, CardInstance, CardTemplate, GameState, CounterDefinition, DeckList } from '../../core';
+  import { executeAction, shuffle, VISIBILITY, flipCard, parseZoneKey, endTurn, loadDeck } from '../../core';
+  import { plugin, executeSetup, ZONE_IDS } from '../../plugins/pokemon';
+  import { getTemplate } from '../../plugins/pokemon/cards';
   import PlaymatGrid from './PlaymatGrid.svelte';
   import ZoneContextMenu from './ZoneContextMenu.svelte';
   import ArrangeModal from './ArrangeModal.svelte';
@@ -17,6 +18,15 @@
     clearZoneCounters,
   } from './counterDragState.svelte';
   import { playSfx } from '../../lib/audio.svelte';
+
+  // Props
+  interface Props {
+    player1Deck: DeckList;
+    player2Deck: DeckList;
+    onBackToMenu?: () => void;
+  }
+
+  let { player1Deck, player2Deck, onBackToMenu }: Props = $props();
 
   // Game state
   let gameState = $state<GameState<CardTemplate> | null>(null);
@@ -79,11 +89,11 @@
   } | null>(null);
 
   // Card back from plugin
-  const cardBack = plugin.getCardBack?.() ?? '/card-images/pokemon/cardback.png';
+  const cardBack = plugin.getCardBack?.() ?? '';
 
-  // Coin images (use plugin paths, fallback to defaults)
-  const coinFront = '/card-images/pokemon/coinfront.png';
-  const coinBackImg = '/card-images/pokemon/coinback.png';
+  // Coin images from plugin
+  const coinFront = plugin.getCoinFront?.() ?? '';
+  const coinBackImg = plugin.getCoinBack?.() ?? '';
 
   // Coin flip state
   let coinFlipping = $state(false);
@@ -134,6 +144,17 @@
     try {
       playmat = await plugin.getPlaymat();
       gameState = await plugin.startGame();
+
+      // Load player decks (replace the default deck)
+      loadDeck(gameState, 0, ZONE_IDS.DECK, player1Deck, getTemplate, false);
+      loadDeck(gameState, 1, ZONE_IDS.DECK, player2Deck, getTemplate, false);
+
+      // Execute setup for both players (shuffle, draw 7, set prizes)
+      executeSetup(gameState, 0);
+      executeSetup(gameState, 1);
+
+      gameState = { ...gameState };
+      gameLog = ['Game started'];
       loading = false;
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to load game';
@@ -266,12 +287,25 @@
 
   function resetGame() {
     plugin.startGame().then((state) => {
+      // Load player decks
+      loadDeck(state, 0, ZONE_IDS.DECK, player1Deck, getTemplate, false);
+      loadDeck(state, 1, ZONE_IDS.DECK, player2Deck, getTemplate, false);
+
+      // Execute setup for both players
+      executeSetup(state, 0);
+      executeSetup(state, 1);
+
       gameState = state;
       previewCard = null;
       contextMenu = null;
       cardModal = null;
       gameLog = ['Game started'];
     });
+  }
+
+  function handleBackToMenu() {
+    playSfx('cancel');
+    onBackToMenu?.();
   }
 
   function handleEndTurn() {
@@ -370,6 +404,11 @@
       <button class="gbc-btn text-[0.5rem] py-1 px-3" onclick={resetGame}>
         NEW GAME
       </button>
+      {#if onBackToMenu}
+        <button class="gbc-btn text-[0.5rem] py-1 px-3" onclick={handleBackToMenu}>
+          MENU
+        </button>
+      {/if}
     </div>
   </header>
 

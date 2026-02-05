@@ -23,4 +23,10 @@ export interface GamePlugin<T extends CardTemplate = CardTemplate> {
 
   /** Get counter definitions for this game (optional) */
   getCounterDefinitions?(): CounterDefinition[];
+
+  /** Get coin front image URL (optional) */
+  getCoinFront?(): string;
+
+  /** Get coin back image URL (optional) */
+  getCoinBack?(): string;
 }
