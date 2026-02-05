@@ -5,7 +5,6 @@
   import { plugin } from '../../plugins/pokemon';
   import PlaymatGrid from './PlaymatGrid.svelte';
   import ZoneContextMenu from './ZoneContextMenu.svelte';
-  import PeekModal from './PeekModal.svelte';
   import ArrangeModal from './ArrangeModal.svelte';
   import DragOverlay from './DragOverlay.svelte';
   import { dragStore, executeDrop } from './dragState.svelte';
@@ -31,18 +30,13 @@
     y: number;
   } | null>(null);
 
-  // Modal states
-  let peekModal = $state<{
-    cards: CardInstance<CardTemplate>[];
-    zoneName: string;
-    position: 'top' | 'bottom';
-  } | null>(null);
-
-  let arrangeModal = $state<{
+  // Card modal state (unified for peek and arrange)
+  let cardModal = $state<{
     cards: CardInstance<CardTemplate>[];
     zoneKey: string;
     zoneName: string;
     position: 'top' | 'bottom';
+    mode: 'peek' | 'arrange';
   } | null>(null);
 
   // Card back from plugin
@@ -115,10 +109,12 @@
     const zoneCards = getZoneCards(contextMenu.zoneKey);
     // Last cards in array = highest z-index = visually on TOP
     const cards = zoneCards.slice(-count);
-    peekModal = {
+    cardModal = {
       cards,
+      zoneKey: contextMenu.zoneKey,
       zoneName: contextMenu.zoneName,
       position: 'top',
+      mode: 'peek',
     };
   }
 
@@ -126,15 +122,13 @@
     if (!contextMenu) return;
     // First cards in array = lowest z-index = visually at BOTTOM
     const cards = getZoneCards(contextMenu.zoneKey).slice(0, count);
-    peekModal = {
+    cardModal = {
       cards,
+      zoneKey: contextMenu.zoneKey,
       zoneName: contextMenu.zoneName,
       position: 'bottom',
+      mode: 'peek',
     };
-  }
-
-  function closePeekModal() {
-    peekModal = null;
   }
 
   function handleArrangeTop(count: number) {
@@ -142,11 +136,12 @@
     const zoneCards = getZoneCards(contextMenu.zoneKey);
     // Last cards in array = highest z-index = visually on TOP
     const cards = zoneCards.slice(-count);
-    arrangeModal = {
+    cardModal = {
       cards,
       zoneKey: contextMenu.zoneKey,
       zoneName: contextMenu.zoneName,
       position: 'top',
+      mode: 'arrange',
     };
   }
 
@@ -154,23 +149,24 @@
     if (!contextMenu) return;
     // First cards in array = lowest z-index = visually at BOTTOM
     const cards = getZoneCards(contextMenu.zoneKey).slice(0, count);
-    arrangeModal = {
+    cardModal = {
       cards,
       zoneKey: contextMenu.zoneKey,
       zoneName: contextMenu.zoneName,
       position: 'bottom',
+      mode: 'arrange',
     };
   }
 
-  function handleArrangeConfirm(reorderedCards: CardInstance<CardTemplate>[]) {
-    if (!gameState || !arrangeModal) return;
+  function handleCardModalConfirm(reorderedCards: CardInstance<CardTemplate>[]) {
+    if (!gameState || !cardModal) return;
 
-    const zone = gameState.zones[arrangeModal.zoneKey];
+    const zone = gameState.zones[cardModal.zoneKey];
     if (!zone) return;
 
     const count = reorderedCards.length;
 
-    if (arrangeModal.position === 'top') {
+    if (cardModal.position === 'top') {
       // Replace top N cards (last in array = highest z-index = visually on top)
       zone.cards.splice(-count, count, ...reorderedCards as CardInstance<PlayingCardTemplate>[]);
     } else {
@@ -179,11 +175,11 @@
     }
 
     gameState = { ...gameState };
-    arrangeModal = null;
+    cardModal = null;
   }
 
-  function closeArrangeModal() {
-    arrangeModal = null;
+  function closeCardModal() {
+    cardModal = null;
   }
 
   function resetGame() {
@@ -191,8 +187,7 @@
       gameState = state;
       previewCard = null;
       contextMenu = null;
-      peekModal = null;
-      arrangeModal = null;
+      cardModal = null;
     });
   }
 </script>
@@ -272,26 +267,16 @@
     />
   {/if}
 
-  <!-- Peek Modal -->
-  {#if peekModal}
-    <PeekModal
-      cards={peekModal.cards}
-      zoneName={peekModal.zoneName}
-      position={peekModal.position}
-      renderCardInfo={plugin.getCardInfo}
-      onClose={closePeekModal}
-    />
-  {/if}
-
-  <!-- Arrange Modal -->
-  {#if arrangeModal}
+  <!-- Card Modal (Peek/Arrange) -->
+  {#if cardModal}
     <ArrangeModal
-      cards={arrangeModal.cards}
-      zoneName={arrangeModal.zoneName}
-      position={arrangeModal.position}
+      cards={cardModal.cards}
+      zoneName={cardModal.zoneName}
+      position={cardModal.position}
+      mode={cardModal.mode}
       {cardBack}
-      onConfirm={handleArrangeConfirm}
-      onCancel={closeArrangeModal}
+      onConfirm={handleCardModalConfirm}
+      onClose={closeCardModal}
     />
   {/if}
 
