@@ -1,4 +1,4 @@
-import type { Action, GameState, PlayCardAction, MoveCardAction, MoveCardStackAction, AddCounterAction } from '../../core/types';
+import type { Action, GameState, MoveCardAction, MoveCardStackAction, AddCounterAction } from '../../core/types';
 import type { PreHookResult, Plugin } from '../../core/plugin/types';
 import type { PokemonCardTemplate } from './cards';
 import { getTemplate } from './cards';
@@ -30,20 +30,39 @@ function getTemplateForCard(state: PokemonState, cardInstanceId: string): Pokemo
 }
 
 // Warning 1: Only one Supporter per turn
+// Only hand → staging counts as "playing" a Supporter.
+function isSupporterPlayed(state: PokemonState, action: Action): boolean {
+  let cardInstanceId: string;
+  let fromZone: string | undefined;
+  let toZone: string | undefined;
+
+  if (action.type === 'move_card') {
+    const a = action as MoveCardAction;
+    cardInstanceId = a.cardInstanceId;
+    fromZone = a.fromZone;
+    toZone = a.toZone;
+  } else if (action.type === 'move_card_stack') {
+    const a = action as MoveCardStackAction;
+    cardInstanceId = a.cardInstanceIds[0];
+    fromZone = a.fromZone;
+    toZone = a.toZone;
+    if (!cardInstanceId) return false;
+  } else {
+    return false;
+  }
+
+  if (fromZone !== 'hand' || toZone !== 'staging') return false;
+  const template = getTemplateForCard(state, cardInstanceId);
+  return !!template && isSupporter(template);
+}
+
 function warnOneSupporter(state: PokemonState, action: Action): PreHookResult {
-  if (action.type !== 'play_card') return { outcome: 'continue' };
   if (action.allowed_by_effect) return { outcome: 'continue' };
+  if (!isSupporterPlayed(state, action)) return { outcome: 'continue' };
 
-  const playAction = action as PlayCardAction;
-  const template = getTemplateForCard(state, playAction.cardInstanceId);
-  if (!template || !isSupporter(template)) return { outcome: 'continue' };
-
-  // Check if a Supporter was already played this turn
+  // Check if a Supporter was already played (hand → staging) this turn
   for (const prev of state.currentTurn.actions) {
-    if (prev.type !== 'play_card') continue;
-    const prevPlay = prev as PlayCardAction;
-    const prevTemplate = getTemplateForCard(state, prevPlay.cardInstanceId);
-    if (prevTemplate && isSupporter(prevTemplate)) {
+    if (isSupporterPlayed(state, prev)) {
       return blockOrWarn(action, 'Already played a Supporter this turn. Set allowed_by_effect if a card effect permits this.');
     }
   }
@@ -59,11 +78,7 @@ function warnOneEnergyAttachment(state: PokemonState, action: Action): PreHookRe
   let toZone: string;
   let fromZone: string | undefined;
 
-  if (action.type === 'play_card') {
-    const playAction = action as PlayCardAction;
-    cardInstanceId = playAction.cardInstanceId;
-    toZone = playAction.toZone;
-  } else if (action.type === 'move_card') {
+  if (action.type === 'move_card') {
     const moveAction = action as MoveCardAction;
     cardInstanceId = moveAction.cardInstanceId;
     toZone = moveAction.toZone;
@@ -93,11 +108,7 @@ function warnOneEnergyAttachment(state: PokemonState, action: Action): PreHookRe
     let prevToZone: string | undefined;
     let prevFromZone: string | undefined;
 
-    if (prev.type === 'play_card') {
-      const p = prev as PlayCardAction;
-      prevCardId = p.cardInstanceId;
-      prevToZone = p.toZone;
-    } else if (prev.type === 'move_card') {
+    if (prev.type === 'move_card') {
       const m = prev as MoveCardAction;
       prevCardId = m.cardInstanceId;
       prevToZone = m.toZone;
@@ -130,12 +141,7 @@ function warnEvolutionChain(state: PokemonState, action: Action): PreHookResult 
   let toZone: string;
   let player: 0 | 1;
 
-  if (action.type === 'play_card') {
-    const a = action as PlayCardAction;
-    cardInstanceId = a.cardInstanceId;
-    toZone = a.toZone;
-    player = a.player;
-  } else if (action.type === 'move_card') {
+  if (action.type === 'move_card') {
     const a = action as MoveCardAction;
     cardInstanceId = a.cardInstanceId;
     toZone = a.toZone;
@@ -183,12 +189,7 @@ function warnEvolutionTiming(state: PokemonState, action: Action): PreHookResult
   let toZone: string;
   let player: 0 | 1;
 
-  if (action.type === 'play_card') {
-    const a = action as PlayCardAction;
-    cardInstanceId = a.cardInstanceId;
-    toZone = a.toZone;
-    player = a.player;
-  } else if (action.type === 'move_card') {
+  if (action.type === 'move_card') {
     const a = action as MoveCardAction;
     cardInstanceId = a.cardInstanceId;
     toZone = a.toZone;
@@ -256,12 +257,7 @@ function warnNonBasicToEmptyField(state: PokemonState, action: Action): PreHookR
   let toZone: string;
   let player: 0 | 1;
 
-  if (action.type === 'play_card') {
-    const playAction = action as PlayCardAction;
-    cardInstanceId = playAction.cardInstanceId;
-    toZone = playAction.toZone;
-    player = playAction.player;
-  } else if (action.type === 'move_card') {
+  if (action.type === 'move_card') {
     const moveAction = action as MoveCardAction;
     cardInstanceId = moveAction.cardInstanceId;
     toZone = moveAction.toZone;
@@ -355,11 +351,7 @@ function warnStadiumOnly(state: PokemonState, action: Action): PreHookResult {
   let cardInstanceId: string;
   let toZone: string;
 
-  if (action.type === 'play_card') {
-    const playAction = action as PlayCardAction;
-    cardInstanceId = playAction.cardInstanceId;
-    toZone = playAction.toZone;
-  } else if (action.type === 'move_card') {
+  if (action.type === 'move_card') {
     const moveAction = action as MoveCardAction;
     cardInstanceId = moveAction.cardInstanceId;
     toZone = moveAction.toZone;
@@ -386,15 +378,8 @@ export const pokemonWarningsPlugin: Plugin<PokemonCardTemplate> = {
   name: 'Pokemon TCG Warnings',
   version: '1.0.0',
   preHooks: {
-    'play_card': [
-      { hook: warnOneSupporter, priority: 100 },
-      { hook: warnOneEnergyAttachment, priority: 100 },
-      { hook: warnEvolutionChain, priority: 100 },
-      { hook: warnEvolutionTiming, priority: 110 },
-      { hook: warnNonBasicToEmptyField, priority: 90 },
-      { hook: warnStadiumOnly, priority: 90 },
-    ],
     'move_card': [
+      { hook: warnOneSupporter, priority: 100 },
       { hook: warnOneEnergyAttachment, priority: 100 },
       { hook: warnEvolutionChain, priority: 100 },
       { hook: warnEvolutionTiming, priority: 110 },
@@ -403,6 +388,7 @@ export const pokemonWarningsPlugin: Plugin<PokemonCardTemplate> = {
       { hook: warnStadiumOnly, priority: 90 },
     ],
     'move_card_stack': [
+      { hook: warnOneSupporter, priority: 100 },
       { hook: warnOneEnergyAttachment, priority: 100 },
       { hook: warnEvolutionChain, priority: 100 },
       { hook: warnEvolutionTiming, priority: 110 },

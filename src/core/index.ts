@@ -54,7 +54,6 @@ export {
   draw,
   moveCard,
   moveCardStack,
-  playCard,
   placeOnZone,
   placeOnTop,
   placeOnBottom,

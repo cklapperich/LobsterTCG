@@ -7,7 +7,6 @@ import {
   GameLoop,
   moveCard,
   moveCardStack,
-  playCard,
   addCounter,
   VISIBILITY,
 } from './index';
@@ -92,7 +91,7 @@ describe('checkOpponentZone', () => {
     state.activePlayer = 1;
     const card = placeCard(state, 1, 'hand');
     // shared_zone defaults to player0 ownership, but shared=true
-    gameLoop.submit(playCard(0, card, 'shared_zone'));
+    gameLoop.submit(moveCard(0, card, 'hand', 'shared_zone'));
     gameLoop.processNext();
     expect(blocked).toHaveLength(0);
   });

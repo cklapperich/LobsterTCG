@@ -5,7 +5,6 @@ import { makeZoneKey } from './engine';
 import {
   draw,
   moveCard,
-  playCard,
   shuffle,
   addCounter,
   removeCounter,
@@ -86,31 +85,6 @@ export function createDefaultTools<T extends CardTemplate>(
       async run(input) {
         const count = (input.count as number) ?? 1;
         return submitAndReturn(gameLoop, p, draw(p, count), modifyReadableState);
-      },
-    },
-
-    // ── Play Card ──────────────────────────────────────────────────
-    {
-      name: 'play_card',
-      description: 'Play a card from your hand to a zone.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          cardName: { type: 'string', description: 'Name of the card in your hand to play' },
-          toZone: { type: 'string', description: 'Zone ID to play the card to (e.g. "active", "bench_1", "stadium")' },
-          targetCardName: { type: 'string', description: 'Optional: name of a card to target (e.g. for evolution or attachment)' },
-        },
-        required: ['cardName', 'toZone'],
-      },
-      async run(input) {
-        const handKey = makeZoneKey(p, 'hand');
-        const cardId = resolveCard(gameLoop, input.cardName as string, handKey);
-        let targetId: string | undefined;
-        if (input.targetCardName) {
-          const toZoneKey = makeZoneKey(p, input.toZone as string);
-          targetId = resolveCard(gameLoop, input.targetCardName as string, toZoneKey);
-        }
-        return submitAndReturn(gameLoop, p, playCard(p, cardId, input.toZone as string, targetId), modifyReadableState);
       },
     },
 

@@ -4,7 +4,6 @@ import type {
   DrawAction,
   MoveCardAction,
   MoveCardStackAction,
-  PlayCardAction,
   PlaceOnZoneAction,
   ShuffleAction,
   SearchZoneAction,
@@ -48,15 +47,6 @@ export function moveCardStack(
   position?: number
 ): MoveCardStackAction {
   return { type: 'move_card_stack', player, cardInstanceIds, fromZone, toZone, position };
-}
-
-export function playCard(
-  player: PlayerIndex,
-  cardInstanceId: string,
-  toZone: string,
-  targetInstanceId?: string
-): PlayCardAction {
-  return { type: 'play_card', player, cardInstanceId, toZone, targetInstanceId };
 }
 
 export function placeOnZone(
@@ -217,6 +207,7 @@ export function peek(
 export function peekTopOfDeck(player: PlayerIndex, count: number = 1): PeekAction {
   return peek(player, 'deck', count, 'top');
 }
+
 
 // ============================================================================
 // Convenience: Move to specific zones
