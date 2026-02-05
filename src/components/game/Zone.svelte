@@ -119,7 +119,6 @@
 
   .zone {
     @apply bg-gbc-dark-green border-4 border-gbc-border p-2 rounded;
-    height: fit-content;
     box-shadow:
       inset 0.125rem 0.125rem 0 rgba(255,255,255,0.1),
       inset -0.125rem -0.125rem 0 rgba(0,0,0,0.2);
@@ -143,7 +142,6 @@
   .zone-content {
     @apply relative;
     min-height: calc(var(--spacing-card-w) * 1.4);
-    height: fit-content;
   }
 
   .zone-content.fixed-size {
