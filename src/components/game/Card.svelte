@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { CardInstance, CardTemplate } from '../../core';
   import { startDrag, updateDragPosition, endDrag } from './dragState.svelte';
+  import { playSfx } from '../../lib/audio.svelte';
 
   interface Props {
     card: CardInstance<CardTemplate>;
@@ -65,6 +66,7 @@
   }
 
   function handleClick() {
+    playSfx('cursor');
     onPreview?.(card);
   }
 

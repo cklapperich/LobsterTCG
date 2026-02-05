@@ -8,6 +8,7 @@
   import ArrangeModal from './ArrangeModal.svelte';
   import DragOverlay from './DragOverlay.svelte';
   import { dragStore, executeDrop } from './dragState.svelte';
+  import { playSfx } from '../../lib/audio.svelte';
 
   // Game state
   let gameState = $state<GameState<CardTemplate> | null>(null);
@@ -88,6 +89,7 @@
   }
 
   function closeContextMenu() {
+    playSfx('cancel');
     contextMenu = null;
   }
 
@@ -179,6 +181,7 @@
   }
 
   function closeCardModal() {
+    playSfx('cancel');
     cardModal = null;
   }
 
