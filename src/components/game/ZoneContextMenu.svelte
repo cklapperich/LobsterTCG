@@ -4,7 +4,7 @@
   interface Props {
     x: number;
     y: number;
-    zoneId: string;
+    zoneKey: string;
     zoneName: string;
     cardCount: number;
     onShuffle: () => void;
@@ -18,7 +18,7 @@
   let {
     x,
     y,
-    zoneId: _zoneId,
+    zoneKey: _zoneKey,
     zoneName,
     cardCount,
     onShuffle,

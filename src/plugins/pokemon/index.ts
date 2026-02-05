@@ -9,8 +9,15 @@ import {
   executeAction,
 } from '../../core';
 import { ZONE_IDS, PRIZE_ZONE_IDS } from './zones';
+import type { PokemonCardTemplate } from './cards';
+import {
+  POKEMON_TEMPLATE_MAP,
+  DEFAULT_POKEMON_DECK,
+  getTemplate,
+  getCardBack,
+} from './cards';
 
-export type PokemonGameState = GameState<CardTemplate>;
+export type PokemonGameState = GameState<PokemonCardTemplate>;
 
 // Cached playmat instance
 let cachedPlaymat: Playmat | null = null;
@@ -57,6 +64,7 @@ export async function startPokemonGame(
 
 /**
  * Start Pokemon TCG with an already-loaded playmat.
+ * Automatically loads the default deck for player 0.
  */
 export function startPokemonGameWithPlaymat(
   playmat: Playmat,
@@ -64,7 +72,12 @@ export function startPokemonGameWithPlaymat(
   player2Id: string = 'player2'
 ): PokemonGameState {
   const config = getGameConfig(playmat);
-  return createGameState<CardTemplate>(config, player1Id, player2Id);
+  const state = createGameState<PokemonCardTemplate>(config, player1Id, player2Id);
+
+  // Auto-load default deck for player 0
+  loadDeck(state, 0, ZONE_IDS.DECK, DEFAULT_POKEMON_DECK, getTemplate, false);
+
+  return state;
 }
 
 /**
@@ -132,11 +145,19 @@ export function getCardInfo(template: CardTemplate): string {
 }
 
 // Plugin object conforming to GamePlugin interface
-export const plugin: GamePlugin<CardTemplate> = {
+export const plugin: GamePlugin<PokemonCardTemplate> = {
   getPlaymat: getPokemonPlaymat,
   startGame: startPokemonGame,
   getCardInfo,
+  getCardBack,
 };
 
 // Re-exports
 export { ZONE_IDS, BENCH_ZONE_IDS, PRIZE_ZONE_IDS, ALL_ZONE_IDS } from './zones';
+export type { PokemonCardTemplate } from './cards';
+export {
+  POKEMON_TEMPLATE_MAP,
+  DEFAULT_POKEMON_DECK,
+  getTemplate,
+  getCardBack,
+} from './cards';

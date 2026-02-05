@@ -10,6 +10,7 @@ export {
   executeAction,
   getPlayerView,
   makeZoneKey,
+  parseZoneKey,
   STAGING_ZONE_CONFIG,
 } from './engine';
 

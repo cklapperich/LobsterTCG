@@ -11,6 +11,7 @@ export interface ZoneConfig {
 }
 
 export interface Zone<T extends CardTemplate = CardTemplate> {
+  key: string; // unique zone key: "player0_deck", "player1_hand", etc.
   config: ZoneConfig;
   owner: PlayerIndex;
   cards: CardInstance<T>[]; // index 0 = "top"

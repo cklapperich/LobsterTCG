@@ -5,10 +5,11 @@
   interface Props {
     cards: CardInstance<CardTemplate>[];
     stackDirection: 'none' | 'down' | 'right' | 'fan';
-    zoneId: string;
+    fixedSize?: boolean;
+    zoneKey: string;
     cardBack?: string;
     renderFace?: (template: CardTemplate) => { rank?: string; suit?: string; color?: string };
-    onDragStart?: (cardInstanceId: string, zoneId: string) => void;
+    onDragStart?: (cardInstanceId: string, zoneKey: string) => void;
     onDragEnd?: () => void;
     onPreview?: (card: CardInstance<CardTemplate>) => void;
     onToggleVisibility?: (cardInstanceId: string) => void;
@@ -18,7 +19,8 @@
   let {
     cards,
     stackDirection,
-    zoneId,
+    fixedSize = false,
+    zoneKey,
     cardBack,
     renderFace,
     onDragStart,
@@ -32,7 +34,7 @@
   const isDropTarget = true;
 </script>
 
-<div class="card-stack" class:stack-down={stackDirection === 'down'} class:stack-right={stackDirection === 'right'} class:stack-none={stackDirection === 'none' || stackDirection === 'fan'}>
+<div class="card-stack" class:stack-down={stackDirection === 'down' && !fixedSize} class:stack-right={stackDirection === 'right' && !fixedSize} class:stack-none={stackDirection === 'none' || stackDirection === 'fan' || fixedSize}>
   {#each cards as card, i (card.instanceId)}
     <div
       class="stack-card"
@@ -43,7 +45,7 @@
       <Card
         {card}
         index={i}
-        {zoneId}
+        {zoneKey}
         {isDropTarget}
         {cardBack}
         {renderFace}

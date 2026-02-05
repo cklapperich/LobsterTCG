@@ -16,6 +16,7 @@ export interface PlaymatSlot {
   position: PlaymatPosition;
   label?: string; // optional display label
   stackDirection?: 'none' | 'down' | 'right' | 'fan'; // how cards stack visually
+  fixedSize?: boolean; // if true, zone won't auto-expand based on card count
 }
 
 // Group related slots together (e.g., all foundations)
