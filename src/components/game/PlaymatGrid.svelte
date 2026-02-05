@@ -125,7 +125,7 @@
   }
 
   .grid-slot {
-    @apply flex justify-center;
+    @apply flex justify-center items-start;
   }
 
   .staging-slot.has-cards :global(.zone) {
