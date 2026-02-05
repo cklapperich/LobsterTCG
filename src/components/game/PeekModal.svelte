@@ -43,7 +43,7 @@
       <div class="card-list">
         {#each cards as card, i (card.instanceId)}
           <div class="card-row">
-            <span class="card-index">{position === 'top' ? i + 1 : cards.length - i}</span>
+            <span class="card-index">{position === 'top' ? cards.length - i : i + 1}</span>
             <span class="card-info">{getCardDisplay(card)}</span>
           </div>
         {/each}

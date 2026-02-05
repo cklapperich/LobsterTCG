@@ -105,12 +105,12 @@
             <Card
               {card}
               index={0}
-              zoneId="arrange-modal"
+              zoneKey="arrange-modal"
               draggable={false}
               {renderFace}
               {cardBack}
             />
-            <span class="card-index">{position === 'top' ? i + 1 : orderedCards.length - i}</span>
+            <span class="card-index">{position === 'top' ? orderedCards.length - i : i + 1}</span>
           </div>
         {/each}
       </div>
