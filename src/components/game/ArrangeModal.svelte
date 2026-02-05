@@ -156,7 +156,7 @@
               {renderFace}
               {cardBack}
             />
-            <span class="card-index">{position === 'top' ? orderedCards.length - i : i + 1}</span>
+            <span class="card-index">{i + 1}</span>
           </div>
         {/each}
       </div>
