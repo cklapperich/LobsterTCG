@@ -9,8 +9,6 @@
     cardBack?: string;
     counterDefinitions?: CounterDefinition[];
     renderFace?: (template: CardTemplate) => { rank?: string; suit?: string; color?: string };
-    isShuffling?: boolean;
-    shufflePacketStart?: number;
     onDrop?: (cardInstanceId: string, toZoneId: string, position?: number) => void;
     onPreview?: (card: CardInstance<CardTemplate>) => void;
     onToggleVisibility?: (cardInstanceId: string) => void;
@@ -24,14 +22,20 @@
     cardBack,
     counterDefinitions = [],
     renderFace,
-    isShuffling = false,
-    shufflePacketStart = -1,
     onDrop,
     onPreview,
     onToggleVisibility,
     onZoneContextMenu,
     onCounterDrop,
   }: Props = $props();
+
+  // CardStack ref for shuffle animation
+  let cardStackRef: CardStack | undefined = $state();
+
+  // Expose shuffle method via the CardStack ref
+  export async function shuffle(): Promise<void> {
+    await cardStackRef?.shuffle();
+  }
 
   let isDragOver = $state(false);
 
@@ -100,6 +104,7 @@
   <div class="zone-content" class:fixed-size={fixedSize}>
     {#if zone.cards.length > 0}
       <CardStack
+        bind:this={cardStackRef}
         cards={zone.cards}
         {stackDirection}
         {fixedSize}
@@ -107,8 +112,6 @@
         {cardBack}
         {counterDefinitions}
         {renderFace}
-        {isShuffling}
-        {shufflePacketStart}
         {onPreview}
         {onToggleVisibility}
         onCardDrop={handleCardDrop}

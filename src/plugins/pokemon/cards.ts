@@ -134,12 +134,18 @@ const BASE_SET_CARDS: Array<{ number: number; name: string }> = [
 
 /**
  * Create a Pokemon card template.
+ * Uses external image URLs from the western card database.
  */
 function createTemplate(setId: string, number: number, name: string): PokemonCardTemplate {
+  ensureWesternCardsLoaded();
+  const cardId = `${setId}-${number}`;
+  const westernCard = westernCardMap!.get(cardId);
+  const imageUrl = westernCard ? getWesternCardImageUrl(westernCard) : cardbackImg;
+
   return {
-    id: `${setId}-${number}`,
+    id: cardId,
     name,
-    imageUrl: `/card-images/pokemon/${setId}-${number}.png`,
+    imageUrl,
     setId,
     number,
   };

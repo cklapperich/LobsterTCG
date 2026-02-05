@@ -8,8 +8,6 @@
     gameState: GameState<CardTemplate>;
     cardBack?: string;
     counterDefinitions?: CounterDefinition[];
-    shufflingZoneKey?: string | null;
-    shufflePacketStart?: number;
     renderFace?: (template: CardTemplate) => { rank?: string; suit?: string; color?: string };
     onDrop?: (cardInstanceId: string, toZoneKey: string, position?: number) => void;
     onPreview?: (card: CardInstance<CardTemplate>) => void;
@@ -23,8 +21,6 @@
     gameState,
     cardBack,
     counterDefinitions = [],
-    shufflingZoneKey = null,
-    shufflePacketStart = -1,
     renderFace,
     onDrop,
     onPreview,
@@ -32,6 +28,14 @@
     onZoneContextMenu,
     onCounterDrop,
   }: Props = $props();
+
+  // Track Zone refs by zoneKey for shuffle access
+  let zoneRefs: Record<string, Zone> = $state({});
+
+  // Exported method to trigger shuffle animation on a zone
+  export async function shuffleZone(zoneKey: string): Promise<void> {
+    await zoneRefs[zoneKey]?.shuffle();
+  }
 
   const layout = $derived(playmat.layout);
 
@@ -80,13 +84,12 @@
         "
       >
         <Zone
+          bind:this={zoneRefs[zone.key]}
           {zone}
           {slot}
           {cardBack}
           {counterDefinitions}
           {renderFace}
-          isShuffling={shufflingZoneKey === zone.key}
-          {shufflePacketStart}
           {onDrop}
           {onPreview}
           {onToggleVisibility}
@@ -105,13 +108,12 @@
       style="grid-column: 9 / span 3; grid-row: {layout.rows};"
     >
       <Zone
+        bind:this={zoneRefs[stagingZone.key]}
         zone={stagingZone}
         slot={{ id: 'staging', zoneId: 'staging', position: { row: layout.rows, col: 0 }, stackDirection: 'down' }}
         {cardBack}
         {counterDefinitions}
         {renderFace}
-        isShuffling={shufflingZoneKey === stagingZone.key}
-        {shufflePacketStart}
         {onDrop}
         {onPreview}
         {onToggleVisibility}

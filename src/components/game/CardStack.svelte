@@ -10,8 +10,6 @@
     cardBack?: string;
     counterDefinitions?: CounterDefinition[];
     renderFace?: (template: CardTemplate) => { rank?: string; suit?: string; color?: string };
-    isShuffling?: boolean;
-    shufflePacketStart?: number;
     onPreview?: (card: CardInstance<CardTemplate>) => void;
     onToggleVisibility?: (cardInstanceId: string) => void;
     onCardDrop?: (droppedCardId: string, targetCardId: string, targetIndex: number) => void;
@@ -26,13 +24,32 @@
     cardBack,
     counterDefinitions = [],
     renderFace,
-    isShuffling = false,
-    shufflePacketStart = -1,
     onPreview,
     onToggleVisibility,
     onCardDrop,
     onCounterDrop,
   }: Props = $props();
+
+  // Shuffle animation state (managed internally)
+  let isShuffling = $state(false);
+  let shufflePacketStart = $state(-1);
+  const PACKET_SIZE = 12;
+  const SHUFFLE_REPS = 4;
+
+  // Exported shuffle method - call this to trigger shuffle animation
+  export async function shuffle(): Promise<void> {
+    if (isShuffling || cards.length < 2) return;
+    isShuffling = true;
+
+    for (let rep = 0; rep < SHUFFLE_REPS; rep++) {
+      shufflePacketStart = Math.max(0, cards.length - PACKET_SIZE);
+      await new Promise(r => setTimeout(r, 300));
+      shufflePacketStart = -1;
+      await new Promise(r => setTimeout(r, 100));
+    }
+
+    isShuffling = false;
+  }
 
   // Container width for dynamic fan layout
   let containerWidth = $state(0);
