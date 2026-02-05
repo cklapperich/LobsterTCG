@@ -11,17 +11,16 @@ import type {
   Visibility,
 } from './types';
 
-// Readable card: instanceId replaced with human-readable name
-export interface ReadableCard<T extends CardTemplate = CardTemplate> {
-  name: string;  // human-readable: "A♥", "Pikachu", "Pikachu_1"
-  template: T;
+// Readable card: template flattened, instanceId replaced with human-readable name
+export type ReadableCard<T extends CardTemplate = CardTemplate> = T & {
+  name: string;  // display name with suffix: "Pikachu", "Pikachu_1", "Pikachu_2"
   visibility: Visibility;
   orientation?: string;
   status: string[];
   counters: Record<string, number>;
   attachments: ReadableCard<T>[];
   evolutionStack?: ReadableCard<T>[];
-}
+};
 
 export interface ReadableZone<T extends CardTemplate = CardTemplate> {
   config: ZoneConfig;
@@ -105,8 +104,8 @@ function convertCard<T extends CardTemplate>(
     : undefined;
 
   return {
-    name,
-    template: card.template,
+    ...card.template,
+    name,  // display name overwrites template.name
     visibility: card.visibility,
     orientation: card.orientation,
     status: card.status,

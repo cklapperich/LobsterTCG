@@ -42,9 +42,6 @@ function createCardTemplate(rank: Rank, suit: Suit): PlayingCardTemplate {
   return {
     id: `${rank}-${suit}`,
     name: `${rank}${symbol}`,
-    supertype: 'Playing Card',
-    subtypes: [suit, color],
-    text: `${rank} of ${suit}`,
     rank,
     suit,
     color,
@@ -74,4 +71,31 @@ export const STANDARD_DECK: DeckList = {
 
 export function getTemplate(templateId: string): PlayingCardTemplate | undefined {
   return CARD_TEMPLATE_MAP.get(templateId);
+}
+
+// Card back - uses default pattern (no image)
+export function getCardBack(): string | undefined {
+  return undefined; // Uses default CSS pattern
+}
+
+// Render face data for Card component
+export function renderCardFace(template: unknown): { rank?: string; suit?: string; color?: string } {
+  const t = template as PlayingCardTemplate;
+  if (!t.rank || !t.suit) {
+    return {};
+  }
+  return {
+    rank: t.rank,
+    suit: getSuitSymbol(t.suit),
+    color: t.color,
+  };
+}
+
+// Get card info string for modals
+export function getCardInfo(template: unknown): string {
+  const t = template as PlayingCardTemplate;
+  if (!t.rank || !t.suit) {
+    return (template as { name?: string }).name ?? 'Unknown';
+  }
+  return `${t.rank}${getSuitSymbol(t.suit)} - ${t.rank} of ${t.suit}`;
 }

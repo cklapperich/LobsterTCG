@@ -34,6 +34,20 @@ import type {
 import { VISIBILITY } from './types';
 
 // ============================================================================
+// Staging Zone Configuration
+// ============================================================================
+
+export const STAGING_ZONE_CONFIG: ZoneConfig = {
+  id: 'staging',
+  name: 'Staging',
+  ordered: false,
+  defaultVisibility: VISIBILITY.PUBLIC,
+  maxCards: -1,
+  ownerCanSeeContents: true,
+  opponentCanSeeCount: true,
+};
+
+// ============================================================================
 // Factory Functions
 // ============================================================================
 
@@ -111,6 +125,10 @@ export function createGameState<T extends CardTemplate>(
       const key = makeZoneKey(playerIndex as PlayerIndex, zoneConfig.id);
       zones[key] = createZone(zoneConfig, playerIndex as PlayerIndex);
     }
+
+    // Inject staging zone for each player
+    const stagingKey = makeZoneKey(playerIndex as PlayerIndex, STAGING_ZONE_CONFIG.id);
+    zones[stagingKey] = createZone(STAGING_ZONE_CONFIG, playerIndex as PlayerIndex);
   }
 
   return {
@@ -683,8 +701,6 @@ function filterCardForPlayer<T extends CardTemplate>(
       template: {
         id: 'hidden',
         name: 'Hidden Card',
-        supertype: 'unknown',
-        subtypes: [],
       } as unknown as T,
       visibility: card.visibility,
       orientation: card.orientation,

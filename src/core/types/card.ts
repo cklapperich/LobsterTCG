@@ -11,13 +11,10 @@ export const VISIBILITY = {
   HIDDEN: [false, false] as Visibility,
 } as const;
 
-// Static card definition
+// Static card definition - minimal, games can add extra properties
 export interface CardTemplate {
   id: string;
   name: string;
-  supertype: string;
-  subtypes: string[];
-  text?: string;
   imageUrl?: string;
 }
 
