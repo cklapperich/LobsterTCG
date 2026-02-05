@@ -78,6 +78,7 @@
       <div
         class="grid-slot"
         class:hand-zone={isHandZone}
+        class:stack-up={slot.stackDirection === 'up'}
         style="
           grid-column: {slot.position.col + 1} / span {slot.position.colSpan ?? 1};
           grid-row: {slot.position.row + 1} / span {slot.position.rowSpan ?? 1};
@@ -138,6 +139,10 @@
 
   .grid-slot {
     @apply flex justify-center items-start;
+  }
+
+  .grid-slot.stack-up {
+    @apply items-end;
   }
 
   .grid-slot.hand-zone {

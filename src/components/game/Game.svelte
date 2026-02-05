@@ -336,6 +336,7 @@
 <div class="game-container font-retro bg-gbc-bg min-h-screen w-screen p-4 box-border relative overflow-auto">
   <div class="scanlines"></div>
 
+  <div class="game-content">
   <header class="gbc-panel text-center mb-4 flex items-center justify-between px-4">
     <div class="flex-1 flex justify-start">
       {#if gameState}
@@ -453,6 +454,7 @@
       </div>
     </div>
   {/if}
+  </div>
 
   <!-- Context Menu -->
   {#if contextMenu}
@@ -555,8 +557,12 @@
     @apply font-retro tracking-wide;
   }
 
+  .game-content {
+    @apply w-fit mx-auto;
+  }
+
   .game-layout {
-    @apply flex justify-center items-start;
+    @apply flex items-start;
     gap: 0.5rem;
     @apply max-lg:flex-col max-lg:items-center;
   }
