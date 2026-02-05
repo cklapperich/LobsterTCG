@@ -1,7 +1,9 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import type { CardInstance, CardTemplate } from '../../core';
   import { VISIBILITY } from '../../core';
   import Card from './Card.svelte';
+  import { playSfx } from '../../lib/audio.svelte';
 
   interface Props {
     cards: CardInstance<CardTemplate>[];
@@ -99,9 +101,29 @@
 
   function handleBackdropClick(event: MouseEvent) {
     if (event.target === event.currentTarget) {
+      playSfx('cancel');
       onClose();
     }
   }
+
+  function handleBackdropKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape') {
+      playSfx('cancel');
+      onClose();
+    }
+  }
+
+  // Global Escape key handler for accessibility
+  onMount(() => {
+    const handleKeydown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        playSfx('cancel');
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeydown);
+    return () => window.removeEventListener('keydown', handleKeydown);
+  });
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
@@ -109,7 +131,7 @@
   <div class="modal gbc-panel">
     <div class="modal-header">
       <span class="modal-title">{title}</span>
-      <button class="close-btn" onclick={onClose}>×</button>
+      <button class="close-btn" onclick={() => { playSfx('cancel'); onClose(); }}>×</button>
     </div>
 
     <div class="modal-content">
@@ -144,10 +166,10 @@
 
     <div class="modal-footer">
       {#if canReorder}
-        <button class="gbc-btn secondary" onclick={onClose}>Cancel</button>
+        <button class="gbc-btn secondary" onclick={() => { playSfx('cancel'); onClose(); }}>Cancel</button>
         <button class="gbc-btn" onclick={handleConfirm}>Confirm</button>
       {:else}
-        <button class="gbc-btn" onclick={onClose}>Close</button>
+        <button class="gbc-btn" onclick={() => { playSfx('cancel'); onClose(); }}>Close</button>
       {/if}
     </div>
   </div>

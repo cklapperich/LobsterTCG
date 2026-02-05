@@ -1,5 +1,6 @@
 import type { CardInstance, CardTemplate, Visibility, GameState } from '../../core';
 import { executeAction, moveCard, flipCard, parseZoneKey } from '../../core';
+import { playSfx } from '../../lib/audio.svelte';
 
 export interface DragState {
   cardInstanceId: string;
@@ -87,6 +88,7 @@ export function executeDrop(
 
   // Clear drag state
   dragStore.current = null;
+  playSfx('cardDrop');
 
   // Return updated game state for reactivity
   return { ...gameState };

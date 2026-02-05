@@ -33,17 +33,35 @@
   const stackOffset = 1.5; // rem
   const extraHeight = $derived(Math.max(0, cards.length - 1) * stackOffset);
   const extraWidth = $derived(Math.max(0, cards.length - 1) * stackOffset);
+
+  // Calculate dynamic min-width style
+  const stackStyle = $derived.by(() => {
+    if (fixedSize) return '';
+    if (stackDirection === 'down') {
+      return `min-height: calc(var(--spacing-card-w) * 1.4 + ${extraHeight}rem)`;
+    }
+    if (stackDirection === 'right') {
+      return `min-width: calc(var(--spacing-card-w) + ${extraWidth}rem)`;
+    }
+    if (stackDirection === 'fan') {
+      // Fan uses full card width spacing - use CSS calc with card count
+      return `min-width: calc(var(--spacing-card-w) * ${cards.length} + ${Math.max(0, cards.length - 1) * 0.5}rem)`;
+    }
+    return '';
+  });
 </script>
 
 <div
   class="card-stack"
-  style="{stackDirection === 'down' && !fixedSize ? `min-height: calc(var(--spacing-card-w) * 1.4 + ${extraHeight}rem)` : ''}{stackDirection === 'right' && !fixedSize ? `min-width: calc(var(--spacing-card-w) + ${extraWidth}rem)` : ''}"
+  class:fan={stackDirection === 'fan'}
+  style={stackStyle}
 >
   {#each cards as card, i (card.instanceId)}
     <div
       class="stack-card"
       class:offset-down={stackDirection === 'down'}
       class:offset-right={stackDirection === 'right'}
+      class:offset-fan={stackDirection === 'fan'}
       style="--i: {i}; z-index: {i + 1}"
     >
       <Card
@@ -84,5 +102,25 @@
   .stack-card.offset-right {
     top: 0;
     left: calc(var(--i) * 1.5rem);
+  }
+
+  /* Fan layout: cards spread out with full card width + small gap */
+  .card-stack.fan {
+    display: flex;
+    flex-direction: row;
+    gap: 0.5rem;
+    align-items: flex-start;
+  }
+
+  .card-stack.fan .stack-card {
+    position: relative;
+    top: auto;
+    left: auto;
+  }
+
+  .stack-card.offset-fan {
+    position: relative;
+    top: auto;
+    left: auto;
   }
 </style>
