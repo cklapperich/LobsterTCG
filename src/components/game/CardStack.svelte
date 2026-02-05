@@ -41,9 +41,6 @@
 
 <div
   class="card-stack"
-  class:stack-down={stackDirection === 'down' && !fixedSize}
-  class:stack-right={stackDirection === 'right' && !fixedSize}
-  class:stack-none={stackDirection === 'none' || stackDirection === 'fan' || fixedSize}
   style="{stackDirection === 'down' && !fixedSize ? `min-height: calc(var(--spacing-card-w) * 1.4 + ${extraHeight}rem)` : ''}{stackDirection === 'right' && !fixedSize ? `min-width: calc(var(--spacing-card-w) + ${extraWidth}rem)` : ''}"
 >
   {#each cards as card, i (card.instanceId)}
