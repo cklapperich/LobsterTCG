@@ -1,5 +1,5 @@
 import type { CardInstance, CardTemplate, Visibility, GameState } from '../../core';
-import { executeAction, moveCard, flipCard, parseZoneKey } from '../../core';
+import { executeAction, moveCard, flipCard, parseZoneKey, VISIBILITY } from '../../core';
 import { playSfx } from '../../lib/audio.svelte';
 
 export interface DragState {
@@ -82,8 +82,11 @@ export function executeDrop(
     executeAction(gameState, action);
   }
 
-  // Restore original visibility (moveCard changes it to zone default)
-  const flipAction = flipCard(from.playerIndex, cardInstanceId, savedVisibility);
+  // Determine visibility for the card
+  // Auto-reveal cards moved to hand zones, otherwise restore original visibility
+  const isHandZone = to.zoneId.toLowerCase().includes('hand');
+  const newVisibility = isHandZone ? VISIBILITY.PUBLIC : savedVisibility;
+  const flipAction = flipCard(from.playerIndex, cardInstanceId, newVisibility);
   executeAction(gameState, flipAction);
 
   // Clear drag state

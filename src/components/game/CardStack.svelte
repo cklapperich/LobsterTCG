@@ -29,21 +29,29 @@
   // All cards can be drop targets
   const isDropTarget = true;
 
+  // Dynamic layout: switch fan to right stacking when too many cards
+  const FAN_THRESHOLD = 7;
+  const effectiveDirection = $derived(
+    stackDirection === 'fan' && cards.length > FAN_THRESHOLD ? 'right' : stackDirection
+  );
+  // Enable hover-to-top when we've switched from fan to stacked
+  const hoverToTop = $derived(stackDirection === 'fan' && cards.length > FAN_THRESHOLD);
+
   // Calculate stack size based on card count and offset (1.5rem = 24px at base, but use rem)
   const stackOffset = 1.5; // rem
   const extraHeight = $derived(Math.max(0, cards.length - 1) * stackOffset);
   const extraWidth = $derived(Math.max(0, cards.length - 1) * stackOffset);
 
-  // Calculate dynamic min-width style
+  // Calculate dynamic min-width style based on effective direction
   const stackStyle = $derived.by(() => {
     if (fixedSize) return '';
-    if (stackDirection === 'down') {
+    if (effectiveDirection === 'down') {
       return `min-height: calc(var(--spacing-card-w) * 1.4 + ${extraHeight}rem)`;
     }
-    if (stackDirection === 'right') {
+    if (effectiveDirection === 'right') {
       return `min-width: calc(var(--spacing-card-w) + ${extraWidth}rem)`;
     }
-    if (stackDirection === 'fan') {
+    if (effectiveDirection === 'fan') {
       // Fan uses full card width spacing - use CSS calc with card count
       return `min-width: calc(var(--spacing-card-w) * ${cards.length} + ${Math.max(0, cards.length - 1) * 0.5}rem)`;
     }
@@ -53,15 +61,16 @@
 
 <div
   class="card-stack"
-  class:fan={stackDirection === 'fan'}
+  class:fan={effectiveDirection === 'fan'}
+  class:hover-to-top={hoverToTop}
   style={stackStyle}
 >
   {#each cards as card, i (card.instanceId)}
     <div
       class="stack-card"
-      class:offset-down={stackDirection === 'down'}
-      class:offset-right={stackDirection === 'right'}
-      class:offset-fan={stackDirection === 'fan'}
+      class:offset-down={effectiveDirection === 'down'}
+      class:offset-right={effectiveDirection === 'right'}
+      class:offset-fan={effectiveDirection === 'fan'}
       style="--i: {i}; z-index: {i + 1}"
     >
       <Card
@@ -122,5 +131,10 @@
     position: relative;
     top: auto;
     left: auto;
+  }
+
+  /* Hover-to-top: when hovering a card in stacked mode, bring it to front */
+  .card-stack.hover-to-top .stack-card:hover {
+    z-index: 100 !important;
   }
 </style>

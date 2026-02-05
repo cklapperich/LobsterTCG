@@ -166,7 +166,7 @@
   }
 
   .card:hover {
-    @apply z-10;
+    z-index: 100;
     transform: translateY(-0.25rem);
     box-shadow:
       0 0.25rem 0 rgba(0,0,0,0.3),
