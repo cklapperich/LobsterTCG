@@ -4,7 +4,7 @@
 
   interface Props {
     cards: CardInstance<CardTemplate>[];
-    stackDirection: 'none' | 'down' | 'right' | 'fan';
+    stackDirection: 'none' | 'down' | 'up' | 'right' | 'fan';
     fixedSize?: boolean;
     zoneKey: string;
     cardBack?: string;
@@ -99,6 +99,10 @@
     if (stackDirection === 'down') {
       return `min-height: calc(var(--spacing-card-w) * 1.4 + ${extraHeight}rem)`;
     }
+    if (stackDirection === 'up') {
+      // Don't expand container height — cards overflow upward to save vertical space
+      return '';
+    }
     if (stackDirection === 'right') {
       return `min-width: calc(var(--spacing-card-w) + ${extraWidth}rem)`;
     }
@@ -153,6 +157,7 @@
     <div
       class="stack-card"
       class:offset-down={stackDirection === 'down'}
+      class:offset-up={stackDirection === 'up'}
       class:offset-right={stackDirection === 'right'}
       class:offset-fan={stackDirection === 'fan'}
       class:animate-overhand-lift={isInPacket}
@@ -192,6 +197,12 @@
 
   .stack-card.offset-down {
     top: calc(var(--i) * 1.5rem);
+    left: 0;
+  }
+
+  .stack-card.offset-up {
+    top: auto;
+    bottom: calc(var(--i) * 1.5rem);
     left: 0;
   }
 

@@ -15,7 +15,7 @@ export interface PlaymatSlot {
   zoneId: string; // references ZoneConfig.id
   position: PlaymatPosition;
   label?: string; // optional display label
-  stackDirection?: 'none' | 'down' | 'right' | 'fan'; // how cards stack visually
+  stackDirection?: 'none' | 'down' | 'up' | 'right' | 'fan'; // how cards stack visually
   fixedSize?: boolean; // if true, zone won't auto-expand based on card count
 }
 
