@@ -4,7 +4,6 @@
   interface Props {
     x: number;
     y: number;
-    zoneKey: string;
     zoneName: string;
     cardCount: number;
     onShuffle: () => void;
@@ -18,7 +17,6 @@
   let {
     x,
     y,
-    zoneKey: _zoneKey,
     zoneName,
     cardCount,
     onShuffle,
@@ -41,28 +39,8 @@
     }
   }
 
-  function handleShuffle() {
-    onShuffle();
-    onClose();
-  }
-
-  function handlePeekTop(count: number) {
-    onPeekTop(count);
-    onClose();
-  }
-
-  function handlePeekBottom(count: number) {
-    onPeekBottom(count);
-    onClose();
-  }
-
-  function handleArrangeTop(count: number) {
-    onArrangeTop(count);
-    onClose();
-  }
-
-  function handleArrangeBottom(count: number) {
-    onArrangeBottom(count);
+  function handleAction(action: () => void) {
+    action();
     onClose();
   }
 
@@ -83,7 +61,7 @@
 >
   <div class="menu-header">{zoneName}</div>
 
-  <button class="menu-item" onclick={handleShuffle} disabled={cardCount < 2}>
+  <button class="menu-item" onclick={() => handleAction(onShuffle)} disabled={cardCount < 2}>
     Shuffle
   </button>
 
@@ -101,7 +79,7 @@
       <div class="submenu gbc-panel">
         <div class="submenu-section">Top</div>
         {#each availableCounts as count}
-          <button class="menu-item" onclick={() => handlePeekTop(count)}>
+          <button class="menu-item" onclick={() => handleAction(() => onPeekTop(count))}>
             {count} card{count > 1 ? 's' : ''}
           </button>
         {/each}
@@ -110,7 +88,7 @@
 
         <div class="submenu-section">Bottom</div>
         {#each availableCounts as count}
-          <button class="menu-item" onclick={() => handlePeekBottom(count)}>
+          <button class="menu-item" onclick={() => handleAction(() => onPeekBottom(count))}>
             {count} card{count > 1 ? 's' : ''}
           </button>
         {/each}
@@ -132,7 +110,7 @@
       <div class="submenu gbc-panel">
         <div class="submenu-section">Top</div>
         {#each availableCounts as count}
-          <button class="menu-item" onclick={() => handleArrangeTop(count)}>
+          <button class="menu-item" onclick={() => handleAction(() => onArrangeTop(count))}>
             {count} card{count > 1 ? 's' : ''}
           </button>
         {/each}
@@ -141,7 +119,7 @@
 
         <div class="submenu-section">Bottom</div>
         {#each availableCounts as count}
-          <button class="menu-item" onclick={() => handleArrangeBottom(count)}>
+          <button class="menu-item" onclick={() => handleAction(() => onArrangeBottom(count))}>
             {count} card{count > 1 ? 's' : ''}
           </button>
         {/each}

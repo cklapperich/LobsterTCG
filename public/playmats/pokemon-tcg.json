@@ -32,7 +32,7 @@
       { "id": "p1_bench_5", "zoneId": "bench_5", "position": { "row": 2, "col": 6 }, "label": "Bench", "stackDirection": "down" },
       { "id": "p1_prizes", "zoneId": "prizes", "position": { "row": 2, "col": 7 }, "label": "Prizes", "stackDirection": "down" },
 
-      { "id": "p1_hand", "zoneId": "hand", "position": { "row": 3, "col": 0, "colSpan": 9 }, "label": "Hand", "stackDirection": "fan" }
+      { "id": "p1_hand", "zoneId": "hand", "position": { "row": 3, "col": 0, "colSpan": 8 }, "label": "Hand", "stackDirection": "fan" }
     ],
     "groups": [
       { "id": "p1_field", "name": "Player 1 Field", "slotIds": ["p1_deck", "p1_discard", "p1_active", "p1_bench_1", "p1_bench_2", "p1_bench_3", "p1_bench_4", "p1_bench_5", "p1_lost_zone", "p1_prizes", "p1_hand"] },

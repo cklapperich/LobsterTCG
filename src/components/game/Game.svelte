@@ -22,6 +22,21 @@
   // Preview state
   let previewCard = $state<CardInstance<CardTemplate> | null>(null);
 
+  // Game log state
+  let gameLog = $state<string[]>([]);
+  let logContainer = $state<HTMLDivElement | null>(null);
+
+  function addLogEntry(message: string) {
+    gameLog = [...gameLog, message];
+  }
+
+  // Auto-scroll log to bottom when new entries are added
+  $effect(() => {
+    if (gameLog.length > 0 && logContainer) {
+      logContainer.scrollTop = logContainer.scrollHeight;
+    }
+  });
+
   // Context menu state
   let contextMenu = $state<{
     zoneKey: string;
@@ -49,6 +64,54 @@
   // Card back from plugin
   const cardBack = plugin.getCardBack?.() ?? '/card-images/pokemon/cardback.png';
 
+  // Coin images (use plugin paths, fallback to defaults)
+  const coinFront = '/card-images/pokemon/coinfront.png';
+  const coinBackImg = '/card-images/pokemon/coinback.png';
+
+  // Coin flip state
+  let coinFlipping = $state(false);
+  let coinResult = $state<'heads' | 'tails' | null>(null);
+  let coinShowingFront = $state(true);
+
+  async function handleCoinFlip() {
+    if (coinFlipping) return;
+
+    // Reset state and start animation
+    coinFlipping = true;
+    coinResult = null;
+
+    // Play initial toss sound
+    playSfx('coinToss');
+
+    // Determine result randomly
+    const isHeads = Math.random() < 0.5;
+
+    // Animate several flips (12 half-rotations over ~1.5 seconds)
+    const flipCount = 12;
+    const baseDelay = 80;
+
+    for (let i = 0; i < flipCount; i++) {
+      coinShowingFront = !coinShowingFront;
+      // Slow down towards the end
+      const delay = baseDelay + (i > flipCount - 4 ? (i - (flipCount - 4)) * 40 : 0);
+      await new Promise(r => setTimeout(r, delay));
+    }
+
+    // Set final result
+    coinResult = isHeads ? 'heads' : 'tails';
+    coinShowingFront = isHeads;
+
+    // Play result sound
+    playSfx(isHeads ? 'coinHeads' : 'coinTails');
+
+    // Log the result
+    addLogEntry(`Coin flip: ${isHeads ? 'HEADS' : 'TAILS'}`);
+
+    // Keep result visible briefly, then reset
+    await new Promise(r => setTimeout(r, 800));
+    coinFlipping = false;
+  }
+
   onMount(async () => {
     try {
       playmat = await plugin.getPlaymat();
@@ -62,14 +125,28 @@
 
   function handleDrop(cardInstanceId: string, toZoneKey: string, position?: number) {
     if (!gameState) return;
+
+    // Find the card and source zone for logging
+    let cardName = 'Card';
+    for (const zone of Object.values(gameState.zones)) {
+      const card = zone.cards.find((c) => c.instanceId === cardInstanceId);
+      if (card) {
+        cardName = card.template.name;
+        break;
+      }
+    }
+
     const updatedState = executeDrop(cardInstanceId, toZoneKey, gameState, position);
     if (updatedState) {
       gameState = updatedState;
+      // Get zone name for logging
+      const { zoneId } = parseZoneKey(toZoneKey);
+      addLogEntry(`Moved ${cardName} to ${zoneId}`);
     }
   }
 
   function handlePreview(card: CardInstance<CardTemplate>) {
-    previewCard = card as CardInstance<CardTemplate>;
+    previewCard = card;
   }
 
   function handleToggleVisibility(cardInstanceId: string) {
@@ -84,6 +161,8 @@
         const action = flipCard(0, cardInstanceId, newVisibility);
         executeAction(gameState, action);
         gameState = { ...gameState };
+        const flipDirection = newVisibility === VISIBILITY.PUBLIC ? 'face up' : 'face down';
+        addLogEntry(`Flipped ${card.template.name} ${flipDirection}`);
         break;
       }
     }
@@ -129,68 +208,18 @@
     const action = shuffle(playerIndex, zoneId);
     executeAction(gameState, action);
     gameState = { ...gameState };
+    addLogEntry(`Shuffled ${zoneId}`);
 
     // Clear animation state
     shufflingZoneKey = null;
   }
 
-  function getZoneCards(zoneKey: string): CardInstance<CardTemplate>[] {
-    if (!gameState) return [];
-    return gameState.zones[zoneKey]?.cards ?? [];
-  }
-
-  function handlePeekTop(count: number) {
-    if (!contextMenu) return;
-    const zoneCards = getZoneCards(contextMenu.zoneKey);
-    // Last cards in array = highest z-index = visually on TOP
-    const cards = zoneCards.slice(-count);
-    cardModal = {
-      cards,
-      zoneKey: contextMenu.zoneKey,
-      zoneName: contextMenu.zoneName,
-      position: 'top',
-      mode: 'peek',
-    };
-  }
-
-  function handlePeekBottom(count: number) {
-    if (!contextMenu) return;
-    // First cards in array = lowest z-index = visually at BOTTOM
-    const cards = getZoneCards(contextMenu.zoneKey).slice(0, count);
-    cardModal = {
-      cards,
-      zoneKey: contextMenu.zoneKey,
-      zoneName: contextMenu.zoneName,
-      position: 'bottom',
-      mode: 'peek',
-    };
-  }
-
-  function handleArrangeTop(count: number) {
-    if (!contextMenu) return;
-    const zoneCards = getZoneCards(contextMenu.zoneKey);
-    // Last cards in array = highest z-index = visually on TOP
-    const cards = zoneCards.slice(-count);
-    cardModal = {
-      cards,
-      zoneKey: contextMenu.zoneKey,
-      zoneName: contextMenu.zoneName,
-      position: 'top',
-      mode: 'arrange',
-    };
-  }
-
-  function handleArrangeBottom(count: number) {
-    if (!contextMenu) return;
-    // First cards in array = lowest z-index = visually at BOTTOM
-    const cards = getZoneCards(contextMenu.zoneKey).slice(0, count);
-    cardModal = {
-      cards,
-      zoneKey: contextMenu.zoneKey,
-      zoneName: contextMenu.zoneName,
-      position: 'bottom',
-      mode: 'arrange',
-    };
+  function handleCardModal(mode: 'peek' | 'arrange', position: 'top' | 'bottom', count: number) {
+    if (!contextMenu || !gameState) return;
+    const zoneCards = gameState.zones[contextMenu.zoneKey]?.cards ?? [];
+    // top = last cards in array (highest z-index), bottom = first cards
+    const cards = position === 'top' ? zoneCards.slice(-count) : zoneCards.slice(0, count);
+    cardModal = { cards, zoneKey: contextMenu.zoneKey, zoneName: contextMenu.zoneName, position, mode };
   }
 
   function handleCardModalConfirm(reorderedCards: CardInstance<CardTemplate>[]) {
@@ -202,11 +231,9 @@
     const count = reorderedCards.length;
 
     if (cardModal.position === 'top') {
-      // Replace top N cards (last in array = highest z-index = visually on top)
-      zone.cards.splice(-count, count, ...reorderedCards as CardInstance<CardTemplate>[]);
+      zone.cards.splice(-count, count, ...reorderedCards);
     } else {
-      // Replace bottom N cards (first in array = lowest z-index = visually at bottom)
-      zone.cards.splice(0, count, ...reorderedCards as CardInstance<CardTemplate>[]);
+      zone.cards.splice(0, count, ...reorderedCards);
     }
 
     gameState = { ...gameState };
@@ -224,6 +251,7 @@
       previewCard = null;
       contextMenu = null;
       cardModal = null;
+      gameLog = ['Game started'];
     });
   }
 </script>
@@ -231,10 +259,23 @@
 <div class="game-container font-retro bg-gbc-bg min-h-screen w-screen p-4 box-border relative overflow-auto">
   <div class="scanlines"></div>
 
-  <header class="gbc-panel text-center mb-4">
+  <header class="gbc-panel text-center mb-4 flex items-center justify-between px-4">
+    <div class="flex-1"></div>
     <h1 class="text-gbc-yellow text-xl max-sm:text-sm m-0 tracking-wide title-shadow">
       {playmat?.name ?? 'LOADING...'}
     </h1>
+    <div class="flex-1 flex justify-end gap-2">
+      <button
+        class="gbc-btn text-[0.5rem] py-1 px-3"
+        onclick={handleCoinFlip}
+        disabled={coinFlipping}
+      >
+        FLIP COIN
+      </button>
+      <button class="gbc-btn text-[0.5rem] py-1 px-3" onclick={resetGame}>
+        NEW GAME
+      </button>
+    </div>
   </header>
 
   {#if loading}
@@ -279,10 +320,13 @@
           {/if}
         </div>
 
-        <div class="gbc-panel controls-panel">
-          <button class="gbc-btn text-[0.5rem] py-2 px-4 w-full" onclick={resetGame}>
-            NEW GAME
-          </button>
+        <div class="gbc-panel log-panel">
+          <div class="text-gbc-yellow text-[0.5rem] text-center mb-2 py-1 px-2 bg-gbc-border">LOG</div>
+          <div class="log-content" bind:this={logContainer}>
+            {#each gameLog as entry}
+              <div class="log-entry text-[0.45rem] text-gbc-light">{entry}</div>
+            {/each}
+          </div>
         </div>
       </div>
     </div>
@@ -293,14 +337,13 @@
     <ZoneContextMenu
       x={contextMenu.x}
       y={contextMenu.y}
-      zoneKey={contextMenu.zoneKey}
       zoneName={contextMenu.zoneName}
       cardCount={contextMenu.cardCount}
       onShuffle={handleShuffle}
-      onPeekTop={handlePeekTop}
-      onPeekBottom={handlePeekBottom}
-      onArrangeTop={handleArrangeTop}
-      onArrangeBottom={handleArrangeBottom}
+      onPeekTop={(count) => handleCardModal('peek', 'top', count)}
+      onPeekBottom={(count) => handleCardModal('peek', 'bottom', count)}
+      onArrangeTop={(count) => handleCardModal('arrange', 'top', count)}
+      onArrangeBottom={(count) => handleCardModal('arrange', 'bottom', count)}
       onClose={closeContextMenu}
     />
   {/if}
@@ -326,6 +369,27 @@
       y={dragState.mouseY}
       {cardBack}
     />
+  {/if}
+
+  <!-- Coin Flip Modal -->
+  {#if coinFlipping}
+    <div class="coin-modal-overlay">
+      <div class="coin-modal">
+        <div class="coin-container" class:showing-result={coinResult !== null}>
+          <img
+            src={coinShowingFront ? coinFront : coinBackImg}
+            alt="Coin"
+            class="coin-image"
+            class:flipping={coinResult === null}
+          />
+        </div>
+        {#if coinResult}
+          <div class="coin-result text-gbc-yellow text-lg mt-4">
+            {coinResult === 'heads' ? 'HEADS!' : 'TAILS!'}
+          </div>
+        {/if}
+      </div>
+    </div>
   {/if}
 </div>
 
@@ -369,8 +433,19 @@
     @apply max-lg:w-auto;
   }
 
-  .controls-panel {
+  .log-panel {
     @apply max-lg:w-auto;
+  }
+
+  .log-content {
+    @apply overflow-y-auto px-2;
+    height: 25rem;
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-gbc-green) var(--color-gbc-border);
+  }
+
+  .log-entry {
+    @apply py-0.5 border-b border-gbc-border/30;
   }
 
   .preview-card {
@@ -404,5 +479,60 @@
     width: 18rem;
     aspect-ratio: 5 / 7;
     @apply rounded-xl bg-gbc-border opacity-30;
+  }
+
+  .coin-modal-overlay {
+    @apply fixed inset-0 z-50 flex items-center justify-center;
+    background: rgba(0, 0, 0, 0.7);
+  }
+
+  .coin-modal {
+    @apply flex flex-col items-center justify-center p-8;
+  }
+
+  .coin-container {
+    @apply relative;
+    perspective: 1000px;
+  }
+
+  .coin-image {
+    width: 12rem;
+    height: 12rem;
+    @apply rounded-full object-cover;
+    box-shadow: 0 0.5rem 2rem rgba(0, 0, 0, 0.5);
+  }
+
+  .coin-image.flipping {
+    animation: coin-flip 0.15s linear infinite;
+  }
+
+  .coin-container.showing-result .coin-image {
+    animation: coin-land 0.3s ease-out forwards;
+  }
+
+  .coin-result {
+    @apply font-retro tracking-wider;
+    text-shadow:
+      0.125rem 0.125rem 0 var(--color-gbc-red),
+      0.25rem 0.25rem 0 var(--color-gbc-border);
+    animation: result-pop 0.3s ease-out;
+  }
+
+  @keyframes coin-flip {
+    0% { transform: rotateY(0deg) scale(1); }
+    50% { transform: rotateY(90deg) scale(1.1); }
+    100% { transform: rotateY(180deg) scale(1); }
+  }
+
+  @keyframes coin-land {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+  }
+
+  @keyframes result-pop {
+    0% { transform: scale(0); opacity: 0; }
+    50% { transform: scale(1.2); }
+    100% { transform: scale(1); opacity: 1; }
   }
 </style>
