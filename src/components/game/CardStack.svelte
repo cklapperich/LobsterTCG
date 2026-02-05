@@ -100,8 +100,7 @@
       return `min-height: calc(var(--spacing-card-w) * 1.4 + ${extraHeight}rem)`;
     }
     if (stackDirection === 'up') {
-      // Don't expand container height — cards overflow upward to save vertical space
-      return '';
+      return `min-height: calc(var(--spacing-card-w) * 1.4 + ${extraHeight}rem)`;
     }
     if (stackDirection === 'right') {
       return `min-width: calc(var(--spacing-card-w) + ${extraWidth}rem)`;
