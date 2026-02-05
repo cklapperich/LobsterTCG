@@ -31,6 +31,12 @@
     y: number;
   } | null>(null);
 
+  // Shuffle animation state
+  let shufflingZoneKey = $state<string | null>(null);
+  let shufflePacketStart = $state(-1);
+  const PACKET_SIZE = 12;
+  const SHUFFLE_REPS = 4;
+
   // Card modal state (unified for peek and arrange)
   let cardModal = $state<{
     cards: CardInstance<CardTemplate>[];
@@ -93,12 +99,39 @@
     contextMenu = null;
   }
 
-  function handleShuffle() {
+  async function handleShuffle() {
     if (!gameState || !contextMenu) return;
-    const { playerIndex, zoneId } = parseZoneKey(contextMenu.zoneKey);
+
+    const zoneKey = contextMenu.zoneKey;
+    const zone = gameState.zones[zoneKey];
+    if (!zone || zone.cards.length < 2) return;
+
+    // Play shuffle sound
+    playSfx('shuffle');
+
+    // Start animation
+    shufflingZoneKey = zoneKey;
+
+    // Do multiple overhand motions
+    for (let rep = 0; rep < SHUFFLE_REPS; rep++) {
+      // Mark which cards are in the current packet (top cards)
+      shufflePacketStart = Math.max(0, zone.cards.length - PACKET_SIZE);
+
+      // Wait for animation
+      await new Promise(r => setTimeout(r, 300));
+
+      shufflePacketStart = -1;
+      await new Promise(r => setTimeout(r, 100)); // Brief pause between reps
+    }
+
+    // Execute actual shuffle
+    const { playerIndex, zoneId } = parseZoneKey(zoneKey);
     const action = shuffle(playerIndex, zoneId);
     executeAction(gameState, action);
     gameState = { ...gameState };
+
+    // Clear animation state
+    shufflingZoneKey = null;
   }
 
   function getZoneCards(zoneKey: string): CardInstance<CardTemplate>[] {
@@ -219,6 +252,8 @@
           {playmat}
           {gameState}
           {cardBack}
+          {shufflingZoneKey}
+          {shufflePacketStart}
           onDrop={handleDrop}
           onPreview={handlePreview}
           onToggleVisibility={handleToggleVisibility}

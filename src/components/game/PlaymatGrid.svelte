@@ -7,6 +7,8 @@
     playmat: Playmat;
     gameState: GameState<CardTemplate>;
     cardBack?: string;
+    shufflingZoneKey?: string | null;
+    shufflePacketStart?: number;
     renderFace?: (template: CardTemplate) => { rank?: string; suit?: string; color?: string };
     onDrop?: (cardInstanceId: string, toZoneKey: string, position?: number) => void;
     onPreview?: (card: CardInstance<CardTemplate>) => void;
@@ -18,6 +20,8 @@
     playmat,
     gameState,
     cardBack,
+    shufflingZoneKey = null,
+    shufflePacketStart = -1,
     renderFace,
     onDrop,
     onPreview,
@@ -76,6 +80,8 @@
           {slot}
           {cardBack}
           {renderFace}
+          isShuffling={shufflingZoneKey === zone.key}
+          {shufflePacketStart}
           {onDrop}
           {onPreview}
           {onToggleVisibility}
@@ -97,6 +103,8 @@
         slot={{ id: 'staging', zoneId: 'staging', position: { row: layout.rows, col: 0 }, stackDirection: 'down' }}
         {cardBack}
         {renderFace}
+        isShuffling={shufflingZoneKey === stagingZone.key}
+        {shufflePacketStart}
         {onDrop}
         {onPreview}
         {onToggleVisibility}
