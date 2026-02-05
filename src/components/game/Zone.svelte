@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Zone as ZoneType, PlaymatSlot, CardInstance, CardTemplate, CounterDefinition } from '../../core';
+  import type { Zone as ZoneType, PlaymatSlot, CardInstance, CardTemplate, CounterDefinition, ZoneConfig } from '../../core';
   import CardStack from './CardStack.svelte';
 
   interface Props {
@@ -14,7 +14,7 @@
     onDrop?: (cardInstanceId: string, toZoneId: string, position?: number) => void;
     onPreview?: (card: CardInstance<CardTemplate>) => void;
     onToggleVisibility?: (cardInstanceId: string) => void;
-    onZoneContextMenu?: (zoneId: string, zoneName: string, cardCount: number, x: number, y: number) => void;
+    onZoneContextMenu?: (zoneId: string, zoneName: string, cardCount: number, zoneConfig: ZoneConfig, x: number, y: number) => void;
     onCounterDrop?: (counterId: string, cardInstanceId: string) => void;
   }
 
@@ -46,7 +46,7 @@
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
-      onZoneContextMenu?.(zone.key, label, zone.cards.length, e.clientX, e.clientY);
+      onZoneContextMenu?.(zone.key, label, zone.cards.length, zone.config, e.clientX, e.clientY);
       return false;
     }
     zoneEl.addEventListener('contextmenu', handleContextMenu, { capture: true });
@@ -62,14 +62,20 @@
     isDragOver = false;
   }
 
-  // Zone background drop = bottom of stack (position 0 = lowest z-index = visually behind)
+  // Zone background drop: hands add to end (rightmost), other zones add to bottom (position 0)
   function handleDrop(event: DragEvent) {
     event.preventDefault();
     isDragOver = false;
     const cardInstanceId = event.dataTransfer?.getData('text/plain');
     if (cardInstanceId) {
-      // Zone background drop always goes to bottom (insert at index 0)
-      onDrop?.(cardInstanceId, zone.key, 0);
+      const isHandZone = zone.config.id === 'hand';
+      if (isHandZone) {
+        // Hand zone: add to end (rightmost position)
+        onDrop?.(cardInstanceId, zone.key);
+      } else {
+        // Other zones: add to bottom of stack (insert at index 0)
+        onDrop?.(cardInstanceId, zone.key, 0);
+      }
     }
   }
 

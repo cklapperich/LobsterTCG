@@ -8,7 +8,7 @@
   interface Props {
     cards: CardInstance<CardTemplate>[];
     zoneName: string;
-    position: 'top' | 'bottom';
+    position: 'top' | 'bottom' | 'all';
     mode: 'peek' | 'arrange';
     renderFace?: (template: CardTemplate) => { rank?: string; suit?: string; color?: string };
     cardBack?: string;
@@ -28,7 +28,12 @@
   }: Props = $props();
 
   const canReorder = $derived(mode === 'arrange');
-  const title = $derived(mode === 'peek' ? `Peeking at ${position} of ${zoneName}` : `Arrange ${position} of ${zoneName}`);
+  const title = $derived.by(() => {
+    if (position === 'all') {
+      return mode === 'peek' ? `Viewing ${zoneName}` : `Arrange ${zoneName}`;
+    }
+    return mode === 'peek' ? `Peeking at ${position} of ${zoneName}` : `Arrange ${position} of ${zoneName}`;
+  });
 
   // Create visible copies of cards for display (force face-up)
   function makeVisible(card: CardInstance<CardTemplate>): CardInstance<CardTemplate> {
@@ -119,8 +124,8 @@
   });
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
-<div class="modal-backdrop" onclick={handleBackdropClick}>
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div class="modal-backdrop" onclick={handleBackdropClick} onkeydown={(e) => { if (e.key === 'Escape') { playSfx('cancel'); onClose(); } }} role="presentation">
   <div class="modal gbc-panel">
     <div class="modal-header">
       <span class="modal-title">{title}</span>

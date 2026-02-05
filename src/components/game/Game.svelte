@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Playmat, CardInstance, CardTemplate, GameState, CounterDefinition, DeckList } from '../../core';
+  import type { Playmat, CardInstance, CardTemplate, GameState, CounterDefinition, DeckList, ZoneConfig } from '../../core';
   import { executeAction, shuffle, VISIBILITY, flipCard, parseZoneKey, endTurn, loadDeck } from '../../core';
   import { plugin, executeSetup, ZONE_IDS } from '../../plugins/pokemon';
   import { getTemplate } from '../../plugins/pokemon/cards';
@@ -69,6 +69,7 @@
     zoneKey: string;
     zoneName: string;
     cardCount: number;
+    zoneConfig: ZoneConfig;
     x: number;
     y: number;
   } | null>(null);
@@ -84,7 +85,7 @@
     cards: CardInstance<CardTemplate>[];
     zoneKey: string;
     zoneName: string;
-    position: 'top' | 'bottom';
+    position: 'top' | 'bottom' | 'all';
     mode: 'peek' | 'arrange';
   } | null>(null);
 
@@ -209,8 +210,8 @@
   }
 
   // Context menu handlers
-  function handleZoneContextMenu(zoneKey: string, zoneName: string, cardCount: number, x: number, y: number) {
-    contextMenu = { zoneKey, zoneName, cardCount, x, y };
+  function handleZoneContextMenu(zoneKey: string, zoneName: string, cardCount: number, zoneConfig: ZoneConfig, x: number, y: number) {
+    contextMenu = { zoneKey, zoneName, cardCount, zoneConfig, x, y };
   }
 
   function closeContextMenu() {
@@ -262,6 +263,20 @@
     cardModal = { cards, zoneKey: contextMenu.zoneKey, zoneName: contextMenu.zoneName, position, mode };
   }
 
+  function handleViewAll() {
+    if (!contextMenu || !gameState) return;
+    const zoneCards = gameState.zones[contextMenu.zoneKey]?.cards ?? [];
+    if (zoneCards.length === 0) return;
+    cardModal = { cards: [...zoneCards], zoneKey: contextMenu.zoneKey, zoneName: contextMenu.zoneName, position: 'all', mode: 'peek' };
+  }
+
+  function handleArrangeAll() {
+    if (!contextMenu || !gameState) return;
+    const zoneCards = gameState.zones[contextMenu.zoneKey]?.cards ?? [];
+    if (zoneCards.length < 2) return;
+    cardModal = { cards: [...zoneCards], zoneKey: contextMenu.zoneKey, zoneName: contextMenu.zoneName, position: 'all', mode: 'arrange' };
+  }
+
   function handleCardModalConfirm(reorderedCards: CardInstance<CardTemplate>[]) {
     if (!gameState || !cardModal) return;
 
@@ -270,7 +285,10 @@
 
     const count = reorderedCards.length;
 
-    if (cardModal.position === 'top') {
+    if (cardModal.position === 'all') {
+      // Replace entire zone contents
+      zone.cards = reorderedCards;
+    } else if (cardModal.position === 'top') {
       zone.cards.splice(-count, count, ...reorderedCards);
     } else {
       zone.cards.splice(0, count, ...reorderedCards);
@@ -482,11 +500,14 @@
       y={contextMenu.y}
       zoneName={contextMenu.zoneName}
       cardCount={contextMenu.cardCount}
+      zoneConfig={contextMenu.zoneConfig}
       onShuffle={handleShuffle}
       onPeekTop={(count) => handleCardModal('peek', 'top', count)}
       onPeekBottom={(count) => handleCardModal('peek', 'bottom', count)}
       onArrangeTop={(count) => handleCardModal('arrange', 'top', count)}
       onArrangeBottom={(count) => handleCardModal('arrange', 'bottom', count)}
+      onViewAll={handleViewAll}
+      onArrangeAll={handleArrangeAll}
       onClearCounters={handleClearCounters}
       onClose={closeContextMenu}
     />

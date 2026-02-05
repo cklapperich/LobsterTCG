@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Playmat, CardInstance, GameState, CardTemplate, CounterDefinition } from '../../core';
+  import type { Playmat, CardInstance, GameState, CardTemplate, CounterDefinition, ZoneConfig } from '../../core';
   import { makeZoneKey } from '../../core';
   import Zone from './Zone.svelte';
 
@@ -14,7 +14,7 @@
     onDrop?: (cardInstanceId: string, toZoneKey: string, position?: number) => void;
     onPreview?: (card: CardInstance<CardTemplate>) => void;
     onToggleVisibility?: (cardInstanceId: string) => void;
-    onZoneContextMenu?: (zoneKey: string, zoneName: string, cardCount: number, x: number, y: number) => void;
+    onZoneContextMenu?: (zoneKey: string, zoneName: string, cardCount: number, zoneConfig: ZoneConfig, x: number, y: number) => void;
     onCounterDrop?: (counterId: string, cardInstanceId: string) => void;
   }
 
