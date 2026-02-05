@@ -40,7 +40,7 @@ export type {
 
 // Re-export readable state conversion
 export { toReadableState, resolveCardName } from './readable';
-export type { ReadableCard, ReadableZone, ReadableGameState } from './readable';
+export type { ReadableCard, ReadableZone, ReadableGameState, ReadableAction, ReadableTurn } from './readable';
 
 // Re-export playmat loader
 export { loadPlaymat, parsePlaymat } from './playmat-loader';
@@ -50,7 +50,6 @@ export {
   draw,
   moveCard,
   playCard,
-  attachCard,
   placeOnZone,
   placeOnTop,
   placeOnBottom,
@@ -62,8 +61,6 @@ export {
   setOrientation,
   tap,
   untap,
-  addStatus,
-  removeStatus,
   addCounter,
   removeCounter,
   setCounter,
