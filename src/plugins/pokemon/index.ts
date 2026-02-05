@@ -11,7 +11,6 @@ import {
 import { ZONE_IDS, PRIZE_ZONE_IDS } from './zones';
 import type { PokemonCardTemplate } from './cards';
 import {
-  DEFAULT_POKEMON_DECK,
   getTemplate,
   getCardBack,
 } from './cards';
@@ -22,6 +21,10 @@ import poisonImg from './counters/poison.png';
 import damage10Img from './counters/damage-10.png';
 import damage50Img from './counters/damage-50.png';
 import damage100Img from './counters/damage-100.png';
+
+// Import coin images
+import coinFrontImg from './coinfront.png';
+import coinBackImg from './coinback.png';
 
 export type PokemonGameState = GameState<PokemonCardTemplate>;
 
@@ -38,6 +41,14 @@ const POKEMON_COUNTERS: CounterDefinition[] = [
 
 export function getCounterDefinitions(): CounterDefinition[] {
   return POKEMON_COUNTERS;
+}
+
+export function getCoinFront(): string {
+  return coinFrontImg;
+}
+
+export function getCoinBack(): string {
+  return coinBackImg;
 }
 
 // Cached playmat instance
@@ -93,12 +104,7 @@ export function startPokemonGameWithPlaymat(
   player2Id: string = 'player2'
 ): PokemonGameState {
   const config = getGameConfig(playmat);
-  const state = createGameState<PokemonCardTemplate>(config, player1Id, player2Id);
-
-  // Auto-load default deck for player 0
-  loadDeck(state, 0, ZONE_IDS.DECK, DEFAULT_POKEMON_DECK, getTemplate, false);
-
-  return state;
+  return createGameState<PokemonCardTemplate>(config, player1Id, player2Id);
 }
 
 /**
@@ -118,7 +124,7 @@ export function loadPlayerDeck(
  * Execute the standard game setup for a player.
  * Shuffles the deck, draws 7 cards, and sets 6 prizes.
  */
-export function executeSetup(state: PokemonGameState, playerIndex: PlayerIndex): void {
+export function executeSetup(state: GameState<CardTemplate>, playerIndex: PlayerIndex): void {
   const deckKey = makeZoneKey(playerIndex, ZONE_IDS.DECK);
 
   // Shuffle the deck
@@ -172,6 +178,8 @@ export const plugin: GamePlugin<PokemonCardTemplate> = {
   getCardInfo,
   getCardBack,
   getCounterDefinitions,
+  getCoinFront,
+  getCoinBack,
 };
 
 // Re-exports
@@ -179,7 +187,8 @@ export { ZONE_IDS, BENCH_ZONE_IDS, PRIZE_ZONE_IDS, ALL_ZONE_IDS } from './zones'
 export type { PokemonCardTemplate } from './cards';
 export {
   POKEMON_TEMPLATE_MAP,
-  DEFAULT_POKEMON_DECK,
   getTemplate,
   getCardBack,
+  parsePTCGODeck,
+  type PTCGOParseResult,
 } from './cards';
