@@ -1,4 +1,4 @@
-import type { Action, GameState, PlayCardAction, MoveCardAction, AddCounterAction } from '../../core/types';
+import type { Action, GameState, PlayCardAction, MoveCardAction, MoveCardStackAction, AddCounterAction } from '../../core/types';
 import type { PreHookResult, Plugin } from '../../core/plugin/types';
 import type { PokemonCardTemplate } from './cards';
 import { getTemplate } from './cards';
@@ -8,10 +8,20 @@ import {
   isEnergy,
   isEvolution,
   isBasicPokemon,
+  isStadium,
   isFieldZone,
+  isStadiumZone,
 } from './helpers';
 
 type PokemonState = Readonly<GameState<PokemonCardTemplate>>;
+
+/** Return 'block' for AI actions, 'warn' for UI actions (never block human players). */
+function blockOrWarn(action: Action, reason: string): PreHookResult {
+  if (action.source === 'ai') {
+    return { outcome: 'block', reason };
+  }
+  return { outcome: 'warn', reason };
+}
 
 function getTemplateForCard(state: PokemonState, cardInstanceId: string): PokemonCardTemplate | null {
   const result = findCardInZones(state, cardInstanceId);
@@ -34,10 +44,7 @@ function warnOneSupporter(state: PokemonState, action: Action): PreHookResult {
     const prevPlay = prev as PlayCardAction;
     const prevTemplate = getTemplateForCard(state, prevPlay.cardInstanceId);
     if (prevTemplate && isSupporter(prevTemplate)) {
-      return {
-        outcome: 'block',
-        reason: 'Already played a Supporter this turn. Set allowed_by_effect if a card effect permits this.',
-      };
+      return blockOrWarn(action, 'Already played a Supporter this turn. Set allowed_by_effect if a card effect permits this.');
     }
   }
 
@@ -50,6 +57,7 @@ function warnOneEnergyAttachment(state: PokemonState, action: Action): PreHookRe
 
   let cardInstanceId: string;
   let toZone: string;
+  let fromZone: string | undefined;
 
   if (action.type === 'play_card') {
     const playAction = action as PlayCardAction;
@@ -59,9 +67,19 @@ function warnOneEnergyAttachment(state: PokemonState, action: Action): PreHookRe
     const moveAction = action as MoveCardAction;
     cardInstanceId = moveAction.cardInstanceId;
     toZone = moveAction.toZone;
+    fromZone = moveAction.fromZone;
+  } else if (action.type === 'move_card_stack') {
+    const stackAction = action as MoveCardStackAction;
+    cardInstanceId = stackAction.cardInstanceIds[0];
+    toZone = stackAction.toZone;
+    fromZone = stackAction.fromZone;
+    if (!cardInstanceId) return { outcome: 'continue' };
   } else {
     return { outcome: 'continue' };
   }
+
+  // Same-zone rearrangement is not an energy attachment
+  if (fromZone && fromZone === toZone) return { outcome: 'continue' };
 
   // Only care about energy going to field zones
   if (!isFieldZone(toZone)) return { outcome: 'continue' };
@@ -73,6 +91,7 @@ function warnOneEnergyAttachment(state: PokemonState, action: Action): PreHookRe
   for (const prev of state.currentTurn.actions) {
     let prevCardId: string | undefined;
     let prevToZone: string | undefined;
+    let prevFromZone: string | undefined;
 
     if (prev.type === 'play_card') {
       const p = prev as PlayCardAction;
@@ -82,16 +101,21 @@ function warnOneEnergyAttachment(state: PokemonState, action: Action): PreHookRe
       const m = prev as MoveCardAction;
       prevCardId = m.cardInstanceId;
       prevToZone = m.toZone;
+      prevFromZone = m.fromZone;
+    } else if (prev.type === 'move_card_stack') {
+      const s = prev as MoveCardStackAction;
+      prevCardId = s.cardInstanceIds[0];
+      prevToZone = s.toZone;
+      prevFromZone = s.fromZone;
     }
 
     if (!prevCardId || !prevToZone || !isFieldZone(prevToZone)) continue;
+    // Skip same-zone rearrangements in history
+    if (prevFromZone && prevFromZone === prevToZone) continue;
 
     const prevTemplate = getTemplateForCard(state, prevCardId);
     if (prevTemplate && isEnergy(prevTemplate)) {
-      return {
-        outcome: 'block',
-        reason: 'Already attached an Energy this turn. Set allowed_by_effect if a card effect permits this.',
-      };
+      return blockOrWarn(action, 'Already attached an Energy this turn. Set allowed_by_effect if a card effect permits this.');
     }
   }
 
@@ -100,22 +124,43 @@ function warnOneEnergyAttachment(state: PokemonState, action: Action): PreHookRe
 
 // Warning 3: Evolution chain must match
 function warnEvolutionChain(state: PokemonState, action: Action): PreHookResult {
-  if (action.type !== 'play_card') return { outcome: 'continue' };
   if (action.allowed_by_effect) return { outcome: 'continue' };
 
-  const playAction = action as PlayCardAction;
-  const template = getTemplateForCard(state, playAction.cardInstanceId);
+  let cardInstanceId: string;
+  let toZone: string;
+  let player: 0 | 1;
+
+  if (action.type === 'play_card') {
+    const a = action as PlayCardAction;
+    cardInstanceId = a.cardInstanceId;
+    toZone = a.toZone;
+    player = a.player;
+  } else if (action.type === 'move_card') {
+    const a = action as MoveCardAction;
+    cardInstanceId = a.cardInstanceId;
+    toZone = a.toZone;
+    player = a.player;
+  } else if (action.type === 'move_card_stack') {
+    const a = action as MoveCardStackAction;
+    cardInstanceId = a.cardInstanceIds[0];
+    toZone = a.toZone;
+    player = a.player;
+    if (!cardInstanceId) return { outcome: 'continue' };
+  } else {
+    return { outcome: 'continue' };
+  }
+
+  if (!isFieldZone(toZone)) return { outcome: 'continue' };
+
+  const template = getTemplateForCard(state, cardInstanceId);
   if (!template || !isEvolution(template)) return { outcome: 'continue' };
   if (!template.evolveFrom) return { outcome: 'continue' };
 
   // Check target zone for a matching pre-evolution
-  const zoneKey = `player${playAction.player}_${playAction.toZone}`;
+  const zoneKey = `player${player}_${toZone}`;
   const zone = state.zones[zoneKey];
   if (!zone || zone.cards.length === 0) {
-    return {
-      outcome: 'block',
-      reason: `Cannot evolve ${template.name} — no ${template.evolveFrom} found in ${playAction.toZone}. Set allowed_by_effect if a card effect permits this.`,
-    };
+    return blockOrWarn(action, `Cannot evolve ${template.name} — no ${template.evolveFrom} found in ${toZone}. Set allowed_by_effect if a card effect permits this.`);
   }
 
   const hasPreEvolution = zone.cards.some((card) => {
@@ -124,10 +169,7 @@ function warnEvolutionChain(state: PokemonState, action: Action): PreHookResult 
   });
 
   if (!hasPreEvolution) {
-    return {
-      outcome: 'block',
-      reason: `Cannot evolve ${template.name} — no ${template.evolveFrom} found in ${playAction.toZone}. Set allowed_by_effect if a card effect permits this.`,
-    };
+    return blockOrWarn(action, `Cannot evolve ${template.name} — no ${template.evolveFrom} found in ${toZone}. Set allowed_by_effect if a card effect permits this.`);
   }
 
   return { outcome: 'continue' };
@@ -135,33 +177,51 @@ function warnEvolutionChain(state: PokemonState, action: Action): PreHookResult 
 
 // Warning 4: Cannot evolve on first turn or the turn a Pokemon was played
 function warnEvolutionTiming(state: PokemonState, action: Action): PreHookResult {
-  if (action.type !== 'play_card') return { outcome: 'continue' };
   if (action.allowed_by_effect) return { outcome: 'continue' };
 
-  const playAction = action as PlayCardAction;
-  const template = getTemplateForCard(state, playAction.cardInstanceId);
+  let cardInstanceId: string;
+  let toZone: string;
+  let player: 0 | 1;
+
+  if (action.type === 'play_card') {
+    const a = action as PlayCardAction;
+    cardInstanceId = a.cardInstanceId;
+    toZone = a.toZone;
+    player = a.player;
+  } else if (action.type === 'move_card') {
+    const a = action as MoveCardAction;
+    cardInstanceId = a.cardInstanceId;
+    toZone = a.toZone;
+    player = a.player;
+  } else if (action.type === 'move_card_stack') {
+    const a = action as MoveCardStackAction;
+    cardInstanceId = a.cardInstanceIds[0];
+    toZone = a.toZone;
+    player = a.player;
+    if (!cardInstanceId) return { outcome: 'continue' };
+  } else {
+    return { outcome: 'continue' };
+  }
+
+  if (!isFieldZone(toZone)) return { outcome: 'continue' };
+
+  const template = getTemplateForCard(state, cardInstanceId);
   if (!template || !isEvolution(template)) return { outcome: 'continue' };
 
   // First turn for either player (turn 1 = player 0's first, turn 2 = player 1's first)
   if (state.turnNumber <= 2) {
-    return {
-      outcome: 'block',
-      reason: 'Cannot evolve on the first turn or the turn a Pokemon was played. Set allowed_by_effect if a card effect permits this.',
-    };
+    return blockOrWarn(action, 'Cannot evolve on the first turn or the turn a Pokemon was played. Set allowed_by_effect if a card effect permits this.');
   }
 
   // Check if the target Pokemon was played this turn
-  const zoneKey = `player${playAction.player}_${playAction.toZone}`;
+  const zoneKey = `player${player}_${toZone}`;
   const zone = state.zones[zoneKey];
   if (zone) {
     const targetHasPlayedFlag = zone.cards.some(
       (card) => card.flags.includes('played_this_turn')
     );
     if (targetHasPlayedFlag) {
-      return {
-        outcome: 'block',
-        reason: 'Cannot evolve on the first turn or the turn a Pokemon was played. Set allowed_by_effect if a card effect permits this.',
-      };
+      return blockOrWarn(action, 'Cannot evolve on the first turn or the turn a Pokemon was played. Set allowed_by_effect if a card effect permits this.');
     }
   }
 
@@ -182,16 +242,13 @@ function warnCountersOnTrainers(state: PokemonState, action: Action): PreHookRes
   // Block damage and status counters on trainers
   const blockedCounters = ['10', '50', '100', 'burn', 'poison'];
   if (blockedCounters.includes(counterAction.counterType)) {
-    return {
-      outcome: 'block',
-      reason: `Cannot place ${counterAction.counterType} counters on a Trainer card. Set allowed_by_effect if a card effect permits this.`,
-    };
+    return blockOrWarn(action, `Cannot place ${counterAction.counterType} counters on a Trainer card. Set allowed_by_effect if a card effect permits this.`);
   }
 
   return { outcome: 'continue' };
 }
 
-// Warning 6: Non-Basic Pokemon cannot be placed on empty field zones
+// Warning 6: Only Basic Pokemon can be placed on empty field zones
 function warnNonBasicToEmptyField(state: PokemonState, action: Action): PreHookResult {
   if (action.allowed_by_effect) return { outcome: 'continue' };
 
@@ -209,6 +266,12 @@ function warnNonBasicToEmptyField(state: PokemonState, action: Action): PreHookR
     cardInstanceId = moveAction.cardInstanceId;
     toZone = moveAction.toZone;
     player = moveAction.player;
+  } else if (action.type === 'move_card_stack') {
+    const stackAction = action as MoveCardStackAction;
+    cardInstanceId = stackAction.cardInstanceIds[0];
+    toZone = stackAction.toZone;
+    player = stackAction.player;
+    if (!cardInstanceId) return { outcome: 'continue' };
   } else {
     return { outcome: 'continue' };
   }
@@ -217,21 +280,105 @@ function warnNonBasicToEmptyField(state: PokemonState, action: Action): PreHookR
 
   const template = getTemplateForCard(state, cardInstanceId);
   if (!template) return { outcome: 'continue' };
-  if (template.supertype !== 'Pokemon') return { outcome: 'continue' };
   if (isBasicPokemon(template)) return { outcome: 'continue' };
 
   // Check if the target zone is empty
   const zoneKey = `player${player}_${toZone}`;
   const zone = state.zones[zoneKey];
   if (!zone || zone.cards.length === 0) {
-    const stageLabel = template.subtypes.join('/');
-    return {
-      outcome: 'block',
-      reason: `Cannot place ${template.name} (${stageLabel}) on empty ${toZone}. Only Basic Pokemon can be placed directly. Set allowed_by_effect if a card effect permits this.`,
-    };
+    const label = template.supertype === 'Pokemon'
+      ? `${template.name} (${template.subtypes.join('/')})`
+      : `${template.name} (${template.supertype})`;
+    return blockOrWarn(action, `Cannot place ${label} on empty ${toZone}. Only Basic Pokemon can be placed directly. Set allowed_by_effect if a card effect permits this.`);
   }
 
   return { outcome: 'continue' };
+}
+
+// Warning 7: Energy should not be placed on top of a Pokemon in a field zone
+function warnEnergyOnTopOfPokemon(state: PokemonState, action: Action): PreHookResult {
+  if (action.allowed_by_effect) return { outcome: 'continue' };
+
+  let cardInstanceId: string;
+  let toZone: string;
+  let fromZone: string | undefined;
+  let player: 0 | 1;
+  let position: number | undefined;
+
+  if (action.type === 'move_card') {
+    const moveAction = action as MoveCardAction;
+    cardInstanceId = moveAction.cardInstanceId;
+    toZone = moveAction.toZone;
+    fromZone = moveAction.fromZone;
+    player = moveAction.player;
+    position = moveAction.position;
+  } else if (action.type === 'move_card_stack') {
+    const stackAction = action as MoveCardStackAction;
+    cardInstanceId = stackAction.cardInstanceIds[0];
+    toZone = stackAction.toZone;
+    fromZone = stackAction.fromZone;
+    player = stackAction.player;
+    position = stackAction.position;
+    if (!cardInstanceId) return { outcome: 'continue' };
+  } else {
+    return { outcome: 'continue' };
+  }
+
+  // Same-zone rearrangement is not a new attachment
+  if (fromZone && fromZone === toZone) return { outcome: 'continue' };
+
+  if (!isFieldZone(toZone)) return { outcome: 'continue' };
+
+  const template = getTemplateForCard(state, cardInstanceId);
+  if (!template || !isEnergy(template)) return { outcome: 'continue' };
+
+  // Array convention: index 0 = visual bottom, end of array = visual top.
+  // Energy at the visual bottom (position 0) is fine — it's underneath the Pokemon.
+  // Warn when energy would land on top: position undefined (append to end) or
+  // position >= zone length (explicit top).
+  const zoneKey = `player${player}_${toZone}`;
+  const zone = state.zones[zoneKey];
+  if (zone && zone.cards.length > 0) {
+    const isTop = position === undefined || position >= zone.cards.length;
+    if (isTop) {
+      return blockOrWarn(action, `Cannot place energy on top of Pokemon in ${toZone}. Energy should be attached underneath. Set allowed_by_effect if a card effect permits this.`);
+    }
+  }
+
+  return { outcome: 'continue' };
+}
+
+// Warning 8: Only Stadium cards can be placed in the stadium zone
+function warnStadiumOnly(state: PokemonState, action: Action): PreHookResult {
+  if (action.allowed_by_effect) return { outcome: 'continue' };
+
+  let cardInstanceId: string;
+  let toZone: string;
+
+  if (action.type === 'play_card') {
+    const playAction = action as PlayCardAction;
+    cardInstanceId = playAction.cardInstanceId;
+    toZone = playAction.toZone;
+  } else if (action.type === 'move_card') {
+    const moveAction = action as MoveCardAction;
+    cardInstanceId = moveAction.cardInstanceId;
+    toZone = moveAction.toZone;
+  } else if (action.type === 'move_card_stack') {
+    const stackAction = action as MoveCardStackAction;
+    cardInstanceId = stackAction.cardInstanceIds[0];
+    toZone = stackAction.toZone;
+    if (!cardInstanceId) return { outcome: 'continue' };
+  } else {
+    return { outcome: 'continue' };
+  }
+
+  if (!isStadiumZone(toZone)) return { outcome: 'continue' };
+
+  const template = getTemplateForCard(state, cardInstanceId);
+  if (!template) return { outcome: 'continue' };
+  if (isStadium(template)) return { outcome: 'continue' };
+
+  return blockOrWarn(action, `Cannot place ${template.name} (${template.supertype}) in stadium zone. Only Stadium cards can be placed there. Set allowed_by_effect if a card effect permits this.`);
 }
 
 export const pokemonWarningsPlugin: Plugin<PokemonCardTemplate> = {
@@ -245,10 +392,23 @@ export const pokemonWarningsPlugin: Plugin<PokemonCardTemplate> = {
       { hook: warnEvolutionChain, priority: 100 },
       { hook: warnEvolutionTiming, priority: 110 },
       { hook: warnNonBasicToEmptyField, priority: 90 },
+      { hook: warnStadiumOnly, priority: 90 },
     ],
     'move_card': [
       { hook: warnOneEnergyAttachment, priority: 100 },
+      { hook: warnEvolutionChain, priority: 100 },
+      { hook: warnEvolutionTiming, priority: 110 },
       { hook: warnNonBasicToEmptyField, priority: 90 },
+      { hook: warnEnergyOnTopOfPokemon, priority: 90 },
+      { hook: warnStadiumOnly, priority: 90 },
+    ],
+    'move_card_stack': [
+      { hook: warnOneEnergyAttachment, priority: 100 },
+      { hook: warnEvolutionChain, priority: 100 },
+      { hook: warnEvolutionTiming, priority: 110 },
+      { hook: warnNonBasicToEmptyField, priority: 90 },
+      { hook: warnEnergyOnTopOfPokemon, priority: 90 },
+      { hook: warnStadiumOnly, priority: 90 },
     ],
     'add_counter': [
       { hook: warnCountersOnTrainers, priority: 100 },

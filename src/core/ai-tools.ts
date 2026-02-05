@@ -35,6 +35,7 @@ function submitAndReturn<T extends CardTemplate>(
   action: Parameters<GameLoop<T>['submit']>[0],
   modifyReadableState?: Parameters<typeof toReadableState<T>>[2]
 ): string {
+  action.source = 'ai';
   gameLoop.submit(action);
   gameLoop.processAll();
   const state = gameLoop.getState();

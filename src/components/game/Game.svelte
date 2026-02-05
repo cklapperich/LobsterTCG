@@ -101,6 +101,9 @@
       gameState = { ...gameState };
       return reason;
     }
+    if (preResult.outcome === 'warn') {
+      gameState.log.push(`Warning: ${preResult.reason}`);
+    }
 
     const blocked = executeAction(gameState, action);
     gameState = { ...gameState };
@@ -141,8 +144,8 @@
     const updatedState = executeDrop(cardInstanceId, toZoneKey, gameState, position, pluginManager);
     if (updatedState) {
       gameState = updatedState;
-      const { playerIndex, zoneId } = parseZoneKey(toZoneKey);
-      gameState.log.push(`[Player ${playerIndex + 1}] Moved ${cardName} to ${zoneId}`);
+      const { zoneId } = parseZoneKey(toZoneKey);
+      gameState.log.push(`[Player ${gameState.activePlayer + 1}] Moved ${cardName} to ${zoneId}`);
       gameState = { ...gameState };
     }
   }
@@ -195,7 +198,7 @@
     const { playerIndex, zoneId } = parseZoneKey(zoneKey);
     const action = shuffle(playerIndex, zoneId);
     executeAction(gameState, action);
-    gameState.log.push(`[Player ${playerIndex + 1}] Shuffled ${zoneId}`);
+    gameState.log.push(`[Player ${gameState.activePlayer + 1}] Shuffled ${zoneId}`);
     gameState = { ...gameState };
   }
 

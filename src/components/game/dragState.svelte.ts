@@ -1,5 +1,5 @@
 import type { CardInstance, CardTemplate, Visibility, GameState } from '../../core';
-import { executeAction, moveCard, flipCard, parseZoneKey, VISIBILITY, type PluginManager } from '../../core';
+import { executeAction, moveCard, flipCard, parseZoneKey, checkOpponentZone, VISIBILITY, type PluginManager } from '../../core';
 import { playSfx } from '../../lib/audio.svelte';
 
 export interface DragState {
@@ -62,12 +62,38 @@ export function executeDrop(
   const from = parseZoneKey(dragStore.current.fromZoneKey);
   const to = parseZoneKey(toZoneKey);
 
-  // Execute move action with optional position
-  const action = moveCard(from.playerIndex, cardInstanceId, from.zoneId, to.zoneId, position);
+  // Build action using the destination player's index for the action player
+  // (so warnings check the right player's zones)
+  const actionPlayer = to.playerIndex;
+  const action = moveCard(actionPlayer, cardInstanceId, from.zoneId, to.zoneId, position);
 
-  // Manually update zone keys since moveCard assumes same player for both zones
+  // Opponent zone check (game-universal, not plugin-specific)
+  const opponentCheck = checkOpponentZone(gameState, action);
+  if (opponentCheck) {
+    if (opponentCheck.shouldBlock) {
+      gameState.log.push(`Action blocked: ${opponentCheck.reason}`);
+      dragStore.current = null;
+      return null;
+    } else {
+      gameState.log.push(`Warning: ${opponentCheck.reason}`);
+    }
+  }
+
+  // Run plugin pre-hooks for ALL drops (same-player and cross-player)
+  if (pluginManager) {
+    const preResult = pluginManager.runPreHooks(gameState, action);
+    if (preResult.outcome === 'block') {
+      gameState.log.push(`Action blocked: ${preResult.reason ?? 'Unknown'}`);
+      dragStore.current = null;
+      return null;
+    }
+    if (preResult.outcome === 'warn') {
+      gameState.log.push(`Warning: ${preResult.reason}`);
+    }
+  }
+
   if (from.playerIndex !== to.playerIndex) {
-    // Cross-player: inline capacity check (bypasses executeAction)
+    // Cross-player: inline move (executeAction assumes same player for from/to)
     const fromZone = gameState.zones[dragStore.current.fromZoneKey];
     const toZone = gameState.zones[toZoneKey];
     if (toZone && toZone.config.maxCards !== -1 && toZone.cards.length >= toZone.config.maxCards) {
@@ -85,15 +111,7 @@ export function executeDrop(
       }
     }
   } else {
-    // Same-player: run plugin pre-hooks then executeAction
-    if (pluginManager) {
-      const preResult = pluginManager.runPreHooks(gameState, action);
-      if (preResult.outcome === 'block') {
-        gameState.log.push(`Action blocked: ${preResult.reason ?? 'Unknown'}`);
-        dragStore.current = null;
-        return null;
-      }
-    }
+    // Same-player: use executeAction
     const blocked = executeAction(gameState, action);
     if (blocked) {
       dragStore.current = null;
