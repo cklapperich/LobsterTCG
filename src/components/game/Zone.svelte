@@ -33,6 +33,7 @@
 
   const stackDirection = $derived(slot.stackDirection ?? 'none');
   const label = $derived(slot.label ?? zone.config.name);
+  const fixedSize = $derived(slot.fixedSize ?? false);
 
   let zoneEl: HTMLDivElement;
 
@@ -41,7 +42,7 @@
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
-      onZoneContextMenu?.(slot.zoneId, label, zone.cards.length, e.clientX, e.clientY);
+      onZoneContextMenu?.(zone.key, label, zone.cards.length, e.clientX, e.clientY);
       return false;
     }
     zoneEl.addEventListener('contextmenu', handleContextMenu, { capture: true });
@@ -64,7 +65,7 @@
     const cardInstanceId = event.dataTransfer?.getData('text/plain');
     if (cardInstanceId) {
       // Zone background drop always goes to bottom (append)
-      onDrop?.(cardInstanceId, slot.zoneId);
+      onDrop?.(cardInstanceId, zone.key);
     }
   }
 
@@ -73,9 +74,9 @@
   // - others: insert at target card's position (on top of that card)
   function handleCardDrop(droppedCardId: string, _targetCardId: string, targetIndex: number) {
     if (stackDirection === 'none') {
-      onDrop?.(droppedCardId, slot.zoneId, 0);
+      onDrop?.(droppedCardId, zone.key, 0);
     } else {
-      onDrop?.(droppedCardId, slot.zoneId, targetIndex);
+      onDrop?.(droppedCardId, zone.key, targetIndex);
     }
   }
 
@@ -92,12 +93,13 @@
   ondrop={handleDrop}
 >
   <div class="zone-label">{label}</div>
-  <div class="zone-content">
+  <div class="zone-content" class:fixed-size={fixedSize}>
     {#if zone.cards.length > 0}
       <CardStack
         cards={zone.cards}
         {stackDirection}
-        zoneId={slot.zoneId}
+        {fixedSize}
+        zoneKey={zone.key}
         {cardBack}
         {renderFace}
         {onDragStart}
@@ -140,6 +142,11 @@
   .zone-content {
     @apply relative;
     min-height: calc(var(--spacing-card-w) * 1.4);
+  }
+
+  .zone-content.fixed-size {
+    max-height: calc(var(--spacing-card-w) * 1.4);
+    overflow: hidden;
   }
 
   .empty-zone {

@@ -8,12 +8,12 @@
     gameState: GameState<CardTemplate>;
     cardBack?: string;
     renderFace?: (template: CardTemplate) => { rank?: string; suit?: string; color?: string };
-    onDrop?: (cardInstanceId: string, toZoneId: string, position?: number) => void;
-    onDragStart?: (cardInstanceId: string, zoneId: string) => void;
+    onDrop?: (cardInstanceId: string, toZoneKey: string, position?: number) => void;
+    onDragStart?: (cardInstanceId: string, zoneKey: string) => void;
     onDragEnd?: () => void;
     onPreview?: (card: CardInstance<CardTemplate>) => void;
     onToggleVisibility?: (cardInstanceId: string) => void;
-    onZoneContextMenu?: (zoneId: string, zoneName: string, cardCount: number, x: number, y: number) => void;
+    onZoneContextMenu?: (zoneKey: string, zoneName: string, cardCount: number, x: number, y: number) => void;
   }
 
   let {
@@ -31,9 +31,23 @@
 
   const layout = $derived(playmat.layout);
 
-  // Get zone by slot's zoneId
-  function getZone(zoneId: string) {
-    const zoneKey = makeZoneKey(0, zoneId); // Single-player (player 0)
+  // Build slot ID -> player index lookup from playerSlots
+  const slotToPlayer = $derived.by(() => {
+    const map: Record<string, 0 | 1> = {};
+    if (playmat.playerSlots) {
+      for (const [playerIdx, slotIds] of Object.entries(playmat.playerSlots)) {
+        for (const slotId of slotIds) {
+          map[slotId] = Number(playerIdx) as 0 | 1;
+        }
+      }
+    }
+    return map;
+  });
+
+  // Get zone by slot - uses correct player index based on slot ownership
+  function getZone(slot: { id: string; zoneId: string }) {
+    const playerIndex = slotToPlayer[slot.id] ?? 0;
+    const zoneKey = makeZoneKey(playerIndex, slot.zoneId);
     return gameState.zones[zoneKey];
   }
 
@@ -50,7 +64,7 @@
   "
 >
   {#each layout.slots as slot (slot.id)}
-    {@const zone = getZone(slot.zoneId)}
+    {@const zone = getZone(slot)}
     {#if zone}
       <div
         class="grid-slot"
@@ -75,12 +89,12 @@
     {/if}
   {/each}
 
-  <!-- Staging zone - always present, in extra row below playmat -->
+  <!-- Staging zone - always present, in extra row below playmat (columns 7-9) -->
   {#if stagingZone}
     <div
       class="grid-slot staging-slot"
       class:has-cards={stagingHasCards}
-      style="grid-column: 1; grid-row: {layout.rows + 1};"
+      style="grid-column: 7 / span 3; grid-row: {layout.rows};"
     >
       <Zone
         zone={stagingZone}

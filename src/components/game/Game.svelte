@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { Playmat, CardInstance, Visibility, CardTemplate, GameState } from '../../core';
-  import { executeAction, moveCard, flipCard, shuffle, VISIBILITY, makeZoneKey } from '../../core';
+  import { executeAction, moveCard, flipCard, shuffle, VISIBILITY, parseZoneKey } from '../../core';
   import { plugin } from '../../plugins/pokemon';
   import PlaymatGrid from './PlaymatGrid.svelte';
   import ZoneContextMenu from './ZoneContextMenu.svelte';
@@ -17,7 +17,7 @@
   // Drag state - includes original visibility to preserve it
   let dragState = $state<{
     cardInstanceId: string;
-    fromZoneId: string;
+    fromZoneKey: string;
     originalVisibility: Visibility;
   } | null>(null);
 
@@ -26,7 +26,7 @@
 
   // Context menu state
   let contextMenu = $state<{
-    zoneId: string;
+    zoneKey: string;
     zoneName: string;
     cardCount: number;
     x: number;
@@ -42,13 +42,13 @@
 
   let arrangeModal = $state<{
     cards: CardInstance<CardTemplate>[];
-    zoneId: string;
+    zoneKey: string;
     zoneName: string;
     position: 'top' | 'bottom';
   } | null>(null);
 
-  // Card back - convention: plugins have cardback.png in public folder
-  const cardBack = '/plugins/pokemon/cardback.png';
+  // Card back from plugin
+  const cardBack = plugin.getCardBack?.() ?? '/card-images/pokemon/cardback.png';
 
   onMount(async () => {
     try {
@@ -61,19 +61,19 @@
     }
   });
 
-  function handleDragStart(cardInstanceId: string, fromZoneId: string) {
+  function handleDragStart(cardInstanceId: string, fromZoneKey: string) {
     if (!gameState) return;
 
     // Find card and save its visibility
-    for (const zone of Object.values(gameState.zones)) {
+    const zone = gameState.zones[fromZoneKey];
+    if (zone) {
       const card = zone.cards.find((c) => c.instanceId === cardInstanceId);
       if (card) {
         dragState = {
           cardInstanceId,
-          fromZoneId,
+          fromZoneKey,
           originalVisibility: [...card.visibility] as Visibility
         };
-        break;
       }
     }
   }
@@ -82,23 +82,45 @@
     dragState = null;
   }
 
-  function handleDrop(cardInstanceId: string, toZoneId: string, position?: number) {
+  function handleDrop(cardInstanceId: string, toZoneKey: string, position?: number) {
     if (!gameState || !dragState) return;
 
     // Don't move to same zone (unless repositioning within zone)
-    if (dragState.fromZoneId === toZoneId && position === undefined) {
+    if (dragState.fromZoneKey === toZoneKey && position === undefined) {
       dragState = null;
       return;
     }
 
     const savedVisibility = dragState.originalVisibility;
 
+    // Parse zone keys to get player indices and zone IDs
+    const from = parseZoneKey(dragState.fromZoneKey);
+    const to = parseZoneKey(toZoneKey);
+
     // Execute move action with optional position
-    const action = moveCard(0, cardInstanceId, dragState.fromZoneId, toZoneId, position);
-    executeAction(gameState, action);
+    // Note: moveCard uses a single player index for the action, but zones can be different players
+    // For cross-player moves, we use the source player as the actor
+    const action = moveCard(from.playerIndex, cardInstanceId, from.zoneId, to.zoneId, position);
+    // Manually update zone keys since moveCard assumes same player for both zones
+    if (from.playerIndex !== to.playerIndex) {
+      // Direct zone manipulation for cross-player moves
+      const fromZone = gameState.zones[dragState.fromZoneKey];
+      const toZone = gameState.zones[toZoneKey];
+      const cardIndex = fromZone.cards.findIndex(c => c.instanceId === cardInstanceId);
+      if (cardIndex !== -1 && toZone) {
+        const [card] = fromZone.cards.splice(cardIndex, 1);
+        if (position !== undefined) {
+          toZone.cards.splice(position, 0, card);
+        } else {
+          toZone.cards.push(card);
+        }
+      }
+    } else {
+      executeAction(gameState, action);
+    }
 
     // Restore original visibility (moveCard changes it to zone default)
-    const flipAction = flipCard(0, cardInstanceId, savedVisibility);
+    const flipAction = flipCard(from.playerIndex, cardInstanceId, savedVisibility);
     executeAction(gameState, flipAction);
 
     // Force reactivity
@@ -128,8 +150,8 @@
   }
 
   // Context menu handlers
-  function handleZoneContextMenu(zoneId: string, zoneName: string, cardCount: number, x: number, y: number) {
-    contextMenu = { zoneId, zoneName, cardCount, x, y };
+  function handleZoneContextMenu(zoneKey: string, zoneName: string, cardCount: number, x: number, y: number) {
+    contextMenu = { zoneKey, zoneName, cardCount, x, y };
   }
 
   function closeContextMenu() {
@@ -138,20 +160,20 @@
 
   function handleShuffle() {
     if (!gameState || !contextMenu) return;
-    const action = shuffle(0, contextMenu.zoneId);
+    const { playerIndex, zoneId } = parseZoneKey(contextMenu.zoneKey);
+    const action = shuffle(playerIndex, zoneId);
     executeAction(gameState, action);
     gameState = { ...gameState };
   }
 
-  function getZoneCards(zoneId: string): CardInstance<CardTemplate>[] {
+  function getZoneCards(zoneKey: string): CardInstance<CardTemplate>[] {
     if (!gameState) return [];
-    const zoneKey = makeZoneKey(0, zoneId);
     return gameState.zones[zoneKey]?.cards ?? [];
   }
 
   function handlePeekTop(count: number) {
     if (!contextMenu) return;
-    const cards = getZoneCards(contextMenu.zoneId).slice(0, count);
+    const cards = getZoneCards(contextMenu.zoneKey).slice(0, count);
     peekModal = {
       cards,
       zoneName: contextMenu.zoneName,
@@ -161,7 +183,7 @@
 
   function handlePeekBottom(count: number) {
     if (!contextMenu) return;
-    const zoneCards = getZoneCards(contextMenu.zoneId);
+    const zoneCards = getZoneCards(contextMenu.zoneKey);
     const cards = zoneCards.slice(-count);
     peekModal = {
       cards,
@@ -176,10 +198,10 @@
 
   function handleArrangeTop(count: number) {
     if (!contextMenu) return;
-    const cards = getZoneCards(contextMenu.zoneId).slice(0, count);
+    const cards = getZoneCards(contextMenu.zoneKey).slice(0, count);
     arrangeModal = {
       cards,
-      zoneId: contextMenu.zoneId,
+      zoneKey: contextMenu.zoneKey,
       zoneName: contextMenu.zoneName,
       position: 'top',
     };
@@ -187,11 +209,11 @@
 
   function handleArrangeBottom(count: number) {
     if (!contextMenu) return;
-    const zoneCards = getZoneCards(contextMenu.zoneId);
+    const zoneCards = getZoneCards(contextMenu.zoneKey);
     const cards = zoneCards.slice(-count);
     arrangeModal = {
       cards,
-      zoneId: contextMenu.zoneId,
+      zoneKey: contextMenu.zoneKey,
       zoneName: contextMenu.zoneName,
       position: 'bottom',
     };
@@ -200,8 +222,7 @@
   function handleArrangeConfirm(reorderedCards: CardInstance<CardTemplate>[]) {
     if (!gameState || !arrangeModal) return;
 
-    const zoneKey = makeZoneKey(0, arrangeModal.zoneId);
-    const zone = gameState.zones[zoneKey];
+    const zone = gameState.zones[arrangeModal.zoneKey];
     if (!zone) return;
 
     const count = reorderedCards.length;
@@ -274,7 +295,6 @@
               {#if previewCard.template.imageUrl}
                 <img src={previewCard.template.imageUrl} alt={previewCard.template.name} class="preview-image" />
               {/if}
-              <div class="preview-name">{plugin.getCardInfo(previewCard.template)}</div>
             </div>
           {:else if previewCard}
             <div class="preview-card face-down">
@@ -299,7 +319,7 @@
     <ZoneContextMenu
       x={contextMenu.x}
       y={contextMenu.y}
-      zoneId={contextMenu.zoneId}
+      zoneKey={contextMenu.zoneKey}
       zoneName={contextMenu.zoneName}
       cardCount={contextMenu.cardCount}
       onShuffle={handleShuffle}
@@ -389,10 +409,6 @@
 
   .preview-card.face-down {
     @apply bg-gbc-blue;
-  }
-
-  .preview-name {
-    @apply text-[0.6rem] mt-2 text-gbc-border text-center px-2;
   }
 
   .preview-image {

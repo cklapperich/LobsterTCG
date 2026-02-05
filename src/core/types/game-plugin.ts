@@ -5,7 +5,6 @@ import type { CardTemplate } from './card';
 /**
  * Interface for game plugins (Pokemon, Solitaire, etc.)
  *
- * Convention: Each plugin directory contains a cardback.png file.
  * Card faces use the imageUrl property on CardTemplate.
  */
 export interface GamePlugin<T extends CardTemplate = CardTemplate> {
@@ -17,4 +16,7 @@ export interface GamePlugin<T extends CardTemplate = CardTemplate> {
 
   /** Get card info string for modals/tooltips */
   getCardInfo(template: T): string;
+
+  /** Get card back image URL (optional) */
+  getCardBack?(): string;
 }

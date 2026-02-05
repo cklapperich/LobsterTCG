@@ -5,12 +5,12 @@
     card: CardInstance<CardTemplate>;
     index: number;
     draggable?: boolean;
-    zoneId: string;
+    zoneKey: string;
     isDropTarget?: boolean;
     cardBack?: string;
     // For playing cards without images - render functions
     renderFace?: (template: CardTemplate) => { rank?: string; suit?: string; color?: string };
-    onDragStart?: (cardInstanceId: string, zoneId: string) => void;
+    onDragStart?: (cardInstanceId: string, zoneKey: string) => void;
     onDragEnd?: () => void;
     onPreview?: (card: CardInstance<CardTemplate>) => void;
     onToggleVisibility?: (cardInstanceId: string) => void;
@@ -21,7 +21,7 @@
     card,
     index,
     draggable = true,
-    zoneId,
+    zoneKey,
     isDropTarget = false,
     cardBack,
     renderFace,
@@ -46,7 +46,7 @@
     if (!draggable) return;
     isDragging = true;
     event.dataTransfer?.setData('text/plain', card.instanceId);
-    onDragStart?.(card.instanceId, zoneId);
+    onDragStart?.(card.instanceId, zoneKey);
   }
 
   function handleDragEnd() {

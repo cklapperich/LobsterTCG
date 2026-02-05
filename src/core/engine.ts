@@ -79,6 +79,7 @@ function createZone<T extends CardTemplate>(
   owner: PlayerIndex
 ): Zone<T> {
   return {
+    key: makeZoneKey(owner, config.id),
     config,
     owner,
     cards: [],
@@ -100,6 +101,18 @@ function createPlayerInfo(
 // Create flattened zone key: "player0_hand", "player1_tableau_1"
 export function makeZoneKey(playerIndex: PlayerIndex, zoneId: string): string {
   return `player${playerIndex}_${zoneId}`;
+}
+
+// Parse a zone key back into player index and zone ID
+export function parseZoneKey(zoneKey: string): { playerIndex: PlayerIndex; zoneId: string } {
+  const match = zoneKey.match(/^player([01])_(.+)$/);
+  if (!match) {
+    throw new Error(`Invalid zone key format: ${zoneKey}`);
+  }
+  return {
+    playerIndex: Number(match[1]) as PlayerIndex,
+    zoneId: match[2],
+  };
 }
 
 function createTurn(turnNumber: number, activePlayer: PlayerIndex): Turn {
