@@ -626,6 +626,9 @@ export function checkOpponentZone<T extends CardTemplate>(
   if (!toZoneId) return null;
   if (action.player === state.activePlayer) return null;
 
+  // Moving cards to opponent's discard is normal gameplay (e.g., knockout)
+  if (toZoneId === 'discard') return null;
+
   // Check if the target zone is shared
   const zoneKey = makeZoneKey(action.player, toZoneId);
   const zone = state.zones[zoneKey];

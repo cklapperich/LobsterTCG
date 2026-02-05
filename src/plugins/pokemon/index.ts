@@ -11,7 +11,7 @@ import {
 import type { GameLoop } from '../../core/game-loop';
 import { createDefaultTools } from '../../core/ai-tools';
 import { toReadableState } from '../../core/readable';
-import { ZONE_IDS, PRIZE_ZONE_IDS } from './zones';
+import { ZONE_IDS } from './zones';
 import type { PokemonCardTemplate } from './cards';
 import {
   getCardBack,
@@ -135,12 +135,12 @@ export function executeSetup(state: GameState<CardTemplate>, playerIndex: Player
   // Draw 7 cards
   executeAction(state, { type: 'draw', player: playerIndex, count: 7 });
 
-  // Set 6 prize cards (move top of deck to each prize zone)
-  for (const prizeZone of PRIZE_ZONE_IDS) {
+  // Set 6 prize cards (move top 6 from deck to prizes zone)
+  for (let i = 0; i < 6; i++) {
     const deckZone = state.zones[deckKey];
     if (deckZone.cards.length > 0) {
       const topCard = deckZone.cards[0];
-      executeAction(state, moveCard(playerIndex, topCard.instanceId, ZONE_IDS.DECK, prizeZone));
+      executeAction(state, moveCard(playerIndex, topCard.instanceId, ZONE_IDS.DECK, ZONE_IDS.PRIZES));
     }
   }
 }

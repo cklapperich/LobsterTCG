@@ -347,12 +347,12 @@ export function createDefaultTools<T extends CardTemplate>(
       inputSchema: {
         type: 'object' as const,
         properties: {
-          count: { type: 'number', description: 'Number of coins to flip (default 1)' },
+          num_coins: { type: 'number', description: 'Number of coins to flip (default 1)' },
         },
         required: [],
       },
       async run(input) {
-        const count = (input.count as number) ?? 1;
+        const count = (input.num_coins as number) ?? 1;
         return submitAndReturn(gameLoop, p, coinFlip(p, count), modifyReadableState);
       },
     },
