@@ -30,9 +30,6 @@
     onCardDrop,
   }: Props = $props();
 
-  // All cards can be drop targets
-  const isDropTarget = true;
-
   // Container width for dynamic fan layout
   let containerWidth = $state(0);
   let cardWidth = $state(0);
@@ -144,7 +141,7 @@
         {card}
         index={i}
         {zoneKey}
-        {isDropTarget}
+        isDropTarget={true}
         {cardBack}
         {renderFace}
         {onPreview}

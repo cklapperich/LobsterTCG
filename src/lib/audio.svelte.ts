@@ -5,6 +5,9 @@ const SFX_PATHS = {
   cancel: '/sfx/cancel.mp3',
   confirm: '/sfx/confirm.mp3',
   shuffle: '/sfx/card_shuffle.mp3',
+  coinToss: '/sfx/coin_toss.mp3',
+  coinHeads: '/sfx/coin_toss_heads.mp3',
+  coinTails: '/sfx/coin_toss_tails.mp3',
 } as const;
 
 type SfxKey = keyof typeof SFX_PATHS;
@@ -45,4 +48,9 @@ if (typeof window !== 'undefined') {
   preload('cursor');
   preload('cardDrop');
   preload('cancel');
+  preload('confirm');
+  preload('shuffle');
+  preload('coinToss');
+  preload('coinHeads');
+  preload('coinTails');
 }

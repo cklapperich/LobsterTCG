@@ -106,14 +106,7 @@
     }
   }
 
-  function handleBackdropKeydown(event: KeyboardEvent) {
-    if (event.key === 'Escape') {
-      playSfx('cancel');
-      onClose();
-    }
-  }
-
-  // Global Escape key handler for accessibility
+  // Global Escape key handler
   onMount(() => {
     const handleKeydown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -126,8 +119,8 @@
   });
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="modal-backdrop" onclick={handleBackdropClick} onkeydown={handleBackdropKeydown}>
+<!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+<div class="modal-backdrop" onclick={handleBackdropClick}>
   <div class="modal gbc-panel">
     <div class="modal-header">
       <span class="modal-title">{title}</span>
