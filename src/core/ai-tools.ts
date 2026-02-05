@@ -1,6 +1,6 @@
 import type { CardTemplate, PlayerIndex, Tool } from './types';
 import type { GameLoop } from './game-loop';
-import { toReadableState, resolveCardName } from './readable';
+import { resolveCardName } from './readable';
 import { makeZoneKey } from './engine';
 import {
   draw,
@@ -32,14 +32,11 @@ function submitAndReturn<T extends CardTemplate>(
   gameLoop: GameLoop<T>,
   playerIndex: PlayerIndex,
   action: Parameters<GameLoop<T>['submit']>[0],
-  modifyReadableState?: Parameters<typeof toReadableState<T>>[2]
 ): string {
   action.source = 'ai';
   gameLoop.submit(action);
   gameLoop.processAll();
-  const state = gameLoop.getState();
-  const readable = toReadableState(state, playerIndex, modifyReadableState);
-  return JSON.stringify(readable);
+  return JSON.stringify(gameLoop.getReadableState(playerIndex));
 }
 
 /**
@@ -66,7 +63,6 @@ function resolveCard<T extends CardTemplate>(
 export function createDefaultTools<T extends CardTemplate>(
   gameLoop: GameLoop<T>,
   playerIndex: PlayerIndex,
-  modifyReadableState?: Parameters<typeof toReadableState<T>>[2]
 ): Tool[] {
   const p = playerIndex;
 
@@ -84,7 +80,7 @@ export function createDefaultTools<T extends CardTemplate>(
       },
       async run(input) {
         const count = (input.count as number) ?? 1;
-        return submitAndReturn(gameLoop, p, draw(p, count), modifyReadableState);
+        return submitAndReturn(gameLoop, p, draw(p, count));
       },
     },
 
@@ -108,7 +104,6 @@ export function createDefaultTools<T extends CardTemplate>(
         return submitAndReturn(
           gameLoop, p,
           moveCard(p, cardId, input.fromZone as string, input.toZone as string, input.position as number | undefined),
-          modifyReadableState
         );
       },
     },
@@ -139,7 +134,6 @@ export function createDefaultTools<T extends CardTemplate>(
         return submitAndReturn(
           gameLoop, p,
           moveCardStack(p, cardIds, input.fromZone as string, input.toZone as string, input.position as number | undefined),
-          modifyReadableState
         );
       },
     },
@@ -176,7 +170,6 @@ export function createDefaultTools<T extends CardTemplate>(
         return submitAndReturn(
           gameLoop, p,
           placeOnZone(p, cardIds, input.zoneId as string, input.position as 'top' | 'bottom'),
-          modifyReadableState
         );
       },
     },
@@ -194,7 +187,7 @@ export function createDefaultTools<T extends CardTemplate>(
       },
       async run(input) {
         const zoneId = (input.zoneId as string) ?? 'deck';
-        return submitAndReturn(gameLoop, p, shuffle(p, zoneId), modifyReadableState);
+        return submitAndReturn(gameLoop, p, shuffle(p, zoneId));
       },
     },
 
@@ -220,7 +213,6 @@ export function createDefaultTools<T extends CardTemplate>(
             count: input.count as number | undefined,
             fromPosition: input.fromPosition as 'top' | 'bottom' | undefined,
           }),
-          modifyReadableState
         );
       },
     },
@@ -251,7 +243,7 @@ export function createDefaultTools<T extends CardTemplate>(
           owner_only: p === 0 ? [true, false] : [false, true],
         };
         const vis = visMap[input.visibility as string] ?? [true, true];
-        return submitAndReturn(gameLoop, p, flipCard(p, cardId, vis), modifyReadableState);
+        return submitAndReturn(gameLoop, p, flipCard(p, cardId, vis));
       },
     },
 
@@ -271,7 +263,7 @@ export function createDefaultTools<T extends CardTemplate>(
       async run(input) {
         const zoneKey = makeZoneKey(p, input.zoneId as string);
         const cardId = resolveCard(gameLoop, input.cardName as string, zoneKey);
-        return submitAndReturn(gameLoop, p, setOrientation(p, cardId, input.orientation as string), modifyReadableState);
+        return submitAndReturn(gameLoop, p, setOrientation(p, cardId, input.orientation as string));
       },
     },
 
@@ -293,7 +285,7 @@ export function createDefaultTools<T extends CardTemplate>(
         const zoneKey = makeZoneKey(p, input.zoneId as string);
         const cardId = resolveCard(gameLoop, input.cardName as string, zoneKey);
         const amount = (input.amount as number) ?? 1;
-        return submitAndReturn(gameLoop, p, addCounter(p, cardId, input.counterType as string, amount), modifyReadableState);
+        return submitAndReturn(gameLoop, p, addCounter(p, cardId, input.counterType as string, amount));
       },
     },
 
@@ -315,7 +307,7 @@ export function createDefaultTools<T extends CardTemplate>(
         const zoneKey = makeZoneKey(p, input.zoneId as string);
         const cardId = resolveCard(gameLoop, input.cardName as string, zoneKey);
         const amount = (input.amount as number) ?? 1;
-        return submitAndReturn(gameLoop, p, removeCounter(p, cardId, input.counterType as string, amount), modifyReadableState);
+        return submitAndReturn(gameLoop, p, removeCounter(p, cardId, input.counterType as string, amount));
       },
     },
 
@@ -336,7 +328,7 @@ export function createDefaultTools<T extends CardTemplate>(
       async run(input) {
         const zoneKey = makeZoneKey(p, input.zoneId as string);
         const cardId = resolveCard(gameLoop, input.cardName as string, zoneKey);
-        return submitAndReturn(gameLoop, p, setCounter(p, cardId, input.counterType as string, input.value as number), modifyReadableState);
+        return submitAndReturn(gameLoop, p, setCounter(p, cardId, input.counterType as string, input.value as number));
       },
     },
 
@@ -353,7 +345,7 @@ export function createDefaultTools<T extends CardTemplate>(
       },
       async run(input) {
         const count = (input.num_coins as number) ?? 1;
-        return submitAndReturn(gameLoop, p, coinFlip(p, count), modifyReadableState);
+        return submitAndReturn(gameLoop, p, coinFlip(p, count));
       },
     },
 
@@ -372,7 +364,7 @@ export function createDefaultTools<T extends CardTemplate>(
       async run(input) {
         const sides = (input.sides as number) ?? 6;
         const count = (input.count as number) ?? 1;
-        return submitAndReturn(gameLoop, p, diceRoll(p, sides, count), modifyReadableState);
+        return submitAndReturn(gameLoop, p, diceRoll(p, sides, count));
       },
     },
 
@@ -393,7 +385,7 @@ export function createDefaultTools<T extends CardTemplate>(
         const zoneId = (input.zoneId as string) ?? 'deck';
         const count = (input.count as number) ?? 1;
         const from = (input.fromPosition as 'top' | 'bottom') ?? 'top';
-        return submitAndReturn(gameLoop, p, peek(p, zoneId, count, from), modifyReadableState);
+        return submitAndReturn(gameLoop, p, peek(p, zoneId, count, from));
       },
     },
 
@@ -420,7 +412,7 @@ export function createDefaultTools<T extends CardTemplate>(
           resolveCard(gameLoop, name, zoneKey)
         );
         const to = (input.to as 'opponent' | 'both') ?? 'both';
-        return submitAndReturn(gameLoop, p, reveal(p, cardIds, to), modifyReadableState);
+        return submitAndReturn(gameLoop, p, reveal(p, cardIds, to));
       },
     },
 
@@ -434,7 +426,7 @@ export function createDefaultTools<T extends CardTemplate>(
         required: [],
       },
       async run() {
-        return submitAndReturn(gameLoop, p, endTurn(p), modifyReadableState);
+        return submitAndReturn(gameLoop, p, endTurn(p));
       },
     },
 
@@ -448,7 +440,7 @@ export function createDefaultTools<T extends CardTemplate>(
         required: [],
       },
       async run() {
-        return submitAndReturn(gameLoop, p, concede(p), modifyReadableState);
+        return submitAndReturn(gameLoop, p, concede(p));
       },
     },
 
@@ -464,7 +456,7 @@ export function createDefaultTools<T extends CardTemplate>(
         required: [],
       },
       async run(input) {
-        return submitAndReturn(gameLoop, p, declareVictory(p, input.reason as string | undefined), modifyReadableState);
+        return submitAndReturn(gameLoop, p, declareVictory(p, input.reason as string | undefined));
       },
     },
   ];

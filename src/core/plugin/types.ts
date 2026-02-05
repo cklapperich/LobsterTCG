@@ -1,4 +1,5 @@
 import type { CardTemplate, Action, GameState } from '../types';
+import type { ReadableGameState } from '../readable';
 import type { PluginManager } from './plugin-manager';
 
 // Hook result types
@@ -90,4 +91,7 @@ export interface Plugin<T extends CardTemplate = CardTemplate> {
 
   // Custom actions
   customActions?: CustomActionRegistration<T>[];
+
+  // Readable state modifier
+  readableStateModifier?: (readable: ReadableGameState) => ReadableGameState;
 }

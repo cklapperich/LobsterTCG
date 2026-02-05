@@ -61,7 +61,6 @@ export interface ReadableGameState {
 export function toReadableState<T extends CardTemplate>(
   state: GameState<T>,
   playerIndex: PlayerIndex,
-  modifyReadableState?: (readable: ReadableGameState, state: Readonly<GameState<T>>, playerIndex: PlayerIndex) => ReadableGameState
 ): ReadableGameState {
   const readableZones: Record<string, ReadableZone> = {};
 
@@ -87,7 +86,7 @@ export function toReadableState<T extends CardTemplate>(
     log: state.log,
   };
 
-  return modifyReadableState ? modifyReadableState(readable, state, playerIndex) : readable;
+  return readable;
 }
 
 /**

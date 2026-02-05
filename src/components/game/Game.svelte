@@ -280,7 +280,7 @@
 
   function handleDebug() {
     if (!gameState) return;
-    const readable = toReadableState(gameState, gameState.activePlayer, plugin.modifyReadableState?.bind(plugin));
+    const readable = pluginManager.applyReadableStateModifier(toReadableState(gameState, gameState.activePlayer));
     debugJson = JSON.stringify(readable, null, 2);
     showDebugModal = true;
   }
@@ -595,7 +595,7 @@
   }
 
   .log-input {
-    @apply w-full bg-gbc-dark text-gbc-light text-[0.45rem] px-2 py-1 border border-gbc-border rounded-sm;
+    @apply w-full bg-gbc-dark-green text-gbc-light text-[0.45rem] px-2 py-1 border border-gbc-border rounded-sm;
     @apply outline-none;
   }
 

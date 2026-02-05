@@ -10,7 +10,6 @@ import {
 } from '../../core';
 import type { GameLoop } from '../../core/game-loop';
 import { createDefaultTools } from '../../core/ai-tools';
-import { toReadableState } from '../../core/readable';
 import { ZONE_IDS } from './zones';
 import type { PokemonCardTemplate } from './cards';
 import {
@@ -226,8 +225,7 @@ function createPokemonTools(
       const activeName = activeZone?.cards[0]?.template?.name ?? 'Active Pokemon';
       const target = input.targetCardName ? ` targeting ${input.targetCardName}` : '';
       state.log.push(`${activeName} used ${input.attackName}!${target}`);
-      const readable = toReadableState(state, p);
-      return JSON.stringify(readable);
+      return JSON.stringify(gameLoop.getReadableState(p));
     },
   });
 
@@ -244,8 +242,7 @@ function createPokemonTools(
     async run(input) {
       const state = gameLoop.getState();
       state.log.push(`${input.cardName} retreated!`);
-      const readable = toReadableState(state, p);
-      return JSON.stringify(readable);
+      return JSON.stringify(gameLoop.getReadableState(p));
     },
   });
 
@@ -263,8 +260,7 @@ function createPokemonTools(
     async run(input) {
       const state = gameLoop.getState();
       state.log.push(`${input.cardName} used ability: ${input.abilityName}`);
-      const readable = toReadableState(state, p);
-      return JSON.stringify(readable);
+      return JSON.stringify(gameLoop.getReadableState(p));
     },
   });
 
@@ -284,7 +280,7 @@ export const plugin: GamePlugin<PokemonCardTemplate> = {
 };
 
 // Re-exports
-export { pokemonWarningsPlugin } from './warnings';
+export { pokemonWarningsPlugin, modifyReadableState } from './warnings';
 export { ZONE_IDS, BENCH_ZONE_IDS, PRIZE_ZONE_IDS, ALL_ZONE_IDS } from './zones';
 export type { PokemonCardTemplate } from './cards';
 export {
