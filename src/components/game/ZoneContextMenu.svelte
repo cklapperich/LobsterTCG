@@ -1,16 +1,20 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import type { ZoneConfig } from '../../core';
 
   interface Props {
     x: number;
     y: number;
     zoneName: string;
     cardCount: number;
+    zoneConfig: ZoneConfig;
     onShuffle: () => void;
     onPeekTop: (count: number) => void;
     onPeekBottom: (count: number) => void;
     onArrangeTop: (count: number) => void;
     onArrangeBottom: (count: number) => void;
+    onViewAll?: () => void;
+    onArrangeAll?: () => void;
     onClearCounters?: () => void;
     onClose: () => void;
   }
@@ -20,11 +24,14 @@
     y,
     zoneName,
     cardCount,
+    zoneConfig,
     onShuffle,
     onPeekTop,
     onPeekBottom,
     onArrangeTop,
     onArrangeBottom,
+    onViewAll,
+    onArrangeAll,
     onClearCounters,
     onClose,
   }: Props = $props();
@@ -34,6 +41,10 @@
 
   // Counts available for peek/arrange
   const availableCounts = $derived([1, 3, 5, 7].filter(n => n <= cardCount));
+
+  // Zone visibility/ordered state for View All / Arrange All
+  const isPublic = $derived(zoneConfig.defaultVisibility === 'public');
+  const isOrdered = $derived(zoneConfig.ordered);
 
   function handleClickOutside(event: MouseEvent) {
     if (menuRef && !menuRef.contains(event.target as Node)) {
@@ -62,6 +73,18 @@
   oncontextmenu={(e) => e.preventDefault()}
 >
   <div class="menu-header">{zoneName}</div>
+
+  {#if isPublic && onViewAll && cardCount > 0}
+    <button class="menu-item" onclick={() => handleAction(onViewAll)}>
+      View All ({cardCount})
+    </button>
+  {/if}
+
+  {#if isPublic && isOrdered && onArrangeAll && cardCount > 1}
+    <button class="menu-item" onclick={() => handleAction(onArrangeAll)}>
+      Arrange All ({cardCount})
+    </button>
+  {/if}
 
   <button class="menu-item" onclick={() => handleAction(onShuffle)} disabled={cardCount < 2}>
     Shuffle
