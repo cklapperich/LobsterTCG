@@ -1,44 +1,63 @@
 <script lang="ts">
   import type { CardInstance, CardTemplate } from '../../core';
+  import { VISIBILITY } from '../../core';
   import Card from './Card.svelte';
 
   interface Props {
     cards: CardInstance<CardTemplate>[];
     zoneName: string;
     position: 'top' | 'bottom';
+    mode: 'peek' | 'arrange';
     renderFace?: (template: CardTemplate) => { rank?: string; suit?: string; color?: string };
     cardBack?: string;
-    onConfirm: (reorderedCards: CardInstance<CardTemplate>[]) => void;
-    onCancel: () => void;
+    onConfirm?: (reorderedCards: CardInstance<CardTemplate>[]) => void;
+    onClose: () => void;
   }
 
   let {
     cards,
     zoneName,
     position,
+    mode,
     renderFace,
     cardBack,
     onConfirm,
-    onCancel,
+    onClose,
   }: Props = $props();
+
+  const canReorder = $derived(mode === 'arrange');
+  const title = $derived(mode === 'peek' ? `Peeking at ${position} of ${zoneName}` : `Arrange ${position} of ${zoneName}`);
+
+  // Create visible copies of cards for display (force face-up)
+  function makeVisible(card: CardInstance<CardTemplate>): CardInstance<CardTemplate> {
+    return {
+      ...card,
+      visibility: card.visibility.map(() => VISIBILITY.PUBLIC),
+    };
+  }
 
   // Local state for reordering - use derived initial value
   let orderedCards = $state<CardInstance<CardTemplate>[]>([]);
   let dragIndex = $state<number | null>(null);
   let dragOverIndex = $state<number | null>(null);
 
-  // Initialize ordered cards from props (runs once on mount)
+  // Initialize ordered cards from props (runs once on mount), force visible
   $effect(() => {
     if (orderedCards.length === 0 && cards.length > 0) {
-      orderedCards = [...cards];
+      orderedCards = cards.map(makeVisible);
     }
   });
 
+  // Keep reference to original cards for confirm (to preserve original visibility)
+  const originalCards = $derived(cards);
+
   function handleDragStart(index: number) {
+    if (!canReorder) return;
     dragIndex = index;
   }
 
   function handleDragOver(event: DragEvent, index: number) {
+    if (!canReorder) return;
     event.preventDefault();
     dragOverIndex = index;
   }
@@ -48,6 +67,7 @@
   }
 
   function handleDrop(targetIndex: number) {
+    if (!canReorder) return;
     if (dragIndex === null || dragIndex === targetIndex) {
       dragIndex = null;
       dragOverIndex = null;
@@ -69,12 +89,17 @@
   }
 
   function handleConfirm() {
-    onConfirm(orderedCards);
+    // Map back to original cards with their original visibility
+    const reordered = orderedCards.map(visibleCard => {
+      const original = originalCards.find(c => c.instanceId === visibleCard.instanceId);
+      return original ?? visibleCard;
+    });
+    onConfirm?.(reordered);
   }
 
   function handleBackdropClick(event: MouseEvent) {
     if (event.target === event.currentTarget) {
-      onCancel();
+      onClose();
     }
   }
 </script>
@@ -83,8 +108,8 @@
 <div class="modal-backdrop" onclick={handleBackdropClick}>
   <div class="modal gbc-panel">
     <div class="modal-header">
-      <span class="modal-title">Arrange {position} of {zoneName}</span>
-      <button class="close-btn" onclick={onCancel}>×</button>
+      <span class="modal-title">{title}</span>
+      <button class="close-btn" onclick={onClose}>×</button>
     </div>
 
     <div class="modal-content">
@@ -95,7 +120,8 @@
             class="card-slot"
             class:dragging={dragIndex === i}
             class:drag-over={dragOverIndex === i}
-            draggable="true"
+            class:readonly={!canReorder}
+            draggable={canReorder}
             ondragstart={() => handleDragStart(i)}
             ondragover={(e) => handleDragOver(e, i)}
             ondragleave={handleDragLeave}
@@ -105,7 +131,7 @@
             <Card
               {card}
               index={0}
-              zoneKey="arrange-modal"
+              zoneKey="modal"
               draggable={false}
               {renderFace}
               {cardBack}
@@ -117,8 +143,12 @@
     </div>
 
     <div class="modal-footer">
-      <button class="gbc-btn secondary" onclick={onCancel}>Cancel</button>
-      <button class="gbc-btn" onclick={handleConfirm}>Confirm</button>
+      {#if canReorder}
+        <button class="gbc-btn secondary" onclick={onClose}>Cancel</button>
+        <button class="gbc-btn" onclick={handleConfirm}>Confirm</button>
+      {:else}
+        <button class="gbc-btn" onclick={onClose}>Close</button>
+      {/if}
     </div>
   </div>
 </div>
@@ -161,8 +191,16 @@
     transition: transform 0.15s, opacity 0.15s;
   }
 
+  .card-slot.readonly {
+    @apply cursor-default;
+  }
+
   .card-slot:hover {
     transform: translateY(-0.25rem);
+  }
+
+  .card-slot.readonly:hover {
+    transform: none;
   }
 
   .card-slot.dragging {
