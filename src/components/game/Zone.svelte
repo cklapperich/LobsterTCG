@@ -9,7 +9,8 @@
     cardBack?: string;
     renderFace?: (template: CardTemplate) => { rank?: string; suit?: string; color?: string };
     onDrop?: (cardInstanceId: string, toZoneId: string, position?: number) => void;
-    onDragStart?: (cardInstanceId: string, zoneId: string) => void;
+    onDragStart?: (cardInstanceId: string, zoneId: string, x: number, y: number) => void;
+    onDrag?: (x: number, y: number) => void;
     onDragEnd?: () => void;
     onPreview?: (card: CardInstance<CardTemplate>) => void;
     onToggleVisibility?: (cardInstanceId: string) => void;
@@ -23,6 +24,7 @@
     renderFace,
     onDrop,
     onDragStart,
+    onDrag,
     onDragEnd,
     onPreview,
     onToggleVisibility,
@@ -58,25 +60,25 @@
     isDragOver = false;
   }
 
-  // Zone drop = bottom of stack (no position specified = append)
+  // Zone drop = bottom of stack (position 0 = lowest z-index = visually behind)
   function handleDrop(event: DragEvent) {
     event.preventDefault();
     isDragOver = false;
     const cardInstanceId = event.dataTransfer?.getData('text/plain');
     if (cardInstanceId) {
-      // Zone background drop always goes to bottom (append)
-      onDrop?.(cardInstanceId, zone.key);
+      // Zone background drop always goes to bottom (insert at index 0)
+      onDrop?.(cardInstanceId, zone.key, 0);
     }
   }
 
   // Card drop behavior depends on stackDirection
-  // - "none": always go to top (position 0)
-  // - others: insert at target card's position (on top of that card)
+  // - "none": always go to top (position 0 = visually on top for unstacked)
+  // - others: insert after target card (targetIndex + 1 = higher z-index = visually on top)
   function handleCardDrop(droppedCardId: string, _targetCardId: string, targetIndex: number) {
     if (stackDirection === 'none') {
       onDrop?.(droppedCardId, zone.key, 0);
     } else {
-      onDrop?.(droppedCardId, zone.key, targetIndex);
+      onDrop?.(droppedCardId, zone.key, targetIndex + 1);
     }
   }
 
@@ -103,6 +105,7 @@
         {cardBack}
         {renderFace}
         {onDragStart}
+        {onDrag}
         {onDragEnd}
         {onPreview}
         {onToggleVisibility}

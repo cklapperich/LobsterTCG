@@ -10,7 +10,8 @@
     cardBack?: string;
     // For playing cards without images - render functions
     renderFace?: (template: CardTemplate) => { rank?: string; suit?: string; color?: string };
-    onDragStart?: (cardInstanceId: string, zoneKey: string) => void;
+    onDragStart?: (cardInstanceId: string, zoneKey: string, x: number, y: number) => void;
+    onDrag?: (x: number, y: number) => void;
     onDragEnd?: () => void;
     onPreview?: (card: CardInstance<CardTemplate>) => void;
     onToggleVisibility?: (cardInstanceId: string) => void;
@@ -26,6 +27,7 @@
     cardBack,
     renderFace,
     onDragStart,
+    onDrag,
     onDragEnd,
     onPreview,
     onToggleVisibility,
@@ -42,11 +44,24 @@
   const faceData = $derived(renderFace ? renderFace(template) : null);
   const hasImage = $derived(!!template.imageUrl);
 
+  // Create a transparent 1x1 pixel image for suppressing native drag preview
+  const transparentImg = new Image();
+  transparentImg.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
   function handleDragStart(event: DragEvent) {
     if (!draggable) return;
     isDragging = true;
     event.dataTransfer?.setData('text/plain', card.instanceId);
-    onDragStart?.(card.instanceId, zoneKey);
+    // Suppress browser's default ghost image with transparent pixel
+    event.dataTransfer?.setDragImage(transparentImg, 0, 0);
+    onDragStart?.(card.instanceId, zoneKey, event.clientX, event.clientY);
+  }
+
+  function handleDrag(event: DragEvent) {
+    // During drag, clientX/Y can be 0 when cursor leaves window - ignore those
+    if (event.clientX !== 0 || event.clientY !== 0) {
+      onDrag?.(event.clientX, event.clientY);
+    }
   }
 
   function handleDragEnd() {
@@ -97,6 +112,7 @@
   style="--i: {index}"
   {draggable}
   ondragstart={handleDragStart}
+  ondrag={handleDrag}
   ondragend={handleDragEnd}
   ondragover={handleDragOver}
   ondragleave={handleDragLeave}
@@ -161,8 +177,7 @@
   }
 
   .card.dragging {
-    @apply opacity-50;
-    transform: scale(1.05);
+    opacity: 0;
   }
 
   .card.drop-target {
