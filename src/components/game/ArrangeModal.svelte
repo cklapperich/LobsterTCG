@@ -34,7 +34,7 @@
   function makeVisible(card: CardInstance<CardTemplate>): CardInstance<CardTemplate> {
     return {
       ...card,
-      visibility: card.visibility.map(() => VISIBILITY.PUBLIC),
+      visibility: VISIBILITY.PUBLIC,
     };
   }
 
