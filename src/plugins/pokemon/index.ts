@@ -11,7 +11,6 @@ import {
 import { ZONE_IDS, PRIZE_ZONE_IDS } from './zones';
 import type { PokemonCardTemplate } from './cards';
 import {
-  POKEMON_TEMPLATE_MAP,
   DEFAULT_POKEMON_DECK,
   getTemplate,
   getCardBack,

@@ -69,7 +69,7 @@
   }
 
   function handlePreview(card: CardInstance<CardTemplate>) {
-    previewCard = card as CardInstance<PlayingCardTemplate>;
+    previewCard = card as CardInstance<CardTemplate>;
   }
 
   function handleToggleVisibility(cardInstanceId: string) {
@@ -203,10 +203,10 @@
 
     if (cardModal.position === 'top') {
       // Replace top N cards (last in array = highest z-index = visually on top)
-      zone.cards.splice(-count, count, ...reorderedCards as CardInstance<PlayingCardTemplate>[]);
+      zone.cards.splice(-count, count, ...reorderedCards as CardInstance<CardTemplate>[]);
     } else {
       // Replace bottom N cards (first in array = lowest z-index = visually at bottom)
-      zone.cards.splice(0, count, ...reorderedCards as CardInstance<PlayingCardTemplate>[]);
+      zone.cards.splice(0, count, ...reorderedCards as CardInstance<CardTemplate>[]);
     }
 
     gameState = { ...gameState };
