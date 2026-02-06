@@ -17,35 +17,35 @@ export interface DrawAction extends BaseAction {
 export interface MoveCardAction extends BaseAction {
   type: 'move_card';
   cardInstanceId: string;
-  fromZone: string;
-  toZone: string;
+  fromZone: string;  // Zone key (e.g., "player1_hand")
+  toZone: string;    // Zone key (e.g., "player1_discard")
   position?: number;
 }
 
 export interface MoveCardStackAction extends BaseAction {
   type: 'move_card_stack';
   cardInstanceIds: string[];
-  fromZone: string;
-  toZone: string;
+  fromZone: string;  // Zone key (e.g., "player0_deck")
+  toZone: string;    // Zone key (e.g., "player0_hand")
   position?: number;
 }
 
 export interface PlaceOnZoneAction extends BaseAction {
   type: 'place_on_zone';
   cardInstanceIds: string[];
-  zoneId: string;
+  zoneId: string;    // Zone key (e.g., "player1_deck")
   position: 'top' | 'bottom';
 }
 
 // Zone Actions
 export interface ShuffleAction extends BaseAction {
   type: 'shuffle';
-  zoneId: string;
+  zoneId: string;    // Zone key (e.g., "player0_deck")
 }
 
 export interface SearchZoneAction extends BaseAction {
   type: 'search_zone';
-  zoneId: string;
+  zoneId: string;    // Zone key (e.g., "player1_deck")
   filter?: string;
   count?: number;
   fromPosition?: 'top' | 'bottom';
@@ -124,7 +124,7 @@ export interface RevealAction extends BaseAction {
 // Peek Action - look at cards without changing visibility
 export interface PeekAction extends BaseAction {
   type: 'peek';
-  zoneId: string;
+  zoneId: string;    // Zone key (e.g., "player0_deck")
   count: number;
   fromPosition: 'top' | 'bottom';
 }

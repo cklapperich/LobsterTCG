@@ -41,7 +41,7 @@ export interface Playmat {
   gameType: string;
   playerCount: 1 | 2;
   layout: PlaymatLayout;
-  zones: ZoneConfig[];
+  zones: Record<string, ZoneConfig>; // zone ID -> config
   // For 2-player games, which slots belong to which player
   playerSlots?: Record<PlayerIndex, string[]>;
 }

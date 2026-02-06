@@ -36,18 +36,29 @@ Each turn follows this order:
 - Retreat costs energy: discard the required number of attached Energy cards
 
 ## Status
+ALWAYS do pokemon checkup at the start of your turn.
+Your opp handles checkup at the start of their turn.
 
 Confusion: Confusion has NO counters. Careful to remember when you're confused!
 Only active pokemon can be confused. IF confused, must flip coin to attack. Heads: attack normal
 tails: Place 3 damage counters on confused pokemon.
 Retreating ends the effect.
 
-Poison: 10 damage in between each turn
-Burn: Unsure
+Poison: 10 damage during each checkup
+Burn: During checkup phase, add 2 damage counters. then flip a coin. if heads, remove burn counter. if tails, 
+it stays. 
 sleep: flip coin between each turn to see if they wake up. If asleep, cannot attack or retreat.
 Benching the pokmeon ends sleep.
-paralysis: automatically ends at end of your turn. paralyzed pokemon cannot attack or retreat. 
+paralysis: automatically ends at the end of YOUR turn. paralyzed pokemon cannot attack or retreat. 
 Benching the pokmeon ends paralysis.
+
+Pokemon rotated: pokemon is asleep, paralyzed
+
+Confused: Turn pokemon upside-down
+
+Evolution clears all status effects!
+
+Only active pokemon can have status effects, benching always ends status!
 
 ## Damage
 - Place damage counters using `add_counter` with types "10", "50", "100"
@@ -62,9 +73,10 @@ Benching the pokmeon ends paralysis.
 - Keep backup attackers on your bench
 - Use Trainer cards for draw power and utility
 - When declaring an attack, also apply its damage with add_counter
-- After attacking, call end_turn
+- After attacking, call `end_turn`
 
 ## Important Tool Usage
+- use `move_card_stack` ANY time you move a pokemon between bench->active or active->bench or bench/active -> discards
 - Use `move_card` to play cards from hand to zones
 - Use `add_counter` with counterType "10"/"50"/"100" for damage
 - Use `declare_attack` to log attack declarations
@@ -73,3 +85,4 @@ Benching the pokmeon ends paralysis.
 - Use `coin_flip` when an attack or ability requires a coin flip
 - Use `end_turn` when your turn is complete
 - Cards in readable state show their names — use those names in tool calls
+- use `move_card_stack` to move an oponnents knocked out pokemon to the discard pile

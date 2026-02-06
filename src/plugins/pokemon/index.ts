@@ -117,7 +117,8 @@ export function loadPlayerDeck(
   getTemplate: (id: string) => CardTemplate | undefined,
   shuffleDeck: boolean = true
 ): void {
-  loadDeck(state, playerIndex, ZONE_IDS.DECK, deckList, getTemplate, shuffleDeck);
+  const deckKey = makeZoneKey(playerIndex, ZONE_IDS.DECK);
+  loadDeck(state, playerIndex, deckKey, deckList, getTemplate, shuffleDeck);
 }
 
 /**
@@ -126,9 +127,10 @@ export function loadPlayerDeck(
  */
 export function executeSetup(state: GameState<CardTemplate>, playerIndex: PlayerIndex): void {
   const deckKey = makeZoneKey(playerIndex, ZONE_IDS.DECK);
+  const prizesKey = makeZoneKey(playerIndex, ZONE_IDS.PRIZES);
 
   // Shuffle the deck
-  executeAction(state, shuffleAction(playerIndex, ZONE_IDS.DECK));
+  executeAction(state, shuffleAction(playerIndex, deckKey));
 
   // Draw 7 cards
   executeAction(state, { type: 'draw', player: playerIndex, count: 7 });
@@ -138,7 +140,7 @@ export function executeSetup(state: GameState<CardTemplate>, playerIndex: Player
     const deckZone = state.zones[deckKey];
     if (deckZone.cards.length > 0) {
       const topCard = deckZone.cards[0];
-      executeAction(state, moveCard(playerIndex, topCard.instanceId, ZONE_IDS.DECK, ZONE_IDS.PRIZES));
+      executeAction(state, moveCard(playerIndex, topCard.instanceId, deckKey, prizesKey));
     }
   }
 }
