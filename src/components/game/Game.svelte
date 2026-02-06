@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import type { Playmat, CardInstance, CardTemplate, GameState, CounterDefinition, DeckList, ZoneConfig, Action } from '../../core';
   import { executeAction, shuffle, VISIBILITY, flipCard, parseZoneKey, endTurn, loadDeck, getCardName, findCardInZones, toReadableState, PluginManager } from '../../core';
+  import type { ToolContext } from '../../core/ai-tools';
   import { plugin, executeSetup, ZONE_IDS, pokemonWarningsPlugin } from '../../plugins/pokemon';
   import { getTemplate } from '../../plugins/pokemon/cards';
   import PlaymatGrid from './PlaymatGrid.svelte';
@@ -19,6 +20,8 @@
     clearZoneCounters,
   } from './counterDragState.svelte';
   import { playSfx } from '../../lib/audio.svelte';
+  import { runAITurn } from '../../ai';
+  import agentsMd from '../../plugins/pokemon/agents.md?raw';
   // gameLog store no longer used - log lives in gameState.log
   import { contextMenuStore, openContextMenu, closeContextMenu as closeContextMenuStore } from './contextMenu.svelte';
   import { cardModalStore, openCardModal, closeCardModal as closeCardModalStore } from './cardModal.svelte';
@@ -41,6 +44,7 @@
   let playmat = $state<Playmat | null>(null);
   let loading = $state(true);
   let error = $state<string | null>(null);
+  let aiThinking = $state(false);
 
   // Reactive drag state from external module
   const dragState = $derived(dragStore.current);
@@ -285,6 +289,67 @@
     showDebugModal = true;
   }
 
+  async function triggerAITurn() {
+    if (!gameState || gameState.activePlayer !== 1 || aiThinking) return;
+    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+    if (!apiKey) return;
+    aiThinking = true;
+    addLog('[AI] Thinking...');
+
+    // Serialize tool execution — the SDK runs parallel tool_use blocks
+    // via Promise.all, but we need them sequential for visual feedback.
+    let queue: Promise<void> = Promise.resolve();
+
+    const ctx: ToolContext = {
+      playerIndex: 1,
+      getState: () => gameState!,
+      getReadableState: () => JSON.stringify(
+        pluginManager.applyReadableStateModifier(toReadableState(gameState!, 1))
+      ),
+      execute: (action) => {
+        // Chain onto the queue so concurrent calls run one at a time
+        const result = queue.then(async () => {
+          action.source = 'ai';
+          const blocked = tryAction(action);
+          if (blocked) return JSON.stringify({ blocked });
+          // SFX based on action type
+          const sfxMap: Record<string, Parameters<typeof playSfx>[0]> = {
+            draw: 'cardDrop',
+            move_card: 'cardDrop',
+            move_card_stack: 'cardDrop',
+            shuffle: 'shuffle',
+            coin_flip: 'coinToss',
+            end_turn: 'confirm',
+            add_counter: 'cursor',
+            remove_counter: 'cursor',
+            set_counter: 'cursor',
+          };
+          const sfx = sfxMap[action.type];
+          if (sfx) playSfx(sfx);
+          // Delay for visual feedback
+          await new Promise(r => setTimeout(r, 500));
+          return ctx.getReadableState();
+        });
+        // Update queue tail (swallow errors so chain doesn't break)
+        queue = result.then(() => {}, () => {});
+        return result;
+      },
+    };
+
+    try {
+      await runAITurn({
+        context: ctx,
+        plugin,
+        heuristics: agentsMd,
+        apiKey,
+        logging: true,
+      });
+    } catch (e) {
+      addLog(`[AI] Error: ${e}`);
+    }
+    aiThinking = false;
+  }
+
   function handleEndTurn() {
     if (!gameState) return;
     const currentPlayer = gameState.activePlayer;
@@ -293,6 +358,9 @@
     gameState.log.push(`[Player ${currentPlayer + 1}] Ended turn`);
     gameState = { ...gameState };
     playSfx('confirm');
+
+    // If it's now the AI's turn, trigger it
+    triggerAITurn();
   }
 
   // Counter handlers
@@ -345,6 +413,9 @@
           <span class="text-gbc-yellow ml-1">{gameState.turnNumber}</span>
           <span class="text-gbc-light ml-2">PLAYER</span>
           <span class="text-gbc-green ml-1">{gameState.activePlayer + 1}</span>
+          {#if aiThinking}
+            <span class="text-gbc-red ml-2 animate-pulse">AI THINKING...</span>
+          {/if}
         </div>
       {/if}
     </div>
@@ -355,7 +426,7 @@
       <button
         class="gbc-btn text-[0.5rem] py-1 px-3"
         onclick={handleEndTurn}
-        disabled={!gameState}
+        disabled={!gameState || aiThinking}
       >
         END TURN
       </button>

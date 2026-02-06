@@ -55,5 +55,3 @@ export type { GamePlugin } from './game-plugin';
 // Counter types
 export type { CounterDefinition } from './counter';
 
-// AI tool types
-export type { Tool } from './tool';

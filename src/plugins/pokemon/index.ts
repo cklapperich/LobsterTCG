@@ -1,4 +1,4 @@
-import type { GameState, Playmat, DeckList, PlayerIndex, CardTemplate, GameConfig, GamePlugin, CounterDefinition, Tool } from '../../core';
+import type { GameState, Playmat, DeckList, PlayerIndex, CardTemplate, GameConfig, GamePlugin, CounterDefinition } from '../../core';
 import {
   createGameState,
   loadDeck,
@@ -8,8 +8,7 @@ import {
   moveCard,
   executeAction,
 } from '../../core';
-import type { GameLoop } from '../../core/game-loop';
-import { createDefaultTools } from '../../core/ai-tools';
+import { createDefaultTools, type RunnableTool, type ToolContext } from '../../core/ai-tools';
 import { ZONE_IDS } from './zones';
 import type { PokemonCardTemplate } from './cards';
 import {
@@ -194,20 +193,34 @@ const HIDDEN_DEFAULT_TOOLS = new Set([
   'place_on_zone',
 ]);
 
-function createPokemonTools(
-  gameLoop: GameLoop<PokemonCardTemplate>,
-  playerIndex: PlayerIndex
-): Tool[] {
-  const p = playerIndex;
+/** Local tool factory matching RunnableTool shape. */
+function tool(options: {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown> & { type: 'object' };
+  run: (input: any) => Promise<string> | string;
+}): RunnableTool {
+  return {
+    type: 'custom',
+    name: options.name,
+    description: options.description,
+    input_schema: options.inputSchema,
+    run: options.run,
+    parse: (content: unknown) => content,
+  };
+}
+
+function createPokemonTools(ctx: ToolContext): RunnableTool[] {
+  const p = ctx.playerIndex;
 
   // Start with filtered defaults
-  const tools = createDefaultTools(gameLoop, p).filter(
+  const tools = createDefaultTools(ctx).filter(
     t => !HIDDEN_DEFAULT_TOOLS.has(t.name)
   );
 
   // ── Pokemon-specific tools ──────────────────────────────────
 
-  tools.push({
+  tools.push(tool({
     name: 'declare_attack',
     description: 'Declare that your active Pokemon is using an attack. Logs the declaration to the game log.',
     inputSchema: {
@@ -219,17 +232,17 @@ function createPokemonTools(
       required: ['attackName'],
     },
     async run(input) {
-      const state = gameLoop.getState();
+      const state = ctx.getState();
       const activeKey = makeZoneKey(p, ZONE_IDS.ACTIVE);
       const activeZone = state.zones[activeKey];
-      const activeName = activeZone?.cards[0]?.template?.name ?? 'Active Pokemon';
+      const activeName = activeZone?.cards.at(-1)?.template?.name ?? 'Active Pokemon';
       const target = input.targetCardName ? ` targeting ${input.targetCardName}` : '';
       state.log.push(`${activeName} used ${input.attackName}!${target}`);
-      return JSON.stringify(gameLoop.getReadableState(p));
+      return ctx.getReadableState();
     },
-  });
+  }));
 
-  tools.push({
+  tools.push(tool({
     name: 'declare_retreat',
     description: 'Declare that your active Pokemon is retreating. Logs the declaration to the game log.',
     inputSchema: {
@@ -240,13 +253,13 @@ function createPokemonTools(
       required: ['cardName'],
     },
     async run(input) {
-      const state = gameLoop.getState();
+      const state = ctx.getState();
       state.log.push(`${input.cardName} retreated!`);
-      return JSON.stringify(gameLoop.getReadableState(p));
+      return ctx.getReadableState();
     },
-  });
+  }));
 
-  tools.push({
+  tools.push(tool({
     name: 'declare_ability',
     description: 'Declare that a Pokemon is using an ability. Logs the declaration to the game log.',
     inputSchema: {
@@ -258,11 +271,11 @@ function createPokemonTools(
       required: ['cardName', 'abilityName'],
     },
     async run(input) {
-      const state = gameLoop.getState();
+      const state = ctx.getState();
       state.log.push(`${input.cardName} used ability: ${input.abilityName}`);
-      return JSON.stringify(gameLoop.getReadableState(p));
+      return ctx.getReadableState();
     },
-  });
+  }));
 
   return tools;
 }

@@ -32,6 +32,10 @@ function deepClone<T>(obj: T): T {
 
 const DEFAULT_MAX_ITERATIONS = 1000;
 
+export interface GameLoopOptions {
+  trackHistory?: boolean;
+}
+
 export class GameLoop<T extends CardTemplate = CardTemplate> {
   private state: GameState<T>;
   private states: GameState<T>[];
@@ -41,10 +45,12 @@ export class GameLoop<T extends CardTemplate = CardTemplate> {
   private validator: ((state: GameState<T>, action: Action) => string | null) | null;
   private pluginManager: PluginManager<T> | null;
   private maxIterations: number;
+  private trackHistory: boolean;
 
-  constructor(state: GameState<T>, pluginManager?: PluginManager<T>) {
+  constructor(state: GameState<T>, pluginManager?: PluginManager<T>, options?: GameLoopOptions) {
+    this.trackHistory = options?.trackHistory ?? true;
     this.state = state;
-    this.states = [deepClone(state)];
+    this.states = this.trackHistory ? [deepClone(state)] : [];
     this.actions = [];
     this.queue = [];
     this.listeners = new Map();
@@ -153,8 +159,10 @@ export class GameLoop<T extends CardTemplate = CardTemplate> {
     }
 
     // Record history
-    this.states.push(deepClone(this.state));
-    this.actions.push(action);
+    if (this.trackHistory) {
+      this.states.push(deepClone(this.state));
+      this.actions.push(action);
+    }
 
     this.emit('action:executed', { state: this.state, action });
 
