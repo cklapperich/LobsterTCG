@@ -223,8 +223,8 @@
       gameState = await plugin.startGame();
 
       // Load player decks (replace the default deck)
-      loadDeck(gameState, 0, `player0_${ZONE_IDS.DECK}`, player1Deck, getTemplate, false);
-      loadDeck(gameState, 1, `player1_${ZONE_IDS.DECK}`, player2Deck, getTemplate, false);
+      loadDeck(gameState, 0, `player1_${ZONE_IDS.DECK}`, player1Deck, getTemplate, false);
+      loadDeck(gameState, 1, `player2_${ZONE_IDS.DECK}`, player2Deck, getTemplate, false);
 
       // Execute setup for both players (shuffle, draw 7, set prizes)
       executeSetup(gameState, 0);
@@ -307,7 +307,7 @@
     await playmatGridRef.shuffleZone(zoneKey);
 
     // Execute actual shuffle after animation completes
-    const playerIndex = zoneKey.startsWith('player0_') ? 0 : 1;
+    const playerIndex = zoneKey.startsWith('player1_') ? 0 : 1;
     const action = shuffle(playerIndex, zoneKey);
     executeAction(gameState, action);
     const zoneName = gameState.zones[zoneKey]?.config.name ?? zoneKey;
@@ -399,8 +399,8 @@
   function resetGame() {
     plugin.startGame().then((state) => {
       // Load player decks
-      loadDeck(state, 0, `player0_${ZONE_IDS.DECK}`, player1Deck, getTemplate, false);
-      loadDeck(state, 1, `player1_${ZONE_IDS.DECK}`, player2Deck, getTemplate, false);
+      loadDeck(state, 0, `player1_${ZONE_IDS.DECK}`, player1Deck, getTemplate, false);
+      loadDeck(state, 1, `player2_${ZONE_IDS.DECK}`, player2Deck, getTemplate, false);
 
       // Execute setup for both players
       executeSetup(state, 0);
@@ -964,7 +964,7 @@
       onArrangeAll={handleArrangeAll}
       onClearCounters={handleClearCounters}
       onSetOrientation={handleSetOrientation}
-      onRevealToOpponent={contextMenu.zoneKey.startsWith('player0_') && !gameState?.pendingDecision ? handleRevealToOpponent : undefined}
+      onRevealToOpponent={contextMenu.zoneKey.startsWith('player1_') && !gameState?.pendingDecision ? handleRevealToOpponent : undefined}
       onMovePile={handleMovePile}
       onClose={handleCloseContextMenu}
     />

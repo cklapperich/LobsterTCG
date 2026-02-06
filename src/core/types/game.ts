@@ -43,7 +43,7 @@ export interface GameState<T extends CardTemplate = CardTemplate> {
   setupComplete: [boolean, boolean];
   turnNumber: number;
   activePlayer: PlayerIndex;
-  zones: Record<string, Zone<T>>;  // flattened: "player0_hand", "player1_tableau_1", etc.
+  zones: Record<string, Zone<T>>;  // flattened: "player1_hand", "player2_tableau_1", etc.
   players: [PlayerInfo, PlayerInfo];  // minimal player info
   currentTurn: Turn;
   pendingDecision: Decision | null;

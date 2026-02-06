@@ -62,12 +62,12 @@
   // Get zone by slot - uses correct player index based on slot ownership
   function getZone(slot: { id: string; zoneId: string }) {
     const playerIndex = slotToPlayer[slot.id] ?? 0;
-    const zoneKey = `player${playerIndex}_${slot.zoneId}`;
+    const zoneKey = `player${playerIndex + 1}_${slot.zoneId}`;
     return gameState.zones[zoneKey];
   }
 
   // Get staging zone
-  const stagingZone = $derived(gameState.zones['player0_staging']);
+  const stagingZone = $derived(gameState.zones['player1_staging']);
   const stagingHasCards = $derived(stagingZone?.cards.length > 0);
 </script>
 

@@ -36,17 +36,18 @@ export function formatNarrativeState(readable: ReadableGameState): string {
     lines.push(`GAME RESULT: ${JSON.stringify(readable.result)}`);
   }
 
-  // Player 1 board (AI = viewer, index 1 = display "Player 2")
+  // Player 1 board (AI = viewer). No player number in label to avoid
+  // confusion with zone key prefixes (player1_, player2_).
   lines.push('');
-  lines.push('--- YOUR BOARD (Player 2) ---');
+  lines.push('--- YOUR BOARD ---');
+  lines.push('');
+  lines.push(...formatBoard(readable, 'player2'));
+
+  // Player 0 board (opponent)
+  lines.push('');
+  lines.push('--- OPPONENT BOARD ---');
   lines.push('');
   lines.push(...formatBoard(readable, 'player1'));
-
-  // Player 0 board (opponent, index 0 = display "Player 1")
-  lines.push('');
-  lines.push('--- OPPONENT BOARD (Player 1) ---');
-  lines.push('');
-  lines.push(...formatBoard(readable, 'player0'));
 
   // Stadium
   const stadiumLines = formatStadium(readable.zones);

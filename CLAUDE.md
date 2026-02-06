@@ -170,7 +170,8 @@ Tools extract SFX from Pokemon TCG GB ROM using PyBoy emulator. Memory addresses
 | `cards.ts` | Card database backed by `cards-western.json`. `PokemonCardTemplate`, `PokemonAttack`, `PokemonAbility`, `POKEMON_TEMPLATE_MAP`, `getTemplate()`, `getCardBack()`, `parsePTCGODeck()`. |
 | `cards-western.json` | Western card database (all sets). Card data including names, images, attacks, abilities, HP, types. |
 | `set-codes.json` | Mapping of Pokemon TCG set names to set code prefixes for image lookup. |
-| `hooks.ts` | Pokemon hooks plugin (validation rules, post-hooks). Uses `blockOrWarn()` — blocks AI, warns UI. `modifyReadableState()` translates orientation→status field, computes totalDamage, converts retreatCost. Post-hook logs trainer card text on play. Exported as `pokemonHooksPlugin`. |
+| `hooks.ts` | Pokemon hooks plugin (validation rules, post-hooks). Uses `blockOrWarn()` — blocks AI, warns UI. `modifyReadableState()` translates orientation→status field, computes totalDamage, converts retreatCost. Registers `readableStateFormatter: formatNarrativeState` for compact AI-friendly text output. Post-hook logs trainer card text on play. Post-hook `setupFaceDown` hides cards placed on field zones during setup phase. Exported as `pokemonHooksPlugin`. |
+| `narrative.ts` | Narrative state formatter for AI consumption. `formatNarrativeState()` converts `ReadableGameState` to structured text: CARD REFERENCE (deduplicated full card details), GAME STATE header, YOUR/OPPONENT BOARD (compact instance stats), STADIUM, ACTIONS, LOG. Skips evolved-from Pokemon buried in stacks. |
 | `hooks.test.ts` | Tests for Pokemon hooks plugin. |
 | `zones.ts` | Pokemon zone IDs: deck, hand, active, bench_1-5, discard, prizes, lost_zone, stadium. |
 | `decks/*.txt` | PTCGO-format deck lists (brushfire, overgrowth, raindance). |

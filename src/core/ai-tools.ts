@@ -109,7 +109,7 @@ export function resolveCardByPosition(
  * Create default tools for all built-in action types.
  * Each tool calls ctx.execute() which is provided by the caller.
  *
- * All zone parameters accept zone keys (e.g. "player1_hand") — the same
+ * All zone parameters accept zone keys (e.g. "player2_hand") — the same
  * format returned by readable state. Zone keys are passed directly to
  * action factories.
  *
@@ -145,8 +145,8 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
         type: 'object' as const,
         properties: {
           cardName: { type: 'string', description: 'Name of the card to move (optional — omit for face-down cards)' },
-          fromZone: { type: 'string', description: 'Zone key (e.g. "player1_hand")' },
-          toZone: { type: 'string', description: 'Zone key to move the card to (e.g. "player1_active")' },
+          fromZone: { type: 'string', description: 'Zone key (e.g. "player2_hand")' },
+          toZone: { type: 'string', description: 'Zone key to move the card to (e.g. "player2_active")' },
           position: { type: 'number', description: 'Optional position in the target zone (0 = top)' },
           fromPosition: { type: 'string', description: 'Position to pick from when cardName is omitted: "top" (default), "bottom", or numeric index' },
         },
@@ -174,7 +174,7 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
             items: { type: 'string' },
             description: 'Names of the cards to move',
           },
-          fromZone: { type: 'string', description: 'Zone key (e.g. "player1_hand")' },
+          fromZone: { type: 'string', description: 'Zone key (e.g. "player2_hand")' },
           toZone: { type: 'string', description: 'Zone key to move the cards to' },
           position: { type: 'number', description: 'Optional position in the target zone (0 = top)' },
         },
@@ -202,7 +202,7 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
             items: { type: 'string' },
             description: 'Names of the cards to place',
           },
-          zone: { type: 'string', description: 'Target zone key (e.g. "player1_deck")' },
+          zone: { type: 'string', description: 'Target zone key (e.g. "player2_deck")' },
           position: { type: 'string', enum: ['top', 'bottom'], description: 'Place on top or bottom of the zone' },
         },
         required: ['cardNames', 'zone', 'position'],
@@ -231,7 +231,7 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
       inputSchema: {
         type: 'object' as const,
         properties: {
-          zone: { type: 'string', description: 'Zone key to shuffle (e.g. "player1_deck")' },
+          zone: { type: 'string', description: 'Zone key to shuffle (e.g. "player2_deck")' },
         },
         required: ['zone'],
       },
@@ -247,7 +247,7 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
       inputSchema: {
         type: 'object' as const,
         properties: {
-          zone: { type: 'string', description: 'Zone key to search (e.g. "player1_deck")' },
+          zone: { type: 'string', description: 'Zone key to search (e.g. "player2_deck")' },
           filter: { type: 'string', description: 'Optional filter string to match card names' },
           count: { type: 'number', description: 'Max number of results' },
           fromPosition: { type: 'string', enum: ['top', 'bottom'], description: 'Search from top or bottom' },
@@ -321,7 +321,7 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
         type: 'object' as const,
         properties: {
           cardName: { type: 'string', description: 'Name of the card' },
-          zone: { type: 'string', description: 'Zone key the card is in (e.g. "player0_active")' },
+          zone: { type: 'string', description: 'Zone key the card is in (e.g. "player1_active")' },
           counterType: { type: 'string', description: 'Counter type (e.g. "10" for 10-damage counter, "poison")' },
           amount: { type: 'number', description: 'Number of counters to add (default 1)' },
         },
@@ -418,7 +418,7 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
       inputSchema: {
         type: 'object' as const,
         properties: {
-          zone: { type: 'string', description: 'Zone key to peek at (e.g. "player1_deck")' },
+          zone: { type: 'string', description: 'Zone key to peek at (e.g. "player2_deck")' },
           count: { type: 'number', description: 'Number of cards to peek at (default 1)' },
           fromPosition: { type: 'string', enum: ['top', 'bottom'], description: 'Peek from top or bottom (default "top")' },
         },
@@ -508,7 +508,7 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
       inputSchema: {
         type: 'object' as const,
         properties: {
-          zone: { type: 'string', description: 'Zone key to reveal (e.g. "player1_hand")' },
+          zone: { type: 'string', description: 'Zone key to reveal (e.g. "player2_hand")' },
         },
         required: ['zone'],
       },

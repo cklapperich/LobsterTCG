@@ -77,8 +77,8 @@ export function executeDrop(
   }
 
   // Extract player indices from zone keys for cross-player check
-  const fromPlayerIndex = dragStore.current.fromZoneKey.startsWith('player0_') ? 0 : 1;
-  const toPlayerIndex = toZoneKey.startsWith('player0_') ? 0 : 1;
+  const fromPlayerIndex = dragStore.current.fromZoneKey.startsWith('player1_') ? 0 : 1;
+  const toPlayerIndex = toZoneKey.startsWith('player1_') ? 0 : 1;
 
   // Build action using the destination player's index for the action player
   // (so warnings check the right player's zones)
@@ -170,8 +170,8 @@ export function executeStackDrop(
     return null;
   }
 
-  const fromPlayerIndex = fromZoneKey.startsWith('player0_') ? 0 : 1;
-  const toPlayerIndex = toZoneKey.startsWith('player0_') ? 0 : 1;
+  const fromPlayerIndex = fromZoneKey.startsWith('player1_') ? 0 : 1;
+  const toPlayerIndex = toZoneKey.startsWith('player1_') ? 0 : 1;
   const actionPlayer = toPlayerIndex;
   const action = moveCardStack(actionPlayer, pileCardIds, fromZoneKey, toZoneKey, position);
 

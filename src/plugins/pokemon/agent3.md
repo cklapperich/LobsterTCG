@@ -73,7 +73,7 @@ Status conditions are tracked via card orientation (just like the real game wher
 ## Important Tool Usage
 - use `move_card_stack` ANY time you move a pokemon between bench->active or active->bench or bench/active -> discards
 - Use `move_card` to play cards from hand to zones
-- To take a prize card, use `move_card` with fromZone "player1_prizes" and toZone "player1_hand" (no cardName needed — takes from top)
+- To take a prize card, use `move_card` with fromZone "player2_prizes" and toZone "player2_hand" (no cardName needed — takes from top)
 - Use `add_counter` with counterType "10"/"50"/"100" for damage
 - Use `declare_attack` to log attack declarations
 - Use `declare_retreat` to log retreat declarations
