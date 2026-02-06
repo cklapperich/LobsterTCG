@@ -83,7 +83,7 @@ export function toReadableState<T extends CardTemplate>(
     }) as unknown as [PlayerInfo, PlayerInfo],
     currentTurn: convertTurn(state.currentTurn, idToName),
     result: state.result,
-    log: state.log,
+    log: state.log.slice(-100),
   };
 
   return readable;
