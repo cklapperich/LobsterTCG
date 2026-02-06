@@ -8,8 +8,9 @@ import {
   executeAction,
   setOrientation,
   resolveCardName,
+  findCardInZones,
 } from '../../core';
-import { createDefaultTools, type RunnableTool, type ToolContext } from '../../core/ai-tools';
+import { createDefaultTools, resolveCardByPosition, type RunnableTool, type ToolContext } from '../../core/ai-tools';
 import { ZONE_IDS } from './zones';
 import type { PokemonCardTemplate } from './cards';
 import {
@@ -209,13 +210,47 @@ function tool(options: {
   };
 }
 
+/**
+ * Auto-determine card position in a target zone based on Pokemon card type.
+ * Pokemon on top, Energy in the middle, Trainer/Item on bottom.
+ */
+function getAutoPosition(
+  state: PokemonGameState,
+  toZone: string,
+  cardId: string,
+): number | undefined {
+  const found = findCardInZones(state, cardId);
+  if (!found) return undefined; // face-down / unknown → top
+
+  const template = found.card.template as PokemonCardTemplate;
+  if (!template.supertype) return undefined;
+
+  if (template.supertype === 'Pokemon') {
+    return undefined; // top (push to end)
+  }
+
+  if (template.supertype === 'Energy') {
+    // Insert before the first Pokemon card in the zone
+    const zoneCards = state.zones[toZone]?.cards;
+    if (!zoneCards) return undefined;
+    for (let i = 0; i < zoneCards.length; i++) {
+      const t = zoneCards[i].template as PokemonCardTemplate;
+      if (t.supertype === 'Pokemon') return i;
+    }
+    return undefined; // no Pokemon → top
+  }
+
+  // Trainer/Item → bottom
+  return 0;
+}
+
 function createPokemonTools(ctx: ToolContext): RunnableTool[] {
   const p = ctx.playerIndex;
   const isDecision = ctx.isDecisionResponse ?? false;
 
-  // Start with filtered defaults
+  // Start with filtered defaults (remove hidden tools and default move_card)
   let tools = createDefaultTools(ctx).filter(
-    t => !HIDDEN_DEFAULT_TOOLS.has(t.name)
+    t => !HIDDEN_DEFAULT_TOOLS.has(t.name) && t.name !== 'move_card'
   );
 
   // Decision-aware filtering
@@ -226,6 +261,30 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
     // Normal turn: hide resolve_decision, show end_turn and create_decision
     tools = tools.filter(t => t.name !== 'resolve_decision');
   }
+
+  // ── Pokemon move_card with auto-position ────────────────────
+  tools.push(tool({
+    name: 'move_card',
+    description: 'Move a card from one zone to another. Position is auto-determined: Pokemon on top, Energy in middle, Trainer/Item on bottom. Use cardName for visible cards. Omit cardName to take from top of zone (e.g. prize cards).',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        cardName: { type: 'string', description: 'Name of the card to move (optional — omit for face-down cards)' },
+        fromZone: { type: 'string', description: 'Zone key (e.g. "player1_hand")' },
+        toZone: { type: 'string', description: 'Zone key to move the card to (e.g. "player1_active")' },
+        fromPosition: { type: 'string', description: 'Position to pick from when cardName is omitted: "top" (default), "bottom", or numeric index' },
+      },
+      required: ['fromZone', 'toZone'],
+    },
+    async run(input) {
+      const state = ctx.getState() as PokemonGameState;
+      const cardId = input.cardName
+        ? resolveCardName(state, input.cardName, input.fromZone)
+        : resolveCardByPosition(state, input.fromZone, input.fromPosition);
+      const position = getAutoPosition(state, input.toZone, cardId);
+      return ctx.execute(moveCard(p, cardId, input.fromZone, input.toZone, position));
+    },
+  }));
 
   // ── Pokemon-specific tools ──────────────────────────────────
 
