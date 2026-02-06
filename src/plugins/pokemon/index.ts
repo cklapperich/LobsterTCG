@@ -9,6 +9,7 @@ import {
   setOrientation,
   resolveCardName,
   findCardInZones,
+  VISIBILITY,
 } from '../../core';
 import { createDefaultTools, resolveCardByPosition, type RunnableTool, type ToolContext } from '../../core/ai-tools';
 import { ZONE_IDS } from './zones';
@@ -17,6 +18,7 @@ import {
   getCardBack,
   getTemplate as getCardTemplate,
 } from './cards';
+import { isBasicPokemon, isFieldZone } from './helpers';
 
 // Import counter images
 import burnImg from './counters/burn.png';
@@ -176,6 +178,52 @@ export function getCardInfo(template: CardTemplate): string {
   return template.name ?? 'Unknown Card';
 }
 
+// ── Setup Phase Helpers ──────────────────────────────────────────
+
+/**
+ * Auto-mulligan: shuffle hand back into deck and redraw 7 until hand
+ * contains at least one Basic Pokemon. Returns the number of mulligans.
+ */
+export function autoMulligan(state: GameState<CardTemplate>, playerIndex: PlayerIndex): number {
+  let count = 0;
+  const handKey = `player${playerIndex}_hand`;
+  const deckKey = `player${playerIndex}_deck`;
+
+  while (count < 20) {
+    const hand = state.zones[handKey];
+    const hasBasic = hand.cards.some(c => isBasicPokemon(c.template as PokemonCardTemplate));
+    if (hasBasic) break;
+
+    count++;
+    // Move all hand cards back to deck
+    while (hand.cards.length > 0) {
+      const card = hand.cards.pop()!;
+      state.zones[deckKey].cards.push(card);
+    }
+    // Shuffle and redraw 7
+    executeAction(state, shuffleAction(playerIndex, deckKey));
+    executeAction(state, { type: 'draw', player: playerIndex, count: 7 });
+    state.log.push(`Player ${playerIndex + 1} mulliganed (no Basic Pokemon)`);
+  }
+  return count;
+}
+
+
+/**
+ * Flip all field Pokemon face-up (PUBLIC visibility).
+ * Called once when setup phase transitions to playing.
+ */
+export function flipFieldCardsFaceUp(state: GameState<CardTemplate>): void {
+  for (const [zoneKey, zone] of Object.entries(state.zones)) {
+    if (isFieldZone(zoneKey)) {
+      for (const card of zone.cards) {
+        card.visibility = VISIBILITY.PUBLIC;
+      }
+    }
+  }
+  state.log.push('All Pokemon flipped face-up!');
+}
+
 // ── AI Tools ─────────────────────────────────────────────────────
 
 /**
@@ -252,6 +300,45 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
   let tools = createDefaultTools(ctx).filter(
     t => !HIDDEN_DEFAULT_TOOLS.has(t.name) && t.name !== 'move_card'
   );
+
+  // Setup phase: only allow move_card, move_card_stack, end_turn
+  if (ctx.getState().phase === 'setup') {
+    let setupTools = tools.filter(t => ['move_card_stack', 'end_turn'].includes(t.name));
+    // Add end_phase alias (agent0.md references it)
+    const endTurnTool = setupTools.find(t => t.name === 'end_turn');
+    if (endTurnTool) {
+      setupTools.push({ ...endTurnTool, name: 'end_phase', description: 'End the setup phase' });
+    }
+    // We still need the custom move_card tool below, so add it after the Pokemon tools section
+    // For now, filter and we'll add move_card below
+    tools = setupTools;
+
+    // Add the Pokemon move_card with auto-position
+    tools.push(tool({
+      name: 'move_card',
+      description: 'Move a card from one zone to another. Position is auto-determined: Pokemon on top, Energy in middle, Trainer/Item on bottom. Use cardName for visible cards. Omit cardName to take from top of zone (e.g. prize cards).',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          cardName: { type: 'string', description: 'Name of the card to move (optional — omit for face-down cards)' },
+          fromZone: { type: 'string', description: 'Zone key (e.g. "player1_hand")' },
+          toZone: { type: 'string', description: 'Zone key to move the card to (e.g. "player1_active")' },
+          fromPosition: { type: 'string', description: 'Position to pick from when cardName is omitted: "top" (default), "bottom", or numeric index' },
+        },
+        required: ['fromZone', 'toZone'],
+      },
+      async run(input) {
+        const state = ctx.getState() as PokemonGameState;
+        const cardId = input.cardName
+          ? resolveCardName(state, input.cardName, input.fromZone)
+          : resolveCardByPosition(state, input.fromZone, input.fromPosition);
+        const position = getAutoPosition(state, input.toZone, cardId);
+        return ctx.execute(moveCard(p, cardId, input.fromZone, input.toZone, position));
+      },
+    }));
+
+    return setupTools;
+  }
 
   // Decision-aware filtering
   if (isDecision) {

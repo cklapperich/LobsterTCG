@@ -1,4 +1,5 @@
 import type { Action, GameState, MoveCardAction, MoveCardStackAction, AddCounterAction } from '../../core/types';
+import { VISIBILITY } from '../../core/types';
 import type { PreHookResult, PostHookResult, Plugin } from '../../core/plugin/types';
 import type { PokemonCardTemplate } from './cards';
 import { getTemplate } from './cards';
@@ -331,6 +332,37 @@ function warnEnergyOnTopOfPokemon(state: PokemonState, action: Action): PreHookR
   return { outcome: 'continue' };
 }
 
+// Post-hook: During setup, cards placed on field zones are face-down (hidden from both players)
+function setupFaceDown(state: PokemonState, action: Action): PostHookResult {
+  if (state.phase !== 'setup') return {};
+
+  let toZone: string | undefined;
+  let cardIds: string[] = [];
+
+  if (action.type === 'move_card') {
+    const a = action as MoveCardAction;
+    toZone = a.toZone;
+    cardIds = [a.cardInstanceId];
+  } else if (action.type === 'move_card_stack') {
+    const a = action as MoveCardStackAction;
+    toZone = a.toZone;
+    cardIds = a.cardInstanceIds;
+  }
+
+  if (!toZone || !isFieldZone(toZone)) return {};
+
+  const mutableState = state as GameState<PokemonCardTemplate>;
+  const zone = mutableState.zones[toZone];
+  if (!zone) return {};
+
+  for (const id of cardIds) {
+    const card = zone.cards.find(c => c.instanceId === id);
+    if (card) card.visibility = VISIBILITY.HIDDEN;
+  }
+
+  return {};
+}
+
 // Post-hook: Log trainer card text when played to staging
 function logTrainerText(state: PokemonState, action: Action): PostHookResult {
   let cardInstanceId: string;
@@ -445,9 +477,11 @@ export const pokemonHooksPlugin: Plugin<PokemonCardTemplate> = {
   readableStateModifier: modifyReadableState,
   postHooks: {
     'move_card': [
+      { hook: setupFaceDown, priority: 50 },
       { hook: logTrainerText, priority: 100 },
     ],
     'move_card_stack': [
+      { hook: setupFaceDown, priority: 50 },
       { hook: logTrainerText, priority: 100 },
     ],
   },

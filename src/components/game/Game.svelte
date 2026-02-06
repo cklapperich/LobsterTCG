@@ -3,7 +3,7 @@
   import type { Playmat, CardInstance, CardTemplate, GameState, CounterDefinition, DeckList, ZoneConfig, Action } from '../../core';
   import { executeAction, shuffle, VISIBILITY, flipCard, endTurn, loadDeck, getCardName, findCardInZones, toReadableState, PluginManager, setOrientation, createDecision, resolveDecision, revealHand } from '../../core';
   import type { ToolContext } from '../../core/ai-tools';
-  import { plugin, executeSetup, ZONE_IDS, pokemonHooksPlugin } from '../../plugins/pokemon';
+  import { plugin, executeSetup, ZONE_IDS, pokemonHooksPlugin, autoMulligan, flipFieldCardsFaceUp } from '../../plugins/pokemon';
   import { getTemplate } from '../../plugins/pokemon/cards';
   import PlaymatGrid from './PlaymatGrid.svelte';
   import ZoneContextMenu from './ZoneContextMenu.svelte';
@@ -23,6 +23,7 @@
   import { playSfx } from '../../lib/audio.svelte';
   import { runAITurn } from '../../ai';
   import agentsMd from '../../plugins/pokemon/agents.md?raw';
+  import agent0Md from '../../plugins/pokemon/agent0.md?raw';
   // gameLog store no longer used - log lives in gameState.log
   import { contextMenuStore, openContextMenu, closeContextMenu as closeContextMenuStore } from './contextMenu.svelte';
   import { cardModalStore, openCardModal, closeCardModal as closeCardModalStore } from './cardModal.svelte';
@@ -142,6 +143,12 @@
     }
 
     const blocked = executeAction(gameState, action);
+
+    // Run post-hooks (e.g., setup face-down, trainer text logging)
+    if (!blocked) {
+      pluginManager.runPostHooks(gameState, action, gameState);
+    }
+
     gameState = { ...gameState };
     return blocked;
   }
@@ -219,7 +226,13 @@
       executeSetup(gameState, 0);
       executeSetup(gameState, 1);
 
-      gameState.log = ['Game started'];
+      // Auto-mulligan AI (player 1)
+      const mulliganCount = autoMulligan(gameState, 1);
+      if (mulliganCount > 0) {
+        gameState.log.push(`AI mulliganed ${mulliganCount} time(s)`);
+      }
+
+      gameState.log = ['Game started — Setup Phase'];
       gameState = { ...gameState };
       loading = false;
     } catch (e) {
@@ -387,7 +400,13 @@
       executeSetup(state, 0);
       executeSetup(state, 1);
 
-      state.log = ['Game started'];
+      // Auto-mulligan AI (player 1)
+      const mulliganCount = autoMulligan(state, 1);
+      if (mulliganCount > 0) {
+        state.log.push(`AI mulliganed ${mulliganCount} time(s)`);
+      }
+
+      state.log = ['Game started — Setup Phase'];
       gameState = state;
       previewCard = null;
       closeContextMenuStore();
@@ -511,6 +530,40 @@
   }
 
   /**
+   * Trigger the AI's setup turn (place initial Pokemon face-down).
+   */
+  async function triggerAISetupTurn() {
+    if (!gameState || gameState.activePlayer !== 1 || aiThinking) return;
+    const apiKey = import.meta.env.VITE_FIREWORKS_API_KEY;
+    if (!apiKey) return;
+    aiThinking = true;
+    addLog('[AI] Setting up...');
+
+    const { ctx } = buildAIContext();
+
+    try {
+      await runAITurn({
+        context: ctx,
+        plugin,
+        heuristics: agent0Md,
+        apiKey,
+        logging: true,
+        setupMode: true,
+      });
+    } catch (e) {
+      addLog(`[AI] Error: ${e}`);
+    }
+
+    // After AI setup turn, check if phase transitioned to playing
+    if (gameState && gameState.phase === 'playing' && gameState.turnNumber === 1) {
+      flipFieldCardsFaceUp(gameState);
+      gameState = { ...gameState };
+    }
+
+    aiThinking = false;
+  }
+
+  /**
    * Trigger a decision mini-turn for the AI (human created the decision).
    */
   async function triggerAIDecisionTurn() {
@@ -548,14 +601,35 @@
   function handleEndTurn() {
     if (!gameState) return;
     const currentPlayer = gameState.activePlayer;
+    const wasSetup = gameState.phase === 'setup';
     const action = endTurn(currentPlayer);
     executeAction(gameState, action);
-    gameState.log.push(`[Player ${currentPlayer + 1}] Ended turn`);
+
+    if (wasSetup) {
+      gameState.log.push(`[Player ${currentPlayer + 1}] Ended setup`);
+    } else {
+      gameState.log.push(`[Player ${currentPlayer + 1}] Ended turn`);
+    }
     gameState = { ...gameState };
     playSfx('confirm');
 
-    // If it's now the AI's turn, trigger it
-    triggerAITurn();
+    // Check if setup just transitioned to playing
+    if (wasSetup && gameState.phase === 'playing' && gameState.turnNumber === 1) {
+      flipFieldCardsFaceUp(gameState);
+      gameState = { ...gameState };
+      return; // Human's turn 1 — no AI trigger
+    }
+
+    // During setup, if it's now AI's turn, trigger AI setup
+    if (gameState.phase === 'setup' && gameState.activePlayer === 1) {
+      triggerAISetupTurn();
+      return;
+    }
+
+    // Normal play: if it's now the AI's turn, trigger it
+    if (gameState.phase === 'playing') {
+      triggerAITurn();
+    }
   }
 
   function handleResolveDecision() {
@@ -654,8 +728,12 @@
     <div class="flex-1 flex justify-start">
       {#if gameState}
         <div class="turn-info text-[0.5rem]">
-          <span class="text-gbc-light">TURN</span>
-          <span class="text-gbc-yellow ml-1">{gameState.turnNumber}</span>
+          {#if gameState.phase === 'setup'}
+            <span class="text-gbc-yellow">SETUP</span>
+          {:else}
+            <span class="text-gbc-light">TURN</span>
+            <span class="text-gbc-yellow ml-1">{gameState.turnNumber}</span>
+          {/if}
           <span class="text-gbc-light ml-2">PLAYER</span>
           <span class="text-gbc-green ml-1">{gameState.activePlayer + 1}</span>
           {#if aiThinking}
@@ -682,7 +760,7 @@
           onclick={handleEndTurn}
           disabled={!gameState || aiThinking}
         >
-          END TURN
+          {gameState?.phase === 'setup' ? 'END SETUP' : 'END TURN'}
         </button>
       {/if}
       <button
