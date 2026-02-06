@@ -25,26 +25,26 @@ export function formatNarrativeState(readable: ReadableGameState): string {
 
   // Header
   lines.push('=== GAME STATE ===');
-  lines.push(`Turn ${readable.turnNumber} | Player ${readable.activePlayer}'s turn | Phase: ${readable.phase}`);
+  lines.push(`Turn ${readable.turnNumber} | Player ${readable.activePlayer + 1}'s turn | Phase: ${readable.phase}`);
 
   if (readable.pendingDecision) {
     const d = readable.pendingDecision;
-    lines.push(`PENDING DECISION: "${d.message ?? 'Action needed'}" (targeting Player ${d.targetPlayer})`);
+    lines.push(`PENDING DECISION: "${d.message ?? 'Action needed'}" (targeting Player ${d.targetPlayer + 1})`);
   }
 
   if (readable.result) {
     lines.push(`GAME RESULT: ${JSON.stringify(readable.result)}`);
   }
 
-  // Player 1 board (AI = viewer)
+  // Player 1 board (AI = viewer, index 1 = display "Player 2")
   lines.push('');
-  lines.push('--- YOUR BOARD (Player 1) ---');
+  lines.push('--- YOUR BOARD (Player 2) ---');
   lines.push('');
   lines.push(...formatBoard(readable, 'player1'));
 
-  // Player 0 board (opponent)
+  // Player 0 board (opponent, index 0 = display "Player 1")
   lines.push('');
-  lines.push('--- OPPONENT BOARD (Player 0) ---');
+  lines.push('--- OPPONENT BOARD (Player 1) ---');
   lines.push('');
   lines.push(...formatBoard(readable, 'player0'));
 
