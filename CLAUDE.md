@@ -56,6 +56,9 @@ During one player's turn, actions can require the OTHER player to make a decisio
 
 **Safety nets:** `executeEndTurn` auto-resolves pending decisions instead of ending the turn. `executeConcede`/`executeDeclareVictory` clear `pendingDecision`.
 
+### AI Turn Auto-End Safety Nets
+All three AI trigger functions (`triggerAITurn`, `triggerAISetupTurn`, `triggerAIDecisionTurn`) have safety nets that fire after `runAITurn()` returns. If the AI failed to call the expected concluding action (e.g. hit `maxSteps` limit), the safety net auto-executes it: `end_turn` for normal/setup turns, `resolve_decision` for decision mini-turns. This prevents the game from entering a stuck state where `activePlayer` is still the AI but `aiThinking` is false, which would let the human interact with the UI under the AI's player label. Coin flip logging also checks the `aiThinking` flag to label flips as `[AI]` vs `[Player N]`.
+
 **AI integration:** `ToolContext.isDecisionResponse?: boolean` signals decision mode. `AITurnConfig.decisionMode?: boolean` changes the user message prompt. Pokemon plugin filters tools: normal turn hides `resolve_decision`; decision mini-turn hides `end_turn` + `create_decision`, shows `resolve_decision`.
 
 **UI blocking:** When AI calls `create_decision` targeting human (player 0), the execute callback blocks via `Promise` until human clicks "Resolve Decision". `pendingDecisionResolve` stores the resolver. Decision banner shows the message. END TURN button relabels to RESOLVE DECISION.

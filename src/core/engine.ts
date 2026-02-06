@@ -570,11 +570,11 @@ function executeEndTurn<T extends CardTemplate>(
 ): void {
   // Safety net: if a decision is pending, auto-resolve instead of ending turn
   if (state.pendingDecision) {
-    // Un-reveal cards if needed
-    if (state.pendingDecision.revealedZone) {
-      const zone = state.zones[state.pendingDecision.revealedZone];
+    // Un-reveal all revealed zones
+    for (const rz of state.pendingDecision.revealedZones) {
+      const zone = state.zones[rz];
       if (zone) {
-        const vis = zoneVisibility(state.pendingDecision.revealedZone, zone.config);
+        const vis = zoneVisibility(rz, zone.config);
         for (const card of zone.cards) {
           card.visibility = vis;
         }
@@ -706,6 +706,7 @@ function executeCreateDecision<T extends CardTemplate>(
     createdBy: action.player,
     targetPlayer: action.targetPlayer,
     message: action.message,
+    revealedZones: [],
   };
   state.activePlayer = action.targetPlayer;
   state.log.push(`Decision requested: ${action.message ?? 'Action needed'} (Player ${action.targetPlayer + 1} to respond)`);
@@ -723,11 +724,11 @@ function executeResolveDecision<T extends CardTemplate>(
     return `Only Player ${state.pendingDecision.targetPlayer + 1} can resolve this decision`;
   }
 
-  // Un-reveal cards if this decision revealed a zone
-  if (state.pendingDecision.revealedZone) {
-    const zone = state.zones[state.pendingDecision.revealedZone];
+  // Un-reveal all revealed zones
+  for (const rz of state.pendingDecision.revealedZones) {
+    const zone = state.zones[rz];
     if (zone) {
-      const vis = zoneVisibility(state.pendingDecision.revealedZone, zone.config);
+      const vis = zoneVisibility(rz, zone.config);
       for (const card of zone.cards) {
         card.visibility = vis;
       }
@@ -737,7 +738,6 @@ function executeResolveDecision<T extends CardTemplate>(
   const creator = state.pendingDecision.createdBy;
   state.pendingDecision = null;
   state.activePlayer = creator;
-  state.log.push(`Decision resolved by Player ${action.player + 1}`);
   return null;
 }
 
@@ -757,18 +757,36 @@ function executeRevealHand<T extends CardTemplate>(
     card.visibility = VISIBILITY.PUBLIC;
   }
 
-  // Log the card names
-  const cardNames = zone.cards.map(c => c.template.name);
   const zoneName = zone.config.name ?? action.zoneKey;
-  state.log.push(`Player ${action.player + 1} revealed ${zoneName}: ${cardNames.join(', ')}`);
+  const revealedZones = [action.zoneKey];
+
+  // Mutual mode: also reveal the opponent's equivalent zone
+  if (action.mutual) {
+    const suffix = action.zoneKey.replace(/^player[12]_/, '');
+    const opponentZoneKey = action.zoneKey.startsWith('player1_')
+      ? `player2_${suffix}`
+      : `player1_${suffix}`;
+    const opponentZone = state.zones[opponentZoneKey];
+    if (opponentZone) {
+      for (const card of opponentZone.cards) {
+        card.visibility = VISIBILITY.PUBLIC;
+      }
+      revealedZones.push(opponentZoneKey);
+      const opponentZoneName = opponentZone.config.name ?? opponentZoneKey;
+      state.log.push(`Both hands revealed: ${zoneName} and ${opponentZoneName}`);
+    }
+  }
 
   // Create a decision so opponent acknowledges
   const opponent = (action.player === 0 ? 1 : 0) as PlayerIndex;
   state.pendingDecision = {
     createdBy: action.player,
     targetPlayer: opponent,
-    message: `Player ${action.player + 1} revealed their ${zoneName}`,
-    revealedZone: action.zoneKey,
+    message: action.message
+      ?? (action.mutual
+        ? `Both hands revealed`
+        : `Player ${action.player + 1} revealed their ${zoneName}`),
+    revealedZones,
   };
   state.activePlayer = opponent;
 

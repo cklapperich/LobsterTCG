@@ -19,6 +19,7 @@
     onClearCounters?: () => void;
     onSetOrientation?: (degrees: string) => void;
     onRevealToOpponent?: () => void;
+    onRevealBothHands?: () => void;
     onMovePile?: () => void;
     onClose: () => void;
   }
@@ -39,6 +40,7 @@
     onClearCounters,
     onSetOrientation,
     onRevealToOpponent,
+    onRevealBothHands,
     onMovePile,
     onClose,
   }: Props = $props();
@@ -116,6 +118,12 @@
   {#if onRevealToOpponent && cardCount > 0}
     <button class="menu-item" onclick={() => handleAction(onRevealToOpponent)} disabled={cardCount < 1}>
       Reveal to Opponent
+    </button>
+  {/if}
+
+  {#if onRevealBothHands && cardCount > 0}
+    <button class="menu-item" onclick={() => handleAction(onRevealBothHands)} disabled={cardCount < 1}>
+      Reveal Both Hands
     </button>
   {/if}
 

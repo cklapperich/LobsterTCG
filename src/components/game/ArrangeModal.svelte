@@ -59,7 +59,9 @@
   // Initialize ordered cards from props (runs once on mount), force visible
   $effect(() => {
     if (orderedCards.length === 0 && cards.length > 0) {
-      orderedCards = cards.map(makeVisible);
+      // Browse shows top-of-zone first (reverse array order)
+      const source = mode === 'browse' ? [...cards].reverse() : cards;
+      orderedCards = source.map(makeVisible);
     }
   });
 
@@ -146,8 +148,8 @@
       <button class="close-btn" onclick={() => { playSfx('cancel'); onClose(); }}>×</button>
     </div>
 
-    <div class="modal-content">
-      <div class="card-row">
+    <div class="modal-content" class:browse-content={isBrowse}>
+      <div class="card-row" class:card-row-browse={isBrowse}>
         {#each orderedCards as card, i (card.instanceId)}
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
@@ -226,6 +228,14 @@
 
   .card-row {
     @apply flex gap-4 justify-center items-start;
+  }
+
+  .card-row-browse {
+    @apply flex-wrap gap-3;
+  }
+
+  .browse-content {
+    @apply overflow-y-auto overflow-x-hidden;
   }
 
   .card-slot {

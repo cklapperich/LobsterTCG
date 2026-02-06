@@ -3,7 +3,7 @@
   import type { Playmat, CardInstance, CardTemplate, GameState, CounterDefinition, DeckList, ZoneConfig, Action } from '../../core';
   import { executeAction, shuffle, VISIBILITY, flipCard, endTurn, loadDeck, getCardName, findCardInZones, toReadableState, PluginManager, setOrientation, createDecision, resolveDecision, revealHand, ACTION_TYPES, PHASES, ACTION_SOURCES } from '../../core';
   import type { ToolContext } from '../../core/ai-tools';
-  import { plugin, executeSetup, ZONE_IDS, pokemonHooksPlugin, autoMulligan, flipFieldCardsFaceUp } from '../../plugins/pokemon';
+  import { plugin, executeSetup, ZONE_IDS, pokemonHooksPlugin, autoMulligan, flipFieldCardsFaceUp, ensureCardInHand } from '../../plugins/pokemon';
   import { getTemplate } from '../../plugins/pokemon/cards';
   import PlaymatGrid from './PlaymatGrid.svelte';
   import ZoneContextMenu from './ZoneContextMenu.svelte';
@@ -33,10 +33,11 @@
   interface Props {
     player1Deck: DeckList;
     player2Deck: DeckList;
+    lassTest?: boolean;
     onBackToMenu?: () => void;
   }
 
-  let { player1Deck, player2Deck, onBackToMenu }: Props = $props();
+  let { player1Deck, player2Deck, lassTest, onBackToMenu }: Props = $props();
 
   // Plugin manager for warnings/hooks
   const pluginManager = new PluginManager<CardTemplate>();
@@ -105,12 +106,12 @@
   // Auto-open browse modal when a reveal decision targets the human player
   $effect(() => {
     const decision = gameState?.pendingDecision;
-    if (decision?.targetPlayer === 0 && decision.revealedZone && gameState) {
-      const zoneKey = decision.revealedZone;
+    if (decision?.targetPlayer === 0 && decision.revealedZones.length > 0 && gameState) {
+      const zoneKey = decision.revealedZones[0];
       const zone = gameState.zones[zoneKey];
       if (zone && zone.cards.length > 0) {
         const zoneName = zone.config.name ?? zoneKey;
-        openCardModal({ cards: [...zone.cards], zoneKey, zoneName, position: 'all', mode: 'browse' });
+        openCardModal({ cards: [...zone.cards], zoneKey, zoneName, position: 'all', mode: 'browse', isDecision: true });
       }
     }
   });
@@ -172,8 +173,8 @@
   }
 
   function handleCoinResult(result: 'heads' | 'tails') {
-    const flipPlayer = gameState?.activePlayer ?? 0;
-    addLog(`[Player ${flipPlayer + 1}] Coin flip: ${result === 'heads' ? 'HEADS' : 'TAILS'}`);
+    const label = aiThinking ? '[AI]' : `[Player ${(gameState?.activePlayer ?? 0) + 1}]`;
+    addLog(`${label} Coin flip: ${result === 'heads' ? 'HEADS' : 'TAILS'}`);
   }
 
   // Convert an Action to a log string for the game log panel. Returns null for silent actions.
@@ -217,8 +218,11 @@
         return `[AI] Revealed ${action.cardInstanceIds.map(id => cardName(id)).join(', ')}`;
       case ACTION_TYPES.PEEK:
         return `[AI] Peeked at ${action.count} cards from ${action.fromPosition} of ${zoneId(action.zoneId)}`;
-      case ACTION_TYPES.REVEAL_HAND:
-        return `[AI] Revealed ${zoneId(action.zoneKey)}`;
+      case ACTION_TYPES.REVEAL_HAND: {
+        const rhZone = state.zones[action.zoneKey];
+        const rhNames = rhZone?.cards.map(c => c.template.name).join(', ') ?? '';
+        return `[AI] Revealed ${zoneId(action.zoneKey)}: ${rhNames}`;
+      }
       case ACTION_TYPES.CREATE_DECISION:
         return `[AI] Requested decision: ${action.message ?? 'Action needed'}`;
       case ACTION_TYPES.RESOLVE_DECISION:
@@ -250,6 +254,12 @@
       const mulliganCount = autoMulligan(gameState, 1);
       if (mulliganCount > 0) {
         gameState.log.push(`AI mulliganed ${mulliganCount} time(s)`);
+      }
+
+      // Lass test: ensure both players have Lass in opening hand
+      if (lassTest) {
+        ensureCardInHand(gameState, 0, 'base1-75');
+        ensureCardInHand(gameState, 1, 'base1-75');
       }
 
       gameState.log = ['Game started — Setup Phase'];
@@ -412,6 +422,11 @@
     closeCardModalStore();
   }
 
+  function handleModalResolveDecision() {
+    closeCardModalStore();
+    handleResolveDecision();
+  }
+
   function resetGame() {
     plugin.startGame().then((state) => {
       // Load player decks
@@ -426,6 +441,12 @@
       const mulliganCount = autoMulligan(state, 1);
       if (mulliganCount > 0) {
         state.log.push(`AI mulliganed ${mulliganCount} time(s)`);
+      }
+
+      // Lass test: ensure both players have Lass in opening hand
+      if (lassTest) {
+        ensureCardInHand(state, 0, 'base1-75');
+        ensureCardInHand(state, 1, 'base1-75');
       }
 
       state.log = ['Game started — Setup Phase'];
@@ -514,8 +535,9 @@
           const sfx = sfxMap[action.type];
           if (sfx) playSfx(sfx);
 
-          // If AI created a decision targeting human (player 0), block until human resolves
+          // If AI created a decision targeting human (player 0), block until human resolves.
           if ((action.type === ACTION_TYPES.CREATE_DECISION || action.type === ACTION_TYPES.REVEAL_HAND) && gameState?.pendingDecision?.targetPlayer === 0) {
+            playSfx('decisionRequested');
             await new Promise<void>(resolve => {
               pendingDecisionResolve = resolve;
             });
@@ -553,7 +575,16 @@
     } catch (e) {
       addLog(`[AI] Error: ${e}`);
     }
+
+    // Safety net: if AI didn't end its turn (e.g. hit maxSteps), auto-end
+    if (gameState?.activePlayer === 1 && gameState.phase === PHASES.PLAYING) {
+      executeAction(gameState, endTurn(1));
+      gameState = { ...gameState };
+      addLog('[AI] Turn auto-ended (AI did not call end_turn)');
+    }
+
     aiThinking = false;
+    if (gameState?.activePlayer === 0) playSfx('turnStart');
   }
 
   /**
@@ -581,6 +612,13 @@
       addLog(`[AI] Error: ${e}`);
     }
 
+    // Safety net: if AI didn't end its setup turn, auto-end
+    if (gameState?.activePlayer === 1 && gameState.phase === PHASES.SETUP) {
+      executeAction(gameState, endTurn(1));
+      gameState = { ...gameState };
+      addLog('[AI] Setup auto-ended (AI did not call end_turn)');
+    }
+
     // After AI setup turn, check if phase transitioned to playing
     if (gameState && gameState.phase === PHASES.PLAYING && gameState.turnNumber === 1) {
       flipFieldCardsFaceUp(gameState);
@@ -588,6 +626,7 @@
     }
 
     aiThinking = false;
+    if (gameState?.activePlayer === 0) playSfx('turnStart');
   }
 
   /**
@@ -662,6 +701,7 @@
   function handleResolveDecision() {
     if (!gameState || !gameState.pendingDecision) return;
     executeAction(gameState, resolveDecision(0));
+    gameState.log.push(`[Player 1] Resolved decision`);
     gameState = { ...gameState };
     playSfx('confirm');
 
@@ -736,9 +776,46 @@
   function handleRevealToOpponent() {
     if (!gameState || !contextMenu || gameState.pendingDecision) return;
     const zoneKey = contextMenu.zoneKey;
+    const zone = gameState.zones[zoneKey];
+    const cardNames = zone?.cards.map(c => c.template.name).join(', ') ?? '';
+    const zoneName = zone?.config.name ?? zoneKey;
     executeAction(gameState, revealHand(0, zoneKey));
+    gameState.log.push(`[Player 1] Revealed ${zoneName}: ${cardNames}`);
     gameState = { ...gameState };
     playSfx('confirm');
+
+    // If AI is the target, trigger a decision mini-turn
+    if (gameState.pendingDecision?.targetPlayer === 1) {
+      triggerAIDecisionTurn();
+    }
+  }
+
+  function handleRevealBothHands() {
+    if (!gameState || !contextMenu || gameState.pendingDecision) return;
+    const zoneKey = contextMenu.zoneKey;
+
+    // Pull card effect text from staging zone (the card being resolved)
+    const stagingKey = `player1_staging`;
+    const stagingCard = gameState.zones[stagingKey]?.cards.at(-1);
+    const template = stagingCard ? getTemplate(stagingCard.template.id) : undefined;
+    const rules = (template as any)?.rules?.join(' ') ?? '';
+    const actionMsg = rules
+      ? `Both hands revealed. Card effect (${template!.name}): ${rules} — Execute this effect on YOUR hand (move cards, shuffle deck, etc.), then call resolve_decision.`
+      : `Both hands revealed. Execute the card effect on your hand, then call resolve_decision.`;
+
+    executeAction(gameState, revealHand(0, zoneKey, true, actionMsg));
+    gameState.log.push(`[Player 1] Revealed both hands (mutual)`);
+    gameState = { ...gameState };
+    playSfx('confirm');
+
+    // Show the opponent's hand to the human (cards are PUBLIC after mutual reveal)
+    const suffix = zoneKey.replace(/^player[12]_/, '');
+    const opponentZoneKey = `player2_${suffix}`;
+    const opponentZone = gameState.zones[opponentZoneKey];
+    if (opponentZone && opponentZone.cards.length > 0) {
+      const zoneName = opponentZone.config.name ?? opponentZoneKey;
+      openCardModal({ cards: [...opponentZone.cards], zoneKey: opponentZoneKey, zoneName, position: 'all', mode: 'browse' });
+    }
 
     // If AI is the target, trigger a decision mini-turn
     if (gameState.pendingDecision?.targetPlayer === 1) {
@@ -988,6 +1065,7 @@
       onClearCounters={handleClearCounters}
       onSetOrientation={handleSetOrientation}
       onRevealToOpponent={contextMenu.zoneKey.startsWith('player1_') && !gameState?.pendingDecision ? handleRevealToOpponent : undefined}
+      onRevealBothHands={contextMenu.zoneKey.startsWith('player1_') && contextMenu.zoneKey.includes('hand') && !gameState?.pendingDecision ? handleRevealBothHands : undefined}
       onMovePile={handleMovePile}
       onClose={handleCloseContextMenu}
     />
@@ -1004,7 +1082,8 @@
       {cardBack}
       onConfirm={handleCardModalConfirm}
       onDragOut={cardModal.mode === 'browse' ? handleModalDragOut : undefined}
-      onClose={handleCloseCardModal}
+      onResolveDecision={cardModal.isDecision ? handleModalResolveDecision : undefined}
+      onClose={cardModal.isDecision ? handleModalResolveDecision : handleCloseCardModal}
     />
   {/if}
 

@@ -6,10 +6,10 @@
   type Screen = 'deck-select' | 'game';
 
   let currentScreen = $state<Screen>('deck-select');
-  let selectedDecks = $state<{ player1: DeckList; player2: DeckList } | null>(null);
+  let selectedDecks = $state<{ player1: DeckList; player2: DeckList; lassTest: boolean } | null>(null);
 
-  function handleStartGame(player1Deck: DeckList, player2Deck: DeckList) {
-    selectedDecks = { player1: player1Deck, player2: player2Deck };
+  function handleStartGame(player1Deck: DeckList, player2Deck: DeckList, options: { lassTest: boolean }) {
+    selectedDecks = { player1: player1Deck, player2: player2Deck, lassTest: options.lassTest };
     currentScreen = 'game';
   }
 
@@ -25,6 +25,7 @@
   <Game
     player1Deck={selectedDecks.player1}
     player2Deck={selectedDecks.player2}
+    lassTest={selectedDecks.lassTest}
     onBackToMenu={handleBackToMenu}
   />
 {/if}
