@@ -215,8 +215,30 @@ function convertZone<T extends CardTemplate>(
 
   return {
     count: zone.cards.length,
-    cards: readableCards,
+    cards: condenseCards(readableCards),
   };
+}
+
+/**
+ * Condense identical readable cards into single entries with a count property.
+ * Cards with count 1 omit the count field.
+ */
+function condenseCards(cards: ReadableCard[]): ReadableCard[] {
+  const groups: { card: ReadableCard; key: string; count: number }[] = [];
+
+  for (const card of cards) {
+    const key = JSON.stringify(card);
+    const existing = groups.find(g => g.key === key);
+    if (existing) {
+      existing.count++;
+    } else {
+      groups.push({ card, key, count: 1 });
+    }
+  }
+
+  return groups.map(({ card, count }) =>
+    count > 1 ? { ...card, count } : card
+  );
 }
 
 function convertCard<T extends CardTemplate>(

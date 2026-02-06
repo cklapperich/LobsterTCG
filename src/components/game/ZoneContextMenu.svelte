@@ -17,6 +17,7 @@
     onArrangeAll?: () => void;
     onClearCounters?: () => void;
     onSetOrientation?: (degrees: string) => void;
+    onRevealToOpponent?: () => void;
     onClose: () => void;
   }
 
@@ -35,6 +36,7 @@
     onArrangeAll,
     onClearCounters,
     onSetOrientation,
+    onRevealToOpponent,
     onClose,
   }: Props = $props();
 
@@ -95,6 +97,12 @@
   {#if onClearCounters}
     <button class="menu-item" onclick={() => handleAction(onClearCounters)} disabled={cardCount < 1}>
       Clear Counters
+    </button>
+  {/if}
+
+  {#if onRevealToOpponent && cardCount > 0}
+    <button class="menu-item" onclick={() => handleAction(onRevealToOpponent)} disabled={cardCount < 1}>
+      Reveal to Opponent
     </button>
   {/if}
 

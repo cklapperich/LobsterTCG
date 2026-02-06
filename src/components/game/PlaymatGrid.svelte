@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Playmat, CardInstance, GameState, CardTemplate, CounterDefinition, ZoneConfig } from '../../core';
+  import { VISIBILITY } from '../../core';
   import Zone from './Zone.svelte';
 
   interface Props {
@@ -13,6 +14,7 @@
     onToggleVisibility?: (cardInstanceId: string) => void;
     onZoneContextMenu?: (zoneKey: string, zoneName: string, cardCount: number, zoneConfig: ZoneConfig, x: number, y: number) => void;
     onCounterDrop?: (counterId: string, cardInstanceId: string) => void;
+    onBrowse?: (zoneKey: string, zoneName: string) => void;
   }
 
   let {
@@ -26,6 +28,7 @@
     onToggleVisibility,
     onZoneContextMenu,
     onCounterDrop,
+    onBrowse,
   }: Props = $props();
 
   // Track Zone refs by zoneKey for shuffle access
@@ -74,6 +77,8 @@
     {@const zone = getZone(slot)}
     {#if zone}
       {@const isHandZone = slot.zoneId === 'hand'}
+      {@const isPublic = zone.config.defaultVisibility[0] && zone.config.defaultVisibility[1]}
+      {@const isBrowsable = onBrowse && isPublic && (slot.stackDirection === 'none' || !slot.stackDirection)}
       <div
         class="grid-slot"
         class:hand-zone={isHandZone}
@@ -95,6 +100,7 @@
           {onToggleVisibility}
           {onZoneContextMenu}
           {onCounterDrop}
+          onBrowse={isBrowsable ? onBrowse : undefined}
         />
       </div>
     {/if}

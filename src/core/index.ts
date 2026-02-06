@@ -74,4 +74,5 @@ export {
   peek,
   createDecision,
   resolveDecision,
+  revealHand,
 } from './action';

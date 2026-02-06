@@ -19,6 +19,7 @@ import type {
   DeclareVictoryAction,
   CreateDecisionAction,
   ResolveDecisionAction,
+  RevealHandAction,
   RevealAction,
   PeekAction,
 } from './types';
@@ -205,4 +206,8 @@ export function createDecision(
 
 export function resolveDecision(player: PlayerIndex): ResolveDecisionAction {
   return { type: 'resolve_decision', player };
+}
+
+export function revealHand(player: PlayerIndex, zoneKey: string): RevealHandAction {
+  return { type: 'reveal_hand', player, zoneKey };
 }

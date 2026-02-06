@@ -9,10 +9,12 @@
     cards: CardInstance<CardTemplate>[];
     zoneName: string;
     position: 'top' | 'bottom' | 'all';
-    mode: 'peek' | 'arrange';
+    mode: 'peek' | 'arrange' | 'browse';
+    zoneKey?: string;
     renderFace?: (template: CardTemplate) => { rank?: string; suit?: string; color?: string };
     cardBack?: string;
     onConfirm?: (reorderedCards: CardInstance<CardTemplate>[]) => void;
+    onDragOut?: (card: CardInstance<CardTemplate>, zoneKey: string, mouseX: number, mouseY: number) => void;
     onClose: () => void;
   }
 
@@ -21,14 +23,18 @@
     zoneName,
     position,
     mode,
+    zoneKey,
     renderFace,
     cardBack,
     onConfirm,
+    onDragOut,
     onClose,
   }: Props = $props();
 
   const canReorder = $derived(mode === 'arrange');
+  const isBrowse = $derived(mode === 'browse');
   const title = $derived.by(() => {
+    if (mode === 'browse') return `Browse ${zoneName}`;
     if (position === 'all') {
       return mode === 'peek' ? `Viewing ${zoneName}` : `Arrange ${zoneName}`;
     }
@@ -95,6 +101,12 @@
     dragOverIndex = null;
   }
 
+  function handleBrowseDragStart(event: MouseEvent, card: CardInstance<CardTemplate>) {
+    if (!isBrowse || !zoneKey) return;
+    event.preventDefault();
+    onDragOut?.(card, zoneKey, event.clientX, event.clientY);
+  }
+
   function handleConfirm() {
     // Map back to original cards with their original visibility
     const reordered = orderedCards.map(visibleCard => {
@@ -140,13 +152,15 @@
             class="card-slot"
             class:dragging={dragIndex === i}
             class:drag-over={dragOverIndex === i}
-            class:readonly={!canReorder}
+            class:readonly={!canReorder && !isBrowse}
+            class:browse={isBrowse}
             draggable={canReorder}
             ondragstart={() => handleDragStart(i)}
             ondragover={(e) => handleDragOver(e, i)}
             ondragleave={handleDragLeave}
             ondrop={() => handleDrop(i)}
             ondragend={handleDragEnd}
+            onmousedown={isBrowse ? (e: MouseEvent) => handleBrowseDragStart(e, card) : undefined}
           >
             <Card
               {card}
@@ -168,6 +182,9 @@
         <button class="gbc-btn" onclick={handleConfirm}>Confirm</button>
       {:else}
         <button class="gbc-btn" onclick={() => { playSfx('cancel'); onClose(); }}>Close</button>
+      {/if}
+      {#if isBrowse}
+        <span class="text-gbc-light text-[0.4rem] ml-2">Click a card to drag it out</span>
       {/if}
     </div>
   </div>
@@ -213,6 +230,10 @@
 
   .card-slot.readonly {
     @apply cursor-default;
+  }
+
+  .card-slot.browse {
+    @apply cursor-grab;
   }
 
   .card-slot:hover {

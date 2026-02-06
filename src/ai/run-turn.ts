@@ -16,7 +16,7 @@ export interface AITurnConfig {
 
 export async function runAITurn(config: AITurnConfig): Promise<void> {
   const { context, plugin, heuristics, apiKey } = config;
-  const model = config.model ?? 'claude-sonnet-4-5-20250929';
+  const model = config.model ?? 'claude-haiku-4-5-20251001';
 
   const anthropic = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
 

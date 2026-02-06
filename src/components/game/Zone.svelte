@@ -14,6 +14,7 @@
     onToggleVisibility?: (cardInstanceId: string) => void;
     onZoneContextMenu?: (zoneId: string, zoneName: string, cardCount: number, zoneConfig: ZoneConfig, x: number, y: number) => void;
     onCounterDrop?: (counterId: string, cardInstanceId: string) => void;
+    onBrowse?: (zoneKey: string, zoneName: string) => void;
   }
 
   let {
@@ -27,6 +28,7 @@
     onToggleVisibility,
     onZoneContextMenu,
     onCounterDrop,
+    onBrowse,
   }: Props = $props();
 
   // CardStack ref for shuffle animation
@@ -57,7 +59,24 @@
       return false;
     }
     zoneEl.addEventListener('contextmenu', handleContextMenu, { capture: true });
-    return () => zoneEl.removeEventListener('contextmenu', handleContextMenu, { capture: true });
+
+    // Browse: capture-phase click so it fires BEFORE Card's preview handler
+    function handleBrowseClick(e: MouseEvent) {
+      if (!onBrowse || zone.cards.length === 0) return;
+      e.stopPropagation();
+      e.preventDefault();
+      onBrowse(zone.key, label);
+    }
+    if (onBrowse) {
+      zoneEl.addEventListener('click', handleBrowseClick, { capture: true });
+    }
+
+    return () => {
+      zoneEl.removeEventListener('contextmenu', handleContextMenu, { capture: true });
+      if (onBrowse) {
+        zoneEl.removeEventListener('click', handleBrowseClick, { capture: true });
+      }
+    };
   });
 
   function handleDragOver(event: DragEvent) {
@@ -94,6 +113,7 @@
     onDrop?.(droppedCardId, zone.key, targetIndex + 1);
   }
 
+
 </script>
 
 <div
@@ -102,9 +122,11 @@
   role="region"
   aria-label={label}
   bind:this={zoneEl}
+  data-zone-key={zone.key}
   ondragover={handleDragOver}
   ondragleave={handleDragLeave}
   ondrop={handleDrop}
+  class:browsable={!!onBrowse && zone.cards.length > 0}
 >
   <div class="zone-label">{label}</div>
   <div class="zone-content" class:fixed-size={fixedSize}>
@@ -138,6 +160,10 @@
       inset 0.125rem 0.125rem 0 rgba(255,255,255,0.1),
       inset -0.125rem -0.125rem 0 rgba(0,0,0,0.2);
     transition: border-color 0.15s, box-shadow 0.15s;
+  }
+
+  .zone.browsable {
+    @apply cursor-pointer;
   }
 
   .zone.drag-over {

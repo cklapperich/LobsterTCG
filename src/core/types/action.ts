@@ -125,6 +125,12 @@ export interface ResolveDecisionAction extends BaseAction {
   type: 'resolve_decision';
 }
 
+// Reveal Hand Action - reveals a zone to opponent, logs contents, creates decision
+export interface RevealHandAction extends BaseAction {
+  type: 'reveal_hand';
+  zoneKey: string;
+}
+
 // Reveal Action
 export interface RevealAction extends BaseAction {
   type: 'reveal';
@@ -160,5 +166,6 @@ export type Action =
   | DeclareVictoryAction
   | CreateDecisionAction
   | ResolveDecisionAction
+  | RevealHandAction
   | RevealAction
   | PeekAction;

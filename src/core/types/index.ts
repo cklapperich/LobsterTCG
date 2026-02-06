@@ -29,6 +29,7 @@ export type {
   DeclareVictoryAction,
   CreateDecisionAction,
   ResolveDecisionAction,
+  RevealHandAction,
   RevealAction,
   PeekAction,
 } from './action';

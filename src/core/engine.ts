@@ -23,6 +23,7 @@ import type {
   DeclareVictoryAction,
   CreateDecisionAction,
   ResolveDecisionAction,
+  RevealHandAction,
   RevealAction,
   PeekAction,
   PlayerInfo,
@@ -537,6 +538,16 @@ function executeEndTurn<T extends CardTemplate>(
 ): void {
   // Safety net: if a decision is pending, auto-resolve instead of ending turn
   if (state.pendingDecision) {
+    // Un-reveal cards if needed
+    if (state.pendingDecision.revealedZone) {
+      const zone = state.zones[state.pendingDecision.revealedZone];
+      if (zone) {
+        const vis = zoneVisibility(state.pendingDecision.revealedZone, zone.config);
+        for (const card of zone.cards) {
+          card.visibility = vis;
+        }
+      }
+    }
     const creator = state.pendingDecision.createdBy;
     state.pendingDecision = null;
     state.activePlayer = creator;
@@ -660,10 +671,56 @@ function executeResolveDecision<T extends CardTemplate>(
   if (action.player !== state.pendingDecision.targetPlayer) {
     return `Only Player ${state.pendingDecision.targetPlayer + 1} can resolve this decision`;
   }
+
+  // Un-reveal cards if this decision revealed a zone
+  if (state.pendingDecision.revealedZone) {
+    const zone = state.zones[state.pendingDecision.revealedZone];
+    if (zone) {
+      const vis = zoneVisibility(state.pendingDecision.revealedZone, zone.config);
+      for (const card of zone.cards) {
+        card.visibility = vis;
+      }
+    }
+  }
+
   const creator = state.pendingDecision.createdBy;
   state.pendingDecision = null;
   state.activePlayer = creator;
   state.log.push(`Decision resolved by Player ${action.player + 1}`);
+  return null;
+}
+
+function executeRevealHand<T extends CardTemplate>(
+  state: GameState<T>,
+  action: RevealHandAction
+): string | null {
+  if (state.pendingDecision) {
+    return 'A decision is already pending';
+  }
+
+  const zone = state.zones[action.zoneKey];
+  if (!zone) return `Zone "${action.zoneKey}" not found`;
+
+  // Reveal all cards to both players
+  for (const card of zone.cards) {
+    card.visibility = VISIBILITY.PUBLIC;
+  }
+
+  // Log the card names
+  const cardNames = zone.cards.map(c => c.template.name);
+  const zoneName = zone.config.name ?? action.zoneKey;
+  state.log.push(`Player ${action.player + 1} revealed ${zoneName}: ${cardNames.join(', ')}`);
+
+  // Create a decision so opponent acknowledges
+  const opponent = (action.player === 0 ? 1 : 0) as PlayerIndex;
+  state.pendingDecision = {
+    createdBy: action.player,
+    targetPlayer: opponent,
+    message: `Player ${action.player + 1} revealed their ${zoneName}`,
+    revealedZone: action.zoneKey,
+  };
+  state.activePlayer = opponent;
+
   return null;
 }
 
@@ -836,6 +893,14 @@ export function executeAction<T extends CardTemplate>(
       if (resErr) {
         state.log.push(resErr);
         return resErr;
+      }
+      break;
+    }
+    case 'reveal_hand': {
+      const rhErr = executeRevealHand(state, action);
+      if (rhErr) {
+        state.log.push(rhErr);
+        return rhErr;
       }
       break;
     }
