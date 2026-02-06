@@ -321,7 +321,8 @@ function formatInstanceStats(card: ReadableCard): string {
   const hp = card.hp as number | undefined;
   const totalDamage = card.totalDamage as number | undefined;
   if (totalDamage && hp) {
-    parts.push(`${totalDamage}/${hp} HP`);
+    const remaining = Math.max(0, hp - totalDamage);
+    parts.push(`${remaining}/${hp} HP`);
   }
 
   const status = card.status as string | undefined;

@@ -41,7 +41,7 @@
     ]
   },
   "zones": [
-    { "id": "deck", "name": "Deck", "ordered": true, "defaultVisibility": "hidden", "maxCards": 60, "ownerCanSeeContents": false, "opponentCanSeeCount": true, "canHaveCounters": false },
+    { "id": "deck", "name": "Deck", "ordered": true, "defaultVisibility": "hidden", "maxCards": 60, "ownerCanSeeContents": false, "opponentCanSeeCount": true, "canHaveCounters": false, "shuffleable": true },
     { "id": "hand", "name": "Hand", "ordered": false, "defaultVisibility": "hidden", "maxCards": -1, "ownerCanSeeContents": true, "opponentCanSeeCount": true, "canHaveCounters": false },
     { "id": "active", "name": "Active Pokemon", "ordered": true, "defaultVisibility": "public", "maxCards": -1, "ownerCanSeeContents": true, "opponentCanSeeCount": true, "canHaveCounters": true },
     { "id": "bench_1", "name": "Bench 1", "ordered": true, "defaultVisibility": "public", "maxCards": -1, "ownerCanSeeContents": true, "opponentCanSeeCount": true, "canHaveCounters": true },

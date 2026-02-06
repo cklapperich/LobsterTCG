@@ -56,7 +56,7 @@
   }
 
   .action-btn {
-    @apply w-full flex flex-col items-center py-2 px-3;
+    @apply w-full flex flex-col items-center py-3 px-4;
     @apply bg-gbc-dark-green border-2 border-gbc-border rounded;
     @apply text-gbc-light font-retro cursor-pointer;
     @apply transition-colors;
@@ -75,11 +75,11 @@
   }
 
   .action-label {
-    @apply text-[0.5rem];
+    @apply text-[0.6rem] font-bold tracking-wide;
   }
 
   .action-sublabel {
-    @apply text-[0.4rem] text-gbc-green mt-0.5;
+    @apply text-[0.5rem] text-gbc-yellow mt-1 font-bold;
   }
 
   .action-btn:hover:not(:disabled) .action-sublabel {

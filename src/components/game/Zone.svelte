@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import type { Zone as ZoneType, PlaymatSlot, CardInstance, CardTemplate, CounterDefinition, ZoneConfig } from '../../core';
   import CardStack from './CardStack.svelte';
+  import { dragStore } from './dragState.svelte';
 
   interface Props {
     zone: ZoneType<CardTemplate>;
@@ -46,6 +47,13 @@
   const fixedSize = $derived(slot.fixedSize ?? false);
   const isFull = $derived(
     zone.config.maxCards !== -1 && zone.cards.length >= zone.config.maxCards
+  );
+
+  // Hide cards visually when a pile drag originates from this zone
+  const displayCards = $derived(
+    dragStore.current?.pileCardIds && dragStore.current.fromZoneKey === zone.key
+      ? []
+      : zone.cards
   );
 
   let zoneEl: HTMLDivElement;
@@ -126,14 +134,14 @@
   ondragover={handleDragOver}
   ondragleave={handleDragLeave}
   ondrop={handleDrop}
-  class:browsable={!!onBrowse && zone.cards.length > 0}
+  class:browsable={!!onBrowse && displayCards.length > 0}
 >
   <div class="zone-label">{label}</div>
   <div class="zone-content" class:fixed-size={fixedSize}>
-    {#if zone.cards.length > 0}
+    {#if displayCards.length > 0}
       <CardStack
         bind:this={cardStackRef}
-        cards={zone.cards}
+        cards={displayCards}
         {stackDirection}
         {fixedSize}
         zoneKey={zone.key}

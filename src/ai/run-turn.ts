@@ -28,13 +28,17 @@ const TERMINAL_TOOLS = new Set<string>(TERMINAL_TOOL_NAMES);
  * When an AbortController is provided, terminal tools (end_turn, concede, etc.)
  * will abort after executing so generateText stops immediately.
  */
-export function toAISDKTools(tools: RunnableTool[], abort?: AbortController): ToolSet {
+export function toAISDKTools(tools: RunnableTool[], abort?: AbortController, ctx?: ToolContext): ToolSet {
   const result: ToolSet = {};
   for (const t of tools) {
     result[t.name] = {
       description: t.description,
       parameters: jsonSchema(t.parameters as any),
       execute: async (args: Record<string, any>) => {
+        // Batch abort: if a previous tool in this step set the abort reason, reject remaining calls
+        if (ctx?.batchAbortReason) {
+          return `[batch aborted] ${ctx.batchAbortReason}`;
+        }
         const res = await t.execute(args);
         if (abort && TERMINAL_TOOLS.has(t.name)) {
           abort.abort();
@@ -84,12 +88,14 @@ export async function runAITurn(config: AITurnConfig): Promise<void> {
       model,
       maxTokens: AI_CONFIG.MAX_TOKENS,
       system: heuristics,
-      tools: toAISDKTools(allTools, abort),
+      tools: toAISDKTools(allTools, abort, context),
       maxSteps: AI_CONFIG.MAX_STEPS,
       abortSignal: abort.signal,
       messages: [{ role: 'user', content: userMessage }],
       onStepFinish: (step) => {
         if (config.logging) logStepFinish(step);
+        // Clear batch abort so the next step starts fresh
+        context.batchAbortReason = undefined;
       },
     });
   } catch (e: any) {
