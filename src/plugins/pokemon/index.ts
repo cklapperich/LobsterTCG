@@ -24,7 +24,6 @@ import {
 import { isBasicPokemon, isEnergy, isFieldZone } from './helpers';
 import {
   SUPERTYPES,
-  ENERGY_TYPES,
   STATUS_TO_DEGREES,
   STATUS_CONDITIONS,
   COUNTER_IDS,
@@ -406,43 +405,24 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
       const activeName = topCard?.template?.name ?? 'Active Pokemon';
       const target = input.targetCardName ? ` targeting ${input.targetCardName}` : '';
 
-      // Basic energy cost validation
+      // Basic energy cost validation (count only — type matching unreliable in card DB)
       if (topCard && activeZone) {
         const template = getCardTemplate((topCard.template as PokemonCardTemplate).id);
         const attack = template?.attacks?.find(
           a => a.name.toLowerCase() === input.attackName.toLowerCase(),
         );
         if (attack && attack.cost.length > 0) {
-          // Count attached energy by type
-          const attached: Record<string, number> = {};
           let totalAttached = 0;
           for (const card of activeZone.cards) {
             const t = card.template as PokemonCardTemplate;
-            if (isEnergy(t) && t.types?.length) {
-              for (const etype of t.types) {
-                attached[etype] = (attached[etype] ?? 0) + 1;
-              }
-              totalAttached++;
-            }
+            if (isEnergy(t)) totalAttached++;
           }
-          // Check specific (non-Colorless) costs first, then Colorless with remainder
-          const used: Record<string, number> = {};
-          let unmet = 0;
-          for (const costType of attack.cost) {
-            if (costType === ENERGY_TYPES.COLORLESS) continue;
-            const available = (attached[costType] ?? 0) - (used[costType] ?? 0);
-            if (available > 0) {
-              used[costType] = (used[costType] ?? 0) + 1;
-            } else {
-              unmet++;
-            }
-          }
-          const totalUsed = Object.values(used).reduce((s, n) => s + n, 0);
-          const colorlessCost = attack.cost.filter(c => c === ENERGY_TYPES.COLORLESS).length;
-          const remainingEnergy = totalAttached - totalUsed;
-          if (unmet > 0 || remainingEnergy < colorlessCost) {
+          if (totalAttached < attack.cost.length) {
             const costStr = attack.cost.join('/');
-            state.log.push(`⚠ ${activeName} may not have enough energy for ${attack.name} (cost: ${costStr}, attached: ${totalAttached} energy). Double check there are card effects that give you enough extra energy.`);
+            const reason = `${activeName} may not have enough energy for ${attack.name} (cost: ${costStr}, attached: ${totalAttached} energy). Double check there are card effects that give you enough extra energy.`;
+            state.log.push(`⚠ ${reason}`);
+            ctx.batchAbortReason = reason;
+            return `⚠ WARNING — attack aborted: ${reason}`;
           }
         }
       }
@@ -525,13 +505,9 @@ function getActionPanels(state: GameState<PokemonCardTemplate>, player: PlayerIn
   const template = activeCard ? getCardTemplate(activeCard.template.id) : undefined;
 
   const attackButtons = (template?.attacks ?? []).map(atk => {
-    const costStr = atk.cost.length > 0 ? atk.cost.join('') : 'Free';
-    const damageStr = atk.damage || '';
-    const sublabel = damageStr ? `${costStr} — ${damageStr}` : costStr;
     return {
       id: atk.name,
       label: atk.name,
-      sublabel,
       tooltip: atk.effect,
     };
   });

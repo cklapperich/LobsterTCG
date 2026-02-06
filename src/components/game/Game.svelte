@@ -751,6 +751,13 @@
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);
 
+      // Eat the subsequent click event so the destination zone's browse handler doesn't fire
+      document.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        ev.preventDefault();
+      }, { capture: true, once: true });
+
       const el = document.elementFromPoint(e.clientX, e.clientY);
       const zoneEl = el?.closest('[data-zone-key]') as HTMLElement | null;
       if (zoneEl && gameState) {

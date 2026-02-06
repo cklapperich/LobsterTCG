@@ -42,6 +42,8 @@ export interface ToolContext {
   getReadableState: () => string;
   /** True when this context is for a decision mini-turn response. */
   isDecisionResponse?: boolean;
+  /** Set by tools to abort remaining calls in the current AI SDK step. */
+  batchAbortReason?: string;
 }
 
 /**

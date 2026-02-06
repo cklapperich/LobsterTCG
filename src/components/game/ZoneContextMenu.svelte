@@ -95,9 +95,11 @@
     </button>
   {/if}
 
-  <button class="menu-item" onclick={() => handleAction(onShuffle)} disabled={cardCount < 2}>
-    Shuffle
-  </button>
+  {#if zoneConfig.shuffleable}
+    <button class="menu-item" onclick={() => handleAction(onShuffle)} disabled={cardCount < 2}>
+      Shuffle
+    </button>
+  {/if}
 
   {#if onMovePile}
     <button class="menu-item" onclick={() => handleAction(onMovePile)} disabled={cardCount < 1}>
