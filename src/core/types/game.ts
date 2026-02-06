@@ -2,6 +2,12 @@ import type { CardTemplate, PlayerIndex } from './card';
 import type { Zone, ZoneConfig } from './zone';
 import type { Action } from './action';
 
+export interface Decision {
+  createdBy: PlayerIndex;
+  targetPlayer: PlayerIndex;
+  message?: string;
+}
+
 // Minimal player info (zones are now top-level)
 export interface PlayerInfo {
   index: PlayerIndex;
@@ -37,6 +43,7 @@ export interface GameState<T extends CardTemplate = CardTemplate> {
   zones: Record<string, Zone<T>>;  // flattened: "player0_hand", "player1_tableau_1", etc.
   players: [PlayerInfo, PlayerInfo];  // minimal player info
   currentTurn: Turn;
+  pendingDecision: Decision | null;
   result: GameResult | null;
   startedAt: number;
   lastActionAt: number;

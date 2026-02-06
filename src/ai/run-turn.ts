@@ -11,6 +11,7 @@ export interface AITurnConfig {
   model?: string;
   apiKey: string;
   logging?: boolean;
+  decisionMode?: boolean;
 }
 
 export async function runAITurn(config: AITurnConfig): Promise<void> {
@@ -29,7 +30,9 @@ export async function runAITurn(config: AITurnConfig): Promise<void> {
   // Initial readable state
   const readableState = context.getReadableState();
 
-  const userMessage = `Current game state:\n${readableState}\n\nIt's your turn. Take actions to advance toward winning. Call end_turn when done.`;
+  const userMessage = config.decisionMode
+    ? `Current game state:\n${readableState}\n\nYour opponent has requested a decision. Read the pendingDecision field and recent log entries. Take the necessary actions, then call resolve_decision when done.`
+    : `Current game state:\n${readableState}\n\nIt's your turn. Take actions to advance toward winning. Call end_turn when done.`;
 
   // Log system prompt
   if (config.logging) {

@@ -1,9 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { Playmat, CardInstance, CardTemplate, GameState, CounterDefinition, DeckList, ZoneConfig, Action } from '../../core';
-  import { executeAction, shuffle, VISIBILITY, flipCard, endTurn, loadDeck, getCardName, findCardInZones, toReadableState, PluginManager, setOrientation } from '../../core';
+  import { executeAction, shuffle, VISIBILITY, flipCard, endTurn, loadDeck, getCardName, findCardInZones, toReadableState, PluginManager, setOrientation, createDecision, resolveDecision } from '../../core';
   import type { ToolContext } from '../../core/ai-tools';
-  import { plugin, executeSetup, ZONE_IDS, pokemonWarningsPlugin } from '../../plugins/pokemon';
+  import { plugin, executeSetup, ZONE_IDS, pokemonHooksPlugin } from '../../plugins/pokemon';
   import { getTemplate } from '../../plugins/pokemon/cards';
   import PlaymatGrid from './PlaymatGrid.svelte';
   import ZoneContextMenu from './ZoneContextMenu.svelte';
@@ -12,6 +12,7 @@
   import CounterTray from './CounterTray.svelte';
   import CounterDragOverlay from './CounterDragOverlay.svelte';
   import CoinFlip from './CoinFlip.svelte';
+  import ActionPanelView from './ActionPanelView.svelte';
   import { dragStore, executeDrop } from './dragState.svelte';
   import {
     counterDragStore,
@@ -37,7 +38,7 @@
 
   // Plugin manager for warnings/hooks
   const pluginManager = new PluginManager<CardTemplate>();
-  pluginManager.register(pokemonWarningsPlugin as any);
+  pluginManager.register(pokemonHooksPlugin as any);
 
   // Game state
   let gameState = $state<GameState<CardTemplate> | null>(null);
@@ -45,6 +46,12 @@
   let loading = $state(true);
   let error = $state<string | null>(null);
   let aiThinking = $state(false);
+  let pendingDecisionResolve: (() => void) | null = $state(null);
+
+  // Derived: is a decision targeting the human player?
+  const decisionTargetsHuman = $derived(
+    gameState?.pendingDecision?.targetPlayer === 0 ?? false
+  );
 
   // Reactive drag state from external module
   const dragState = $derived(dragStore.current);
@@ -52,6 +59,17 @@
 
   // Counter definitions from plugin
   const counterDefinitions = $derived<CounterDefinition[]>(plugin.getCounterDefinitions?.() ?? []);
+
+  // Action panels from plugin (for human player 0)
+  const actionPanels = $derived(
+    gameState && plugin.getActionPanels ? plugin.getActionPanels(gameState, 0) : []
+  );
+
+  function handleActionPanelClick(panelId: string, buttonId: string) {
+    if (!gameState || !plugin.onActionPanelClick) return;
+    plugin.onActionPanelClick(gameState, 0, panelId, buttonId);
+    gameState = { ...gameState };
+  }
 
   // Get counter definition by ID
   function getCounterById(id: string): CounterDefinition | undefined {
@@ -120,6 +138,59 @@
     addLog(`[Player ${flipPlayer + 1}] Coin flip: ${result === 'heads' ? 'HEADS' : 'TAILS'}`);
   }
 
+  // Convert an Action to a log string for the game log panel. Returns null for silent actions.
+  function describeAction(state: GameState<CardTemplate>, action: Action): string | null {
+    const zoneId = (key: string) => key.split('_').slice(1).join('_');
+    const cardName = (id: string) => getCardName(state, id);
+    const counterName = (id: string) => getCounterById(id)?.name ?? id;
+
+    switch (action.type) {
+      case 'draw':
+        return `[AI] Drew ${action.count} card(s)`;
+      case 'move_card':
+        return `[AI] Moved ${cardName(action.cardInstanceId)} from ${zoneId(action.fromZone)} to ${zoneId(action.toZone)}`;
+      case 'move_card_stack':
+        return `[AI] Moved ${action.cardInstanceIds.length} cards from ${zoneId(action.fromZone)} to ${zoneId(action.toZone)}`;
+      case 'place_on_zone':
+        return `[AI] Placed ${action.cardInstanceIds.length} card(s) on ${action.position} of ${zoneId(action.zoneId)}`;
+      case 'shuffle':
+        return `[AI] Shuffled ${zoneId(action.zoneId)}`;
+      case 'flip_card':
+        return `[AI] Flipped ${cardName(action.cardInstanceId)} ${action.newVisibility[0] ? 'face up' : 'face down'}`;
+      case 'set_orientation':
+        return action.orientation === '0'
+          ? `[AI] ${cardName(action.cardInstanceId)} rotation cleared`
+          : `[AI] ${cardName(action.cardInstanceId)} rotated to ${action.orientation}°`;
+      case 'add_counter':
+        return `[AI] Added ${action.amount}x ${counterName(action.counterType)} to ${cardName(action.cardInstanceId)}`;
+      case 'remove_counter':
+        return `[AI] Removed ${action.amount}x ${counterName(action.counterType)} from ${cardName(action.cardInstanceId)}`;
+      case 'set_counter':
+        return `[AI] Set ${counterName(action.counterType)} on ${cardName(action.cardInstanceId)} to ${action.value}`;
+      case 'dice_roll':
+        return `[AI] Rolled ${action.count}d${action.sides}`;
+      case 'end_turn':
+        return `[AI] Ended turn`;
+      case 'concede':
+        return `[AI] Conceded`;
+      case 'declare_victory':
+        return `[AI] Declared victory: ${action.reason ?? 'unknown'}`;
+      case 'reveal':
+        return `[AI] Revealed ${action.cardInstanceIds.map(id => cardName(id)).join(', ')}`;
+      case 'peek':
+        return `[AI] Peeked at ${action.count} cards from ${action.fromPosition} of ${zoneId(action.zoneId)}`;
+      case 'create_decision':
+        return `[AI] Requested decision: ${action.message ?? 'Action needed'}`;
+      case 'resolve_decision':
+        return `[AI] Resolved decision`;
+      case 'coin_flip':
+      case 'search_zone':
+        return null;
+      default:
+        return null;
+    }
+  }
+
   onMount(async () => {
     try {
       playmat = await plugin.getPlaymat();
@@ -146,11 +217,13 @@
     if (!gameState) return;
 
     const cardName = getCardName(gameState, cardInstanceId);
+    const fromZoneKey = dragStore.current?.fromZoneKey;
+    const fromZoneName = fromZoneKey ? (gameState.zones[fromZoneKey]?.config.name ?? fromZoneKey) : '?';
     const updatedState = executeDrop(cardInstanceId, toZoneKey, gameState, position, pluginManager);
     if (updatedState) {
       gameState = updatedState;
-      const zoneName = gameState.zones[toZoneKey]?.config.name ?? toZoneKey;
-      gameState.log.push(`[Player ${gameState.activePlayer + 1}] Moved ${cardName} to ${zoneName}`);
+      const toZoneName = gameState.zones[toZoneKey]?.config.name ?? toZoneKey;
+      gameState.log.push(`[Player ${gameState.activePlayer + 1}] Moved ${cardName} from ${fromZoneName} to ${toZoneName}`);
       gameState = { ...gameState };
     }
   }
@@ -290,36 +363,55 @@
     showDebugModal = true;
   }
 
-  async function triggerAITurn() {
-    if (!gameState || gameState.activePlayer !== 1 || aiThinking) return;
-    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
-    if (!apiKey) return;
-    aiThinking = true;
-    addLog('[AI] Thinking...');
-
-    // Serialize tool execution — the SDK runs parallel tool_use blocks
-    // via Promise.all, but we need them sequential for visual feedback.
+  /**
+   * Build a ToolContext for the AI player with serialized execution,
+   * visual feedback, and decision blocking support.
+   */
+  function buildAIContext(options?: { isDecisionResponse?: boolean }): { ctx: ToolContext; waitForQueue: () => Promise<void> } {
     let queue: Promise<void> = Promise.resolve();
 
     const ctx: ToolContext = {
       playerIndex: 1,
+      isDecisionResponse: options?.isDecisionResponse,
       getState: () => gameState!,
       getReadableState: () => JSON.stringify(
         pluginManager.applyReadableStateModifier(toReadableState(gameState!, 1))
       ),
       execute: (action) => {
-        // Chain onto the queue so concurrent calls run one at a time
         const result = queue.then(async () => {
           action.source = 'ai';
+
+          // Special case: coin_flip uses visual CoinFlip animation
+          if (action.type === 'coin_flip' && coinFlipRef) {
+            const results: boolean[] = [];
+            for (let i = 0; i < action.count; i++) {
+              const isHeads = Math.random() < 0.5;
+              results.push(isHeads);
+              await coinFlipRef.flip(isHeads);
+            }
+            action.results = results;
+            tryAction(action);
+            return JSON.stringify({
+              coin_flip_results: results.map(r => r ? 'heads' : 'tails'),
+              state: JSON.parse(ctx.getReadableState()),
+            });
+          }
+
+          // Resolve log message BEFORE action executes (card names may change post-move)
+          const logMessage = gameState ? describeAction(gameState, action) : null;
+
           const blocked = tryAction(action);
           if (blocked) return JSON.stringify({ blocked });
+
+          // Log the action
+          if (logMessage) addLog(logMessage);
+
           // SFX based on action type
           const sfxMap: Record<string, Parameters<typeof playSfx>[0]> = {
             draw: 'cardDrop',
             move_card: 'cardDrop',
             move_card_stack: 'cardDrop',
             shuffle: 'shuffle',
-            coin_flip: 'coinToss',
             end_turn: 'confirm',
             add_counter: 'cursor',
             remove_counter: 'cursor',
@@ -327,15 +419,34 @@
           };
           const sfx = sfxMap[action.type];
           if (sfx) playSfx(sfx);
+
+          // If AI created a decision targeting human (player 0), block until human resolves
+          if (action.type === 'create_decision' && gameState?.pendingDecision?.targetPlayer === 0) {
+            await new Promise<void>(resolve => {
+              pendingDecisionResolve = resolve;
+            });
+          }
+
           // Delay for visual feedback
           await new Promise(r => setTimeout(r, 500));
           return ctx.getReadableState();
         });
-        // Update queue tail (swallow errors so chain doesn't break)
         queue = result.then(() => {}, () => {});
         return result;
       },
     };
+
+    return { ctx, waitForQueue: () => queue };
+  }
+
+  async function triggerAITurn() {
+    if (!gameState || gameState.activePlayer !== 1 || aiThinking) return;
+    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+    if (!apiKey) return;
+    aiThinking = true;
+    addLog('[AI] Thinking...');
+
+    const { ctx } = buildAIContext();
 
     try {
       await runAITurn({
@@ -351,6 +462,41 @@
     aiThinking = false;
   }
 
+  /**
+   * Trigger a decision mini-turn for the AI (human created the decision).
+   */
+  async function triggerAIDecisionTurn() {
+    if (!gameState || aiThinking) return;
+    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+    if (!apiKey) return;
+    aiThinking = true;
+    addLog('[AI] Responding to decision...');
+
+    const { ctx } = buildAIContext({ isDecisionResponse: true });
+
+    try {
+      await runAITurn({
+        context: ctx,
+        plugin,
+        heuristics: agentsMd,
+        apiKey,
+        logging: true,
+        decisionMode: true,
+      });
+    } catch (e) {
+      addLog(`[AI] Error: ${e}`);
+    }
+
+    // Safety net: if AI didn't call resolve_decision, auto-resolve
+    if (gameState?.pendingDecision) {
+      executeAction(gameState, resolveDecision(1));
+      gameState = { ...gameState };
+      addLog('[AI] Decision auto-resolved (AI did not call resolve_decision)');
+    }
+
+    aiThinking = false;
+  }
+
   function handleEndTurn() {
     if (!gameState) return;
     const currentPlayer = gameState.activePlayer;
@@ -362,6 +508,31 @@
 
     // If it's now the AI's turn, trigger it
     triggerAITurn();
+  }
+
+  function handleResolveDecision() {
+    if (!gameState || !gameState.pendingDecision) return;
+    executeAction(gameState, resolveDecision(0));
+    gameState = { ...gameState };
+    playSfx('confirm');
+
+    // Unblock the AI's tool call if it was waiting
+    if (pendingDecisionResolve) {
+      pendingDecisionResolve();
+      pendingDecisionResolve = null;
+    }
+  }
+
+  function handleRequestAction() {
+    if (!gameState || aiThinking || gameState.pendingDecision) return;
+    const message = prompt('Describe what the opponent should do (optional):');
+    if (message === null) return; // cancelled
+    executeAction(gameState, createDecision(0, 1, message || undefined));
+    gameState = { ...gameState };
+    playSfx('confirm');
+
+    // Trigger AI decision mini-turn
+    triggerAIDecisionTurn();
   }
 
   // Counter handlers
@@ -401,20 +572,16 @@
     playSfx('confirm');
   }
 
-  function handleSetStatus(status: string) {
+  function handleSetOrientation(degrees: string) {
     if (!gameState || !contextMenu) return;
     const zone = gameState.zones[contextMenu.zoneKey];
     if (!zone || zone.cards.length === 0) return;
-    const pokemon = zone.cards.at(-1)!;
-    executeAction(gameState, setOrientation(gameState.activePlayer, pokemon.instanceId, status));
-    const label = status === 'normal' ? 'cleared status' : status;
-    gameState.log.push(`[Player ${gameState.activePlayer + 1}] ${pokemon.template.name} is ${label}`);
+    const card = zone.cards.at(-1)!;
+    executeAction(gameState, setOrientation(gameState.activePlayer, card.instanceId, degrees));
+    const label = degrees === '0' ? 'rotation cleared' : `rotated to ${degrees}°`;
+    gameState.log.push(`[Player ${gameState.activePlayer + 1}] ${card.template.name} ${label}`);
     gameState = { ...gameState };
     playSfx('confirm');
-  }
-
-  function isFieldZoneKey(zoneKey: string): boolean {
-    return zoneKey.endsWith('_active') || /_bench_\d+$/.test(zoneKey);
   }
 </script>
 
@@ -440,12 +607,29 @@
       {playmat?.name ?? 'LOADING...'}
     </h1>
     <div class="flex-1 flex justify-end gap-2">
+      {#if decisionTargetsHuman}
+        <button
+          class="gbc-btn text-[0.5rem] py-1 px-3"
+          onclick={handleResolveDecision}
+          disabled={!gameState}
+        >
+          RESOLVE DECISION
+        </button>
+      {:else}
+        <button
+          class="gbc-btn text-[0.5rem] py-1 px-3"
+          onclick={handleEndTurn}
+          disabled={!gameState || aiThinking}
+        >
+          END TURN
+        </button>
+      {/if}
       <button
         class="gbc-btn text-[0.5rem] py-1 px-3"
-        onclick={handleEndTurn}
-        disabled={!gameState || aiThinking}
+        onclick={handleRequestAction}
+        disabled={!gameState || aiThinking || !!gameState?.pendingDecision}
       >
-        END TURN
+        REQUEST ACTION
       </button>
       <button
         class="gbc-btn text-[0.5rem] py-1 px-3"
@@ -467,6 +651,14 @@
       {/if}
     </div>
   </header>
+
+  {#if decisionTargetsHuman && gameState?.pendingDecision}
+    <div class="gbc-panel text-center mb-2 py-2 px-4 bg-gbc-red/20 border-gbc-red">
+      <span class="text-gbc-yellow text-[0.5rem] font-retro">
+        DECISION: {gameState.pendingDecision.message ?? 'Your opponent requests an action'}
+      </span>
+    </div>
+  {/if}
 
   {#if loading}
     <div class="gbc-panel text-center p-8">
@@ -510,6 +702,13 @@
             <div class="preview-placeholder"></div>
           {/if}
         </div>
+
+        {#if actionPanels.length > 0}
+          <ActionPanelView
+            panels={actionPanels}
+            onButtonClick={handleActionPanelClick}
+          />
+        {/if}
 
         {#if counterDefinitions.length > 0}
           <CounterTray
@@ -560,7 +759,7 @@
       onViewAll={handleViewAll}
       onArrangeAll={handleArrangeAll}
       onClearCounters={handleClearCounters}
-      onSetStatus={isFieldZoneKey(contextMenu.zoneKey) ? handleSetStatus : undefined}
+      onSetOrientation={handleSetOrientation}
       onClose={handleCloseContextMenu}
     />
   {/if}
