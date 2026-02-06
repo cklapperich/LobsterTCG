@@ -52,7 +52,7 @@ function isSupporterPlayed(state: PokemonState, action: Action): boolean {
     return false;
   }
 
-  if (fromZone !== 'hand' || toZone !== 'staging') return false;
+  if (!fromZone?.endsWith('_hand') || !toZone?.endsWith('_staging')) return false;
   const template = getTemplateForCard(state, cardInstanceId);
   return !!template && isSupporter(template);
 }
@@ -140,18 +140,15 @@ function warnEvolutionChain(state: PokemonState, action: Action): PreHookResult 
 
   let cardInstanceId: string;
   let toZone: string;
-  let player: 0 | 1;
 
   if (action.type === 'move_card') {
     const a = action as MoveCardAction;
     cardInstanceId = a.cardInstanceId;
     toZone = a.toZone;
-    player = a.player;
   } else if (action.type === 'move_card_stack') {
     const a = action as MoveCardStackAction;
     cardInstanceId = a.cardInstanceIds[0];
     toZone = a.toZone;
-    player = a.player;
     if (!cardInstanceId) return { outcome: 'continue' };
   } else {
     return { outcome: 'continue' };
@@ -164,10 +161,9 @@ function warnEvolutionChain(state: PokemonState, action: Action): PreHookResult 
   if (!template.evolveFrom) return { outcome: 'continue' };
 
   // Check target zone for a matching pre-evolution
-  const zoneKey = `player${player}_${toZone}`;
-  const zone = state.zones[zoneKey];
+  const zone = state.zones[toZone];
   if (!zone || zone.cards.length === 0) {
-    return blockOrWarn(action, `Cannot evolve ${template.name} — no ${template.evolveFrom} found in ${toZone}. Set allowed_by_effect if a card effect permits this.`);
+    return blockOrWarn(action, `Cannot evolve ${template.name} — no ${template.evolveFrom} found in ${zone?.config.name ?? toZone}. Set allowed_by_effect if a card effect permits this.`);
   }
 
   const hasPreEvolution = zone.cards.some((card) => {
@@ -176,7 +172,7 @@ function warnEvolutionChain(state: PokemonState, action: Action): PreHookResult 
   });
 
   if (!hasPreEvolution) {
-    return blockOrWarn(action, `Cannot evolve ${template.name} — no ${template.evolveFrom} found in ${toZone}. Set allowed_by_effect if a card effect permits this.`);
+    return blockOrWarn(action, `Cannot evolve ${template.name} — no ${template.evolveFrom} found in ${zone.config.name}. Set allowed_by_effect if a card effect permits this.`);
   }
 
   return { outcome: 'continue' };
@@ -188,18 +184,15 @@ function warnEvolutionTiming(state: PokemonState, action: Action): PreHookResult
 
   let cardInstanceId: string;
   let toZone: string;
-  let player: 0 | 1;
 
   if (action.type === 'move_card') {
     const a = action as MoveCardAction;
     cardInstanceId = a.cardInstanceId;
     toZone = a.toZone;
-    player = a.player;
   } else if (action.type === 'move_card_stack') {
     const a = action as MoveCardStackAction;
     cardInstanceId = a.cardInstanceIds[0];
     toZone = a.toZone;
-    player = a.player;
     if (!cardInstanceId) return { outcome: 'continue' };
   } else {
     return { outcome: 'continue' };
@@ -216,8 +209,7 @@ function warnEvolutionTiming(state: PokemonState, action: Action): PreHookResult
   }
 
   // Check if the target Pokemon was played this turn
-  const zoneKey = `player${player}_${toZone}`;
-  const zone = state.zones[zoneKey];
+  const zone = state.zones[toZone];
   if (zone) {
     const targetHasPlayedFlag = zone.cards.some(
       (card) => card.flags.includes('played_this_turn')
@@ -256,18 +248,15 @@ function warnNonBasicToEmptyField(state: PokemonState, action: Action): PreHookR
 
   let cardInstanceId: string;
   let toZone: string;
-  let player: 0 | 1;
 
   if (action.type === 'move_card') {
     const moveAction = action as MoveCardAction;
     cardInstanceId = moveAction.cardInstanceId;
     toZone = moveAction.toZone;
-    player = moveAction.player;
   } else if (action.type === 'move_card_stack') {
     const stackAction = action as MoveCardStackAction;
     cardInstanceId = stackAction.cardInstanceIds[0];
     toZone = stackAction.toZone;
-    player = stackAction.player;
     if (!cardInstanceId) return { outcome: 'continue' };
   } else {
     return { outcome: 'continue' };
@@ -280,13 +269,13 @@ function warnNonBasicToEmptyField(state: PokemonState, action: Action): PreHookR
   if (isBasicPokemon(template)) return { outcome: 'continue' };
 
   // Check if the target zone is empty
-  const zoneKey = `player${player}_${toZone}`;
-  const zone = state.zones[zoneKey];
+  const zone = state.zones[toZone];
   if (!zone || zone.cards.length === 0) {
     const label = template.supertype === 'Pokemon'
       ? `${template.name} (${template.subtypes.join('/')})`
       : `${template.name} (${template.supertype})`;
-    return blockOrWarn(action, `Cannot place ${label} on empty ${toZone}. Only Basic Pokemon can be placed directly. Set allowed_by_effect if a card effect permits this.`);
+    const zoneName = zone?.config.name?.toLowerCase() ?? toZone;
+    return blockOrWarn(action, `Cannot place ${label} on empty ${zoneName}. Only Basic Pokemon can be placed directly. Set allowed_by_effect if a card effect permits this.`);
   }
 
   return { outcome: 'continue' };
@@ -299,7 +288,6 @@ function warnEnergyOnTopOfPokemon(state: PokemonState, action: Action): PreHookR
   let cardInstanceId: string;
   let toZone: string;
   let fromZone: string | undefined;
-  let player: 0 | 1;
   let position: number | undefined;
 
   if (action.type === 'move_card') {
@@ -307,14 +295,12 @@ function warnEnergyOnTopOfPokemon(state: PokemonState, action: Action): PreHookR
     cardInstanceId = moveAction.cardInstanceId;
     toZone = moveAction.toZone;
     fromZone = moveAction.fromZone;
-    player = moveAction.player;
     position = moveAction.position;
   } else if (action.type === 'move_card_stack') {
     const stackAction = action as MoveCardStackAction;
     cardInstanceId = stackAction.cardInstanceIds[0];
     toZone = stackAction.toZone;
     fromZone = stackAction.fromZone;
-    player = stackAction.player;
     position = stackAction.position;
     if (!cardInstanceId) return { outcome: 'continue' };
   } else {
@@ -333,12 +319,12 @@ function warnEnergyOnTopOfPokemon(state: PokemonState, action: Action): PreHookR
   // Energy at the visual bottom (position 0) is fine — it's underneath the Pokemon.
   // Warn when energy would land on top: position undefined (append to end) or
   // position >= zone length (explicit top).
-  const zoneKey = `player${player}_${toZone}`;
-  const zone = state.zones[zoneKey];
+  const zone = state.zones[toZone];
   if (zone && zone.cards.length > 0) {
     const isTop = position === undefined || position >= zone.cards.length;
     if (isTop) {
-      return blockOrWarn(action, `Cannot place energy on top of Pokemon in ${toZone}. Energy should be attached underneath. Set allowed_by_effect if a card effect permits this.`);
+      const zoneName = zone.config.name?.toLowerCase() ?? toZone;
+      return blockOrWarn(action, `Cannot place energy on top of Pokemon in ${zoneName}. Energy should be attached underneath. Set allowed_by_effect if a card effect permits this.`);
     }
   }
 
@@ -403,6 +389,15 @@ export function modifyReadableState(
       if (Array.isArray(card.retreatCost)) {
         card.retreatCost = card.retreatCost.length;
       }
+
+      // Translate orientation to human-readable status field
+      const STATUS_ORIENTATIONS = new Set(['paralyzed', 'asleep', 'confused']);
+      const orientation = card.orientation as string | undefined;
+      if (orientation && STATUS_ORIENTATIONS.has(orientation)) {
+        card.status = orientation;
+      }
+      // Remove raw orientation — AI should use 'status' field instead
+      delete card.orientation;
     }
   }
   return readable;

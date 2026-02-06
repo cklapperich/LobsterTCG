@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { Playmat, CardInstance, CardTemplate, GameState, CounterDefinition, DeckList, ZoneConfig, Action } from '../../core';
-  import { executeAction, shuffle, VISIBILITY, flipCard, endTurn, loadDeck, getCardName, findCardInZones, toReadableState, PluginManager, makeZoneKey } from '../../core';
+  import { executeAction, shuffle, VISIBILITY, flipCard, endTurn, loadDeck, getCardName, findCardInZones, toReadableState, PluginManager, setOrientation } from '../../core';
   import type { ToolContext } from '../../core/ai-tools';
   import { plugin, executeSetup, ZONE_IDS, pokemonWarningsPlugin } from '../../plugins/pokemon';
   import { getTemplate } from '../../plugins/pokemon/cards';
@@ -126,8 +126,8 @@
       gameState = await plugin.startGame();
 
       // Load player decks (replace the default deck)
-      loadDeck(gameState, 0, makeZoneKey(0, ZONE_IDS.DECK), player1Deck, getTemplate, false);
-      loadDeck(gameState, 1, makeZoneKey(1, ZONE_IDS.DECK), player2Deck, getTemplate, false);
+      loadDeck(gameState, 0, `player0_${ZONE_IDS.DECK}`, player1Deck, getTemplate, false);
+      loadDeck(gameState, 1, `player1_${ZONE_IDS.DECK}`, player2Deck, getTemplate, false);
 
       // Execute setup for both players (shuffle, draw 7, set prizes)
       executeSetup(gameState, 0);
@@ -149,8 +149,8 @@
     const updatedState = executeDrop(cardInstanceId, toZoneKey, gameState, position, pluginManager);
     if (updatedState) {
       gameState = updatedState;
-      const zoneId = toZoneKey.split('_').slice(1).join('_'); // Extract zone ID from zone key
-      gameState.log.push(`[Player ${gameState.activePlayer + 1}] Moved ${cardName} to ${zoneId}`);
+      const zoneName = gameState.zones[toZoneKey]?.config.name ?? toZoneKey;
+      gameState.log.push(`[Player ${gameState.activePlayer + 1}] Moved ${cardName} to ${zoneName}`);
       gameState = { ...gameState };
     }
   }
@@ -203,8 +203,8 @@
     const playerIndex = zoneKey.startsWith('player0_') ? 0 : 1;
     const action = shuffle(playerIndex, zoneKey);
     executeAction(gameState, action);
-    const zoneId = zoneKey.split('_').slice(1).join('_');
-    gameState.log.push(`[Player ${gameState.activePlayer + 1}] Shuffled ${zoneId}`);
+    const zoneName = gameState.zones[zoneKey]?.config.name ?? zoneKey;
+    gameState.log.push(`[Player ${gameState.activePlayer + 1}] Shuffled ${zoneName}`);
     gameState = { ...gameState };
   }
 
@@ -259,8 +259,8 @@
   function resetGame() {
     plugin.startGame().then((state) => {
       // Load player decks
-      loadDeck(state, 0, makeZoneKey(0, ZONE_IDS.DECK), player1Deck, getTemplate, false);
-      loadDeck(state, 1, makeZoneKey(1, ZONE_IDS.DECK), player2Deck, getTemplate, false);
+      loadDeck(state, 0, `player0_${ZONE_IDS.DECK}`, player1Deck, getTemplate, false);
+      loadDeck(state, 1, `player1_${ZONE_IDS.DECK}`, player2Deck, getTemplate, false);
 
       // Execute setup for both players
       executeSetup(state, 0);
@@ -399,6 +399,22 @@
     gameState.log.push(`Cleared all counters from ${zoneName}`);
     gameState = { ...gameState };
     playSfx('confirm');
+  }
+
+  function handleSetStatus(status: string) {
+    if (!gameState || !contextMenu) return;
+    const zone = gameState.zones[contextMenu.zoneKey];
+    if (!zone || zone.cards.length === 0) return;
+    const pokemon = zone.cards.at(-1)!;
+    executeAction(gameState, setOrientation(gameState.activePlayer, pokemon.instanceId, status));
+    const label = status === 'normal' ? 'cleared status' : status;
+    gameState.log.push(`[Player ${gameState.activePlayer + 1}] ${pokemon.template.name} is ${label}`);
+    gameState = { ...gameState };
+    playSfx('confirm');
+  }
+
+  function isFieldZoneKey(zoneKey: string): boolean {
+    return zoneKey.endsWith('_active') || /_bench_\d+$/.test(zoneKey);
   }
 </script>
 
@@ -544,6 +560,7 @@
       onViewAll={handleViewAll}
       onArrangeAll={handleArrangeAll}
       onClearCounters={handleClearCounters}
+      onSetStatus={isFieldZoneKey(contextMenu.zoneKey) ? handleSetStatus : undefined}
       onClose={handleCloseContextMenu}
     />
   {/if}

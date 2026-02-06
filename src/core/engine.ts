@@ -93,22 +93,7 @@ function createPlayerInfo(
   };
 }
 
-// Create flattened zone key: "player0_hand", "player1_tableau_1"
-export function makeZoneKey(playerIndex: PlayerIndex, zoneId: string): string {
-  return `player${playerIndex}_${zoneId}`;
-}
 
-// Parse a zone key back into player index and zone ID
-export function parseZoneKey(zoneKey: string): { playerIndex: PlayerIndex; zoneId: string } {
-  const match = zoneKey.match(/^player([01])_(.+)$/);
-  if (!match) {
-    throw new Error(`Invalid zone key format: ${zoneKey}`);
-  }
-  return {
-    playerIndex: Number(match[1]) as PlayerIndex,
-    zoneId: match[2],
-  };
-}
 
 function createTurn(turnNumber: number, activePlayer: PlayerIndex): Turn {
   return {
@@ -130,12 +115,12 @@ export function createGameState<T extends CardTemplate>(
   const zones: Record<string, Zone<T>> = {};
   for (let playerIndex = 0; playerIndex < config.playerCount; playerIndex++) {
     for (const [zoneId, zoneConfig] of Object.entries(config.zones)) {
-      const key = makeZoneKey(playerIndex as PlayerIndex, zoneId);
+      const key = `player${playerIndex}_${zoneId}`;
       zones[key] = createZone(zoneConfig, playerIndex as PlayerIndex, key);
     }
 
     // Inject staging zone for each player
-    const stagingKey = makeZoneKey(playerIndex as PlayerIndex, 'staging');
+    const stagingKey = `player${playerIndex}_staging`;
     zones[stagingKey] = createZone(STAGING_ZONE_CONFIG, playerIndex as PlayerIndex, stagingKey);
   }
 
@@ -271,8 +256,8 @@ function executeDraw<T extends CardTemplate>(
   state: GameState<T>,
   action: DrawAction
 ): void {
-  const deckKey = makeZoneKey(action.player, 'deck');
-  const handKey = makeZoneKey(action.player, 'hand');
+  const deckKey = `player${action.player}_deck`;
+  const handKey = `player${action.player}_hand`;
   const deck = getZone(state, deckKey);
   const hand = getZone(state, handKey);
 
@@ -285,6 +270,7 @@ function executeDraw<T extends CardTemplate>(
       if (hand.config.ownerCanSeeContents) {
         card.visibility = action.player === 0 ? VISIBILITY.PLAYER_A_ONLY : VISIBILITY.PLAYER_B_ONLY;
       }
+      card.orientation = undefined;
       hand.cards.push(card);
     }
   }
@@ -304,6 +290,7 @@ function executeMoveCard<T extends CardTemplate>(
 
   // Update visibility based on target zone
   card.visibility = toZone.config.defaultVisibility;
+  card.orientation = undefined;
 
   if (action.position !== undefined && action.position >= 0) {
     toZone.cards.splice(action.position, 0, card);
@@ -326,6 +313,7 @@ function executeMoveCardStack<T extends CardTemplate>(
     const card = removeCardFromZone(fromZone, cardId);
     if (card) {
       card.visibility = toZone.config.defaultVisibility;
+      card.orientation = undefined;
       cards.push(card);
     }
   }
@@ -352,6 +340,7 @@ function executePlaceOnZone<T extends CardTemplate>(
       const removed = removeCardFromZone(result.zone, cardId);
       if (removed) {
         removed.visibility = zone.config.defaultVisibility;
+        removed.orientation = undefined;
         cardsToPlace.push(removed);
       }
     }
@@ -625,17 +614,15 @@ export function checkOpponentZone<T extends CardTemplate>(
   if (!zoneKey) return null;
   if (action.player === state.activePlayer) return null;
 
-  // Parse the zone key to get zone ID
-  const { zoneId } = parseZoneKey(zoneKey);
-
   // Moving cards to opponent's discard is normal gameplay (e.g., knockout)
-  if (zoneId === 'discard') return null;
+  if (zoneKey.endsWith('_discard')) return null;
 
   // Check if the target zone is shared
   const zone = state.zones[zoneKey];
   if (zone?.config.shared) return null;
 
-  const reason = `Cannot move cards to opponent's ${zoneId}. Set allowed_by_effect if a card effect permits this.`;
+  const zoneName = zone?.config.name ?? zoneKey;
+  const reason = `Cannot move cards to opponent's ${zoneName}. Set allowed_by_effect if a card effect permits this.`;
   return {
     shouldBlock: action.source === 'ai',
     reason,

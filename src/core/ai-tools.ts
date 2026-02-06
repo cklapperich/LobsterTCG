@@ -273,13 +273,13 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
     // ── Set Orientation ────────────────────────────────────────────
     tool({
       name: 'set_orientation',
-      description: 'Set a card\'s orientation (e.g. tap/untap).',
+      description: 'Set a Pokemon\'s status condition via card orientation. Only active Pokemon can have status.',
       inputSchema: {
         type: 'object' as const,
         properties: {
           cardName: { type: 'string', description: 'Name of the card' },
           zone: { type: 'string', description: 'Zone key the card is in' },
-          orientation: { type: 'string', description: 'New orientation (e.g. "normal", "tapped")' },
+          orientation: { type: 'string', enum: ['normal', 'paralyzed', 'asleep', 'confused'], description: 'Status: "paralyzed" (90° CW), "asleep" (90° CCW), "confused" (180°), "normal" (clear status)' },
         },
         required: ['cardName', 'zone', 'orientation'],
       },
