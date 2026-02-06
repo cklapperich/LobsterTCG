@@ -52,56 +52,45 @@ export function moveCardStack(
 export function placeOnZone(
   player: PlayerIndex,
   cardInstanceIds: string[],
-  zoneId: string,
+  zoneKey: string,
   position: 'top' | 'bottom'
 ): PlaceOnZoneAction {
-  return { type: 'place_on_zone', player, cardInstanceIds, zoneId, position };
+  return { type: 'place_on_zone', player, cardInstanceIds, zoneId: zoneKey, position };
 }
 
 export function placeOnTop(
   player: PlayerIndex,
   cardInstanceIds: string[],
-  zoneId: string
+  zoneKey: string
 ): PlaceOnZoneAction {
-  return placeOnZone(player, cardInstanceIds, zoneId, 'top');
+  return placeOnZone(player, cardInstanceIds, zoneKey, 'top');
 }
 
 export function placeOnBottom(
   player: PlayerIndex,
   cardInstanceIds: string[],
-  zoneId: string
+  zoneKey: string
 ): PlaceOnZoneAction {
-  return placeOnZone(player, cardInstanceIds, zoneId, 'bottom');
+  return placeOnZone(player, cardInstanceIds, zoneKey, 'bottom');
 }
 
-export function shuffle(player: PlayerIndex, zoneId: string): ShuffleAction {
-  return { type: 'shuffle', player, zoneId };
-}
-
-export function shuffleDeck(player: PlayerIndex): ShuffleAction {
-  return shuffle(player, 'deck');
+export function shuffle(player: PlayerIndex, zoneKey: string): ShuffleAction {
+  return { type: 'shuffle', player, zoneId: zoneKey };
 }
 
 export function searchZone(
   player: PlayerIndex,
-  zoneId: string,
+  zoneKey: string,
   options?: { filter?: string; count?: number; fromPosition?: 'top' | 'bottom' }
 ): SearchZoneAction {
   return {
     type: 'search_zone',
     player,
-    zoneId,
+    zoneId: zoneKey,
     filter: options?.filter,
     count: options?.count,
     fromPosition: options?.fromPosition,
   };
-}
-
-export function searchDeck(
-  player: PlayerIndex,
-  filter?: string
-): SearchZoneAction {
-  return searchZone(player, 'deck', { filter });
 }
 
 export function flipCard(
@@ -197,43 +186,9 @@ export function reveal(
 
 export function peek(
   player: PlayerIndex,
-  zoneId: string,
+  zoneKey: string,
   count: number,
   fromPosition: 'top' | 'bottom' = 'top'
 ): PeekAction {
-  return { type: 'peek', player, zoneId, count, fromPosition };
-}
-
-export function peekTopOfDeck(player: PlayerIndex, count: number = 1): PeekAction {
-  return peek(player, 'deck', count, 'top');
-}
-
-
-// ============================================================================
-// Convenience: Move to specific zones
-// ============================================================================
-
-export function moveToHand(
-  player: PlayerIndex,
-  cardInstanceId: string,
-  fromZone: string
-): MoveCardAction {
-  return moveCard(player, cardInstanceId, fromZone, 'hand');
-}
-
-export function moveToDiscard(
-  player: PlayerIndex,
-  cardInstanceId: string,
-  fromZone: string
-): MoveCardAction {
-  return moveCard(player, cardInstanceId, fromZone, 'discard');
-}
-
-export function moveToDeck(
-  player: PlayerIndex,
-  cardInstanceId: string,
-  fromZone: string,
-  position?: number
-): MoveCardAction {
-  return moveCard(player, cardInstanceId, fromZone, 'deck', position);
+  return { type: 'peek', player, zoneId: zoneKey, count, fromPosition };
 }

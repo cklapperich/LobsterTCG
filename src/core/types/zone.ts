@@ -1,7 +1,6 @@
 import type { CardTemplate, CardInstance, Visibility, PlayerIndex } from './card';
 
 export interface ZoneConfig {
-  id: string;
   name: string;
   ordered: boolean; // deck=ordered, hand=unordered
   defaultVisibility: Visibility;

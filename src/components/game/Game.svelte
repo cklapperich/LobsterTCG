@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { Playmat, CardInstance, CardTemplate, GameState, CounterDefinition, DeckList, ZoneConfig, Action } from '../../core';
-  import { executeAction, shuffle, VISIBILITY, flipCard, parseZoneKey, endTurn, loadDeck, getCardName, findCardInZones, toReadableState, PluginManager } from '../../core';
+  import { executeAction, shuffle, VISIBILITY, flipCard, endTurn, loadDeck, getCardName, findCardInZones, toReadableState, PluginManager, makeZoneKey } from '../../core';
   import type { ToolContext } from '../../core/ai-tools';
   import { plugin, executeSetup, ZONE_IDS, pokemonWarningsPlugin } from '../../plugins/pokemon';
   import { getTemplate } from '../../plugins/pokemon/cards';
@@ -126,8 +126,8 @@
       gameState = await plugin.startGame();
 
       // Load player decks (replace the default deck)
-      loadDeck(gameState, 0, ZONE_IDS.DECK, player1Deck, getTemplate, false);
-      loadDeck(gameState, 1, ZONE_IDS.DECK, player2Deck, getTemplate, false);
+      loadDeck(gameState, 0, makeZoneKey(0, ZONE_IDS.DECK), player1Deck, getTemplate, false);
+      loadDeck(gameState, 1, makeZoneKey(1, ZONE_IDS.DECK), player2Deck, getTemplate, false);
 
       // Execute setup for both players (shuffle, draw 7, set prizes)
       executeSetup(gameState, 0);
@@ -149,7 +149,7 @@
     const updatedState = executeDrop(cardInstanceId, toZoneKey, gameState, position, pluginManager);
     if (updatedState) {
       gameState = updatedState;
-      const { zoneId } = parseZoneKey(toZoneKey);
+      const zoneId = toZoneKey.split('_').slice(1).join('_'); // Extract zone ID from zone key
       gameState.log.push(`[Player ${gameState.activePlayer + 1}] Moved ${cardName} to ${zoneId}`);
       gameState = { ...gameState };
     }
@@ -200,9 +200,10 @@
     await playmatGridRef.shuffleZone(zoneKey);
 
     // Execute actual shuffle after animation completes
-    const { playerIndex, zoneId } = parseZoneKey(zoneKey);
-    const action = shuffle(playerIndex, zoneId);
+    const playerIndex = zoneKey.startsWith('player0_') ? 0 : 1;
+    const action = shuffle(playerIndex, zoneKey);
     executeAction(gameState, action);
+    const zoneId = zoneKey.split('_').slice(1).join('_');
     gameState.log.push(`[Player ${gameState.activePlayer + 1}] Shuffled ${zoneId}`);
     gameState = { ...gameState };
   }
@@ -258,8 +259,8 @@
   function resetGame() {
     plugin.startGame().then((state) => {
       // Load player decks
-      loadDeck(state, 0, ZONE_IDS.DECK, player1Deck, getTemplate, false);
-      loadDeck(state, 1, ZONE_IDS.DECK, player2Deck, getTemplate, false);
+      loadDeck(state, 0, makeZoneKey(0, ZONE_IDS.DECK), player1Deck, getTemplate, false);
+      loadDeck(state, 1, makeZoneKey(1, ZONE_IDS.DECK), player2Deck, getTemplate, false);
 
       // Execute setup for both players
       executeSetup(state, 0);

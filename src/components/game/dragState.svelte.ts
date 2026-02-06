@@ -1,5 +1,5 @@
 import type { CardInstance, CardTemplate, Visibility, GameState } from '../../core';
-import { executeAction, moveCard, flipCard, parseZoneKey, checkOpponentZone, VISIBILITY, type PluginManager } from '../../core';
+import { executeAction, moveCard, flipCard, checkOpponentZone, VISIBILITY, type PluginManager } from '../../core';
 import { playSfx } from '../../lib/audio.svelte';
 
 export interface DragState {
@@ -58,14 +58,14 @@ export function executeDrop(
 
   const savedVisibility = dragStore.current.originalVisibility;
 
-  // Parse zone keys to get player indices and zone IDs
-  const from = parseZoneKey(dragStore.current.fromZoneKey);
-  const to = parseZoneKey(toZoneKey);
+  // Extract player indices from zone keys for cross-player check
+  const fromPlayerIndex = dragStore.current.fromZoneKey.startsWith('player0_') ? 0 : 1;
+  const toPlayerIndex = toZoneKey.startsWith('player0_') ? 0 : 1;
 
   // Build action using the destination player's index for the action player
   // (so warnings check the right player's zones)
-  const actionPlayer = to.playerIndex;
-  const action = moveCard(actionPlayer, cardInstanceId, from.zoneId, to.zoneId, position);
+  const actionPlayer = toPlayerIndex;
+  const action = moveCard(actionPlayer, cardInstanceId, dragStore.current.fromZoneKey, toZoneKey, position);
 
   // Opponent zone check (game-universal, not plugin-specific)
   const opponentCheck = checkOpponentZone(gameState, action);
@@ -92,7 +92,7 @@ export function executeDrop(
     }
   }
 
-  if (from.playerIndex !== to.playerIndex) {
+  if (fromPlayerIndex !== toPlayerIndex) {
     // Cross-player: inline move (executeAction assumes same player for from/to)
     const fromZone = gameState.zones[dragStore.current.fromZoneKey];
     const toZone = gameState.zones[toZoneKey];
@@ -121,9 +121,9 @@ export function executeDrop(
 
   // Determine visibility for the card
   // Auto-reveal cards moved to hand zones, otherwise restore original visibility
-  const isHandZone = to.zoneId.toLowerCase().includes('hand');
+  const isHandZone = toZoneKey.toLowerCase().includes('hand');
   const newVisibility = isHandZone ? VISIBILITY.PUBLIC : savedVisibility;
-  const flipAction = flipCard(from.playerIndex, cardInstanceId, newVisibility);
+  const flipAction = flipCard(fromPlayerIndex, cardInstanceId, newVisibility);
   executeAction(gameState, flipAction);
 
   // Clear counters when moving to hand zone

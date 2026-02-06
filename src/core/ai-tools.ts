@@ -1,7 +1,6 @@
 import type { CardTemplate, PlayerIndex, Action } from './types';
 import type { GameState } from './types';
 import { resolveCardName } from './readable';
-import { parseZoneKey } from './engine';
 import {
   draw,
   moveCard,
@@ -85,18 +84,13 @@ function resolveCard(
   return resolveCardName(state, cardName, zoneKey);
 }
 
-/** Extract zone ID from a zone key. */
-function zoneId(zoneKey: string): string {
-  return parseZoneKey(zoneKey).zoneId;
-}
-
 /**
  * Create default tools for all built-in action types.
  * Each tool calls ctx.execute() which is provided by the caller.
  *
  * All zone parameters accept zone keys (e.g. "player1_hand") — the same
- * format returned by readable state. Tools parse them internally to get
- * zone IDs for action factories.
+ * format returned by readable state. Zone keys are passed directly to
+ * action factories.
  *
  * Plugins can call this, filter out tools they don't want, and append
  * custom tools before returning from listTools().
@@ -139,7 +133,7 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
       async run(input) {
         const cardId = resolveCard(ctx.getState(), input.cardName, input.fromZone);
         return ctx.execute(
-          moveCard(p, cardId, zoneId(input.fromZone), zoneId(input.toZone), input.position),
+          moveCard(p, cardId, input.fromZone, input.toZone, input.position),
         );
       },
     }),
@@ -167,7 +161,7 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
           resolveCard(ctx.getState(), name, input.fromZone)
         );
         return ctx.execute(
-          moveCardStack(p, cardIds, zoneId(input.fromZone), zoneId(input.toZone), input.position),
+          moveCardStack(p, cardIds, input.fromZone, input.toZone, input.position),
         );
       },
     }),
@@ -201,7 +195,7 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
           throw new Error(`Card "${name}" not found in any zone`);
         });
         return ctx.execute(
-          placeOnZone(p, cardIds, zoneId(input.zone), input.position),
+          placeOnZone(p, cardIds, input.zone, input.position),
         );
       },
     }),
@@ -218,7 +212,7 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
         required: ['zone'],
       },
       async run(input) {
-        return ctx.execute(shuffle(p, zoneId(input.zone)));
+        return ctx.execute(shuffle(p, input.zone));
       },
     }),
 
@@ -238,7 +232,7 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
       },
       async run(input) {
         return ctx.execute(
-          searchZone(p, zoneId(input.zone), {
+          searchZone(p, input.zone, {
             filter: input.filter,
             count: input.count,
             fromPosition: input.fromPosition,
@@ -409,7 +403,7 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
       async run(input) {
         const count = input.count ?? 1;
         const from = input.fromPosition ?? 'top';
-        return ctx.execute(peek(p, zoneId(input.zone), count, from));
+        return ctx.execute(peek(p, input.zone, count, from));
       },
     }),
 

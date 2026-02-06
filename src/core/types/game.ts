@@ -19,7 +19,7 @@ export interface Turn {
 
 export interface GameConfig {
   gameType: string;
-  zones: ZoneConfig[];
+  zones: Record<string, ZoneConfig>;  // zone ID -> config
   playerCount: 2;
 }
 

@@ -4,8 +4,15 @@ import { VISIBILITY } from './types';
 // JSON representation uses string visibility
 type VisibilityString = 'public' | 'hidden' | 'player_a_only' | 'player_b_only';
 
-interface ZoneConfigJson extends Omit<ZoneConfig, 'defaultVisibility'> {
+interface ZoneConfigJson {
+  id: string;
+  name: string;
+  ordered: boolean;
   defaultVisibility: VisibilityString;
+  maxCards: number;
+  ownerCanSeeContents: boolean;
+  opponentCanSeeCount: boolean;
+  shared?: boolean;
 }
 
 interface PlaymatJson extends Omit<Playmat, 'zones'> {
@@ -28,16 +35,23 @@ function parseVisibility(vis: VisibilityString): Visibility {
 }
 
 function parseZoneConfig(json: ZoneConfigJson): ZoneConfig {
+  const { id, defaultVisibility, ...rest } = json;
   return {
-    ...json,
-    defaultVisibility: parseVisibility(json.defaultVisibility),
+    ...rest,
+    defaultVisibility: parseVisibility(defaultVisibility),
   };
 }
 
 export function parsePlaymat(json: PlaymatJson): Playmat {
+  // Convert zones array to Record<string, ZoneConfig>
+  const zones: Record<string, ZoneConfig> = {};
+  for (const zoneJson of json.zones) {
+    zones[zoneJson.id] = parseZoneConfig(zoneJson);
+  }
+
   return {
     ...json,
-    zones: json.zones.map(parseZoneConfig),
+    zones,
   };
 }
 

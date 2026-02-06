@@ -19,15 +19,15 @@ import { pokemonWarningsPlugin } from './warnings';
 // ---------------------------------------------------------------------------
 // Zone configs (minimal subset matching the pokemon playmat)
 // ---------------------------------------------------------------------------
-const POKEMON_ZONES: ZoneConfig[] = [
-  { id: 'deck', name: 'Deck', ordered: true, defaultVisibility: VISIBILITY.HIDDEN, maxCards: -1, ownerCanSeeContents: false, opponentCanSeeCount: true },
-  { id: 'hand', name: 'Hand', ordered: false, defaultVisibility: VISIBILITY.PLAYER_A_ONLY, maxCards: -1, ownerCanSeeContents: true, opponentCanSeeCount: true },
-  { id: 'active', name: 'Active', ordered: false, defaultVisibility: VISIBILITY.PUBLIC, maxCards: -1, ownerCanSeeContents: true, opponentCanSeeCount: true },
-  { id: 'bench_1', name: 'Bench 1', ordered: false, defaultVisibility: VISIBILITY.PUBLIC, maxCards: -1, ownerCanSeeContents: true, opponentCanSeeCount: true },
-  { id: 'discard', name: 'Discard', ordered: true, defaultVisibility: VISIBILITY.PUBLIC, maxCards: -1, ownerCanSeeContents: true, opponentCanSeeCount: true },
-  { id: 'stadium', name: 'Stadium', ordered: false, defaultVisibility: VISIBILITY.PUBLIC, maxCards: -1, ownerCanSeeContents: true, opponentCanSeeCount: true, shared: true },
-  { id: 'staging', name: 'Staging', ordered: false, defaultVisibility: VISIBILITY.PUBLIC, maxCards: -1, ownerCanSeeContents: true, opponentCanSeeCount: true },
-];
+const POKEMON_ZONES: Record<string, ZoneConfig> = {
+  deck: { name: 'Deck', ordered: true, defaultVisibility: VISIBILITY.HIDDEN, maxCards: -1, ownerCanSeeContents: false, opponentCanSeeCount: true },
+  hand: { name: 'Hand', ordered: false, defaultVisibility: VISIBILITY.PLAYER_A_ONLY, maxCards: -1, ownerCanSeeContents: true, opponentCanSeeCount: true },
+  active: { name: 'Active', ordered: false, defaultVisibility: VISIBILITY.PUBLIC, maxCards: -1, ownerCanSeeContents: true, opponentCanSeeCount: true },
+  bench_1: { name: 'Bench 1', ordered: false, defaultVisibility: VISIBILITY.PUBLIC, maxCards: -1, ownerCanSeeContents: true, opponentCanSeeCount: true },
+  discard: { name: 'Discard', ordered: true, defaultVisibility: VISIBILITY.PUBLIC, maxCards: -1, ownerCanSeeContents: true, opponentCanSeeCount: true },
+  stadium: { name: 'Stadium', ordered: false, defaultVisibility: VISIBILITY.PUBLIC, maxCards: -1, ownerCanSeeContents: true, opponentCanSeeCount: true, shared: true },
+  staging: { name: 'Staging', ordered: false, defaultVisibility: VISIBILITY.PUBLIC, maxCards: -1, ownerCanSeeContents: true, opponentCanSeeCount: true },
+};
 
 // ---------------------------------------------------------------------------
 // Test card IDs
@@ -98,12 +98,12 @@ describe('warnOneSupporter', () => {
     const { state, gameLoop, blocked } = setupGame();
 
     const tierno = placeCard(state, 0, 'hand', TIERNO);
-    gameLoop.submit({ ...moveCard(0, tierno, 'hand', 'staging'), source: 'ai' });
+    gameLoop.submit({ ...moveCard(0, tierno, makeZoneKey(0, 'hand'), makeZoneKey(0, 'staging')), source: 'ai' });
     gameLoop.processNext();
     expect(blocked).toHaveLength(0);
 
     const trevor = placeCard(state, 0, 'hand', TREVOR);
-    gameLoop.submit({ ...moveCard(0, trevor, 'hand', 'staging'), source: 'ai' });
+    gameLoop.submit({ ...moveCard(0, trevor, makeZoneKey(0, 'hand'), makeZoneKey(0, 'staging')), source: 'ai' });
     gameLoop.processNext();
     expect(blocked).toHaveLength(1);
     expect(blocked[0].reason).toContain('Already played a Supporter');
@@ -113,11 +113,11 @@ describe('warnOneSupporter', () => {
     const { state, gameLoop, blocked } = setupGame();
 
     const tierno = placeCard(state, 0, 'hand', TIERNO);
-    gameLoop.submit(moveCard(0, tierno, 'hand', 'staging'));
+    gameLoop.submit(moveCard(0, tierno, makeZoneKey(0, 'hand'), makeZoneKey(0, 'staging')));
     gameLoop.processNext();
 
     const trevor = placeCard(state, 0, 'hand', TREVOR);
-    gameLoop.submit(moveCard(0, trevor, 'hand', 'staging'));
+    gameLoop.submit(moveCard(0, trevor, makeZoneKey(0, 'hand'), makeZoneKey(0, 'staging')));
     gameLoop.processNext();
     expect(blocked).toHaveLength(0);
     expect(state.log.some(l => l.includes('Already played a Supporter'))).toBe(true);
@@ -127,11 +127,11 @@ describe('warnOneSupporter', () => {
     const { state, gameLoop, blocked } = setupGame();
 
     const tierno = placeCard(state, 0, 'hand', TIERNO);
-    gameLoop.submit(moveCard(0, tierno, 'hand', 'staging'));
+    gameLoop.submit(moveCard(0, tierno, makeZoneKey(0, 'hand'), makeZoneKey(0, 'staging')));
     gameLoop.processNext();
 
     const trevor = placeCard(state, 0, 'hand', TREVOR);
-    gameLoop.submit({ ...moveCard(0, trevor, 'hand', 'staging'), allowed_by_effect: true });
+    gameLoop.submit({ ...moveCard(0, trevor, makeZoneKey(0, 'hand'), makeZoneKey(0, 'staging')), allowed_by_effect: true });
     gameLoop.processNext();
     expect(blocked).toHaveLength(0);
   });
@@ -141,13 +141,13 @@ describe('warnOneSupporter', () => {
 
     // Discard a supporter (e.g. card effect) — should NOT count
     const tierno = placeCard(state, 0, 'hand', TIERNO);
-    gameLoop.submit({ ...moveCard(0, tierno, 'hand', 'discard'), source: 'ai' });
+    gameLoop.submit({ ...moveCard(0, tierno, makeZoneKey(0, 'hand'), makeZoneKey(0, 'discard')), source: 'ai' });
     gameLoop.processNext();
     expect(blocked).toHaveLength(0);
 
     // Now actually play a supporter to staging — should be allowed
     const trevor = placeCard(state, 0, 'hand', TREVOR);
-    gameLoop.submit({ ...moveCard(0, trevor, 'hand', 'staging'), source: 'ai' });
+    gameLoop.submit({ ...moveCard(0, trevor, makeZoneKey(0, 'hand'), makeZoneKey(0, 'staging')), source: 'ai' });
     gameLoop.processNext();
     expect(blocked).toHaveLength(0);
   });
@@ -162,12 +162,12 @@ describe('warnOneEnergyAttachment', () => {
     placeCard(state, 0, 'bench_1', JIGGLYPUFF);
 
     const energy1 = placeCard(state, 0, 'hand', FAIRY_ENERGY);
-    gameLoop.submit({ ...moveCard(0, energy1, 'hand', 'active', 0), source: 'ai' });
+    gameLoop.submit({ ...moveCard(0, energy1, makeZoneKey(0, 'hand'), makeZoneKey(0, 'active'), 0), source: 'ai' });
     gameLoop.processNext();
     expect(blocked).toHaveLength(0);
 
     const energy2 = placeCard(state, 0, 'hand', FAIRY_ENERGY);
-    gameLoop.submit({ ...moveCard(0, energy2, 'hand', 'bench_1', 0), source: 'ai' });
+    gameLoop.submit({ ...moveCard(0, energy2, makeZoneKey(0, 'hand'), makeZoneKey(0, 'bench_1'), 0), source: 'ai' });
     gameLoop.processNext();
     expect(blocked).toHaveLength(1);
     expect(blocked[0].reason).toContain('Already attached an Energy');
@@ -177,12 +177,12 @@ describe('warnOneEnergyAttachment', () => {
     const { state, gameLoop, blocked } = setupGame();
 
     const energy1 = placeCard(state, 0, 'hand', FAIRY_ENERGY);
-    gameLoop.submit(moveCard(0, energy1, 'hand', 'active', 0));
+    gameLoop.submit(moveCard(0, energy1, makeZoneKey(0, 'hand'), makeZoneKey(0, 'active'), 0));
     gameLoop.processNext();
     expect(blocked).toHaveLength(0);
 
     const energy2 = placeCard(state, 0, 'hand', FAIRY_ENERGY);
-    gameLoop.submit(moveCard(0, energy2, 'hand', 'discard'));
+    gameLoop.submit(moveCard(0, energy2, makeZoneKey(0, 'hand'), makeZoneKey(0, 'discard')));
     gameLoop.processNext();
     expect(blocked).toHaveLength(0);
   });
@@ -194,7 +194,7 @@ describe('warnEvolutionChain', () => {
 
     placeCard(state, 0, 'active', JIGGLYPUFF);
     const pidgeotto = placeCard(state, 0, 'hand', PIDGEOTTO);
-    gameLoop.submit({ ...moveCard(0, pidgeotto, 'hand', 'active'), source: 'ai' });
+    gameLoop.submit({ ...moveCard(0, pidgeotto, makeZoneKey(0, 'hand'), makeZoneKey(0, 'active')), source: 'ai' });
     gameLoop.processNext();
     expect(blocked).toHaveLength(1);
     expect(blocked[0].reason).toContain('no Pidgey found');
@@ -205,7 +205,7 @@ describe('warnEvolutionChain', () => {
 
     placeCard(state, 0, 'active', PIDGEY);
     const pidgeotto = placeCard(state, 0, 'hand', PIDGEOTTO);
-    gameLoop.submit(moveCard(0, pidgeotto, 'hand', 'active'));
+    gameLoop.submit(moveCard(0, pidgeotto, makeZoneKey(0, 'hand'), makeZoneKey(0, 'active')));
     gameLoop.processNext();
     expect(blocked).toHaveLength(0);
   });
@@ -215,7 +215,7 @@ describe('warnEvolutionChain', () => {
 
     placeCard(state, 0, 'active', JIGGLYPUFF);
     const pidgeotto = placeCard(state, 0, 'hand', PIDGEOTTO);
-    gameLoop.submit({ ...moveCard(0, pidgeotto, 'hand', 'active'), source: 'ai' });
+    gameLoop.submit({ ...moveCard(0, pidgeotto, makeZoneKey(0, 'hand'), makeZoneKey(0, 'active')), source: 'ai' });
     gameLoop.processNext();
     expect(blocked).toHaveLength(1);
     expect(blocked[0].reason).toContain('no Pidgey found');
@@ -226,7 +226,7 @@ describe('warnEvolutionChain', () => {
 
     placeCard(state, 0, 'active', PIDGEY);
     const pidgeotto = placeCard(state, 0, 'hand', PIDGEOTTO);
-    gameLoop.submit(moveCard(0, pidgeotto, 'hand', 'active'));
+    gameLoop.submit(moveCard(0, pidgeotto, makeZoneKey(0, 'hand'), makeZoneKey(0, 'active')));
     gameLoop.processNext();
     expect(blocked).toHaveLength(0);
   });
@@ -235,7 +235,7 @@ describe('warnEvolutionChain', () => {
     const { state, gameLoop, blocked } = setupGame();
 
     const pidgeotto = placeCard(state, 0, 'hand', PIDGEOTTO);
-    gameLoop.submit(moveCard(0, pidgeotto, 'hand', 'discard'));
+    gameLoop.submit(moveCard(0, pidgeotto, makeZoneKey(0, 'hand'), makeZoneKey(0, 'discard')));
     gameLoop.processNext();
     expect(blocked).toHaveLength(0);
   });
@@ -249,7 +249,7 @@ describe('warnEvolutionTiming', () => {
 
     placeCard(state, 0, 'active', PIDGEY);
     const pidgeotto = placeCard(state, 0, 'hand', PIDGEOTTO);
-    gameLoop.submit({ ...moveCard(0, pidgeotto, 'hand', 'active'), source: 'ai' });
+    gameLoop.submit({ ...moveCard(0, pidgeotto, makeZoneKey(0, 'hand'), makeZoneKey(0, 'active')), source: 'ai' });
     gameLoop.processNext();
     expect(blocked).toHaveLength(1);
     expect(blocked[0].reason).toContain('Cannot evolve on the first turn');
@@ -267,7 +267,7 @@ describe('warnEvolutionTiming', () => {
     activeZone.cards.push(pidgeyCard);
 
     const pidgeotto = placeCard(state, 0, 'hand', PIDGEOTTO);
-    gameLoop.submit({ ...moveCard(0, pidgeotto, 'hand', 'active'), source: 'ai' });
+    gameLoop.submit({ ...moveCard(0, pidgeotto, makeZoneKey(0, 'hand'), makeZoneKey(0, 'active')), source: 'ai' });
     gameLoop.processNext();
     expect(blocked).toHaveLength(1);
     expect(blocked[0].reason).toContain('Cannot evolve on the first turn or the turn a Pokemon was played');
@@ -291,7 +291,7 @@ describe('warnNonBasicToEmptyField', () => {
     const { state, gameLoop, blocked } = setupGame();
 
     const pidgeotto = placeCard(state, 0, 'hand', PIDGEOTTO);
-    gameLoop.submit({ ...moveCard(0, pidgeotto, 'hand', 'active'), source: 'ai' });
+    gameLoop.submit({ ...moveCard(0, pidgeotto, makeZoneKey(0, 'hand'), makeZoneKey(0, 'active')), source: 'ai' });
     gameLoop.processNext();
     expect(blocked).toHaveLength(1);
     expect(blocked[0].reason).toContain('Cannot place Pidgeotto');
@@ -302,7 +302,7 @@ describe('warnNonBasicToEmptyField', () => {
     const { state, gameLoop, blocked } = setupGame();
 
     const pidgey = placeCard(state, 0, 'hand', PIDGEY);
-    gameLoop.submit(moveCard(0, pidgey, 'hand', 'active'));
+    gameLoop.submit(moveCard(0, pidgey, makeZoneKey(0, 'hand'), makeZoneKey(0, 'active')));
     gameLoop.processNext();
     expect(blocked).toHaveLength(0);
   });
@@ -311,7 +311,7 @@ describe('warnNonBasicToEmptyField', () => {
     const { state, gameLoop, blocked } = setupGame();
 
     const energy = placeCard(state, 0, 'hand', FAIRY_ENERGY);
-    gameLoop.submit({ ...moveCard(0, energy, 'hand', 'active'), source: 'ai' });
+    gameLoop.submit({ ...moveCard(0, energy, makeZoneKey(0, 'hand'), makeZoneKey(0, 'active')), source: 'ai' });
     gameLoop.processNext();
     expect(blocked).toHaveLength(1);
     expect(blocked[0].reason).toContain('on empty active');
@@ -322,7 +322,7 @@ describe('warnNonBasicToEmptyField', () => {
     const { state, gameLoop, blocked } = setupGame();
 
     const potion = placeCard(state, 0, 'hand', POTION);
-    gameLoop.submit({ ...moveCard(0, potion, 'hand', 'active'), source: 'ai' });
+    gameLoop.submit({ ...moveCard(0, potion, makeZoneKey(0, 'hand'), makeZoneKey(0, 'active')), source: 'ai' });
     gameLoop.processNext();
     expect(blocked).toHaveLength(1);
     expect(blocked[0].reason).toContain('on empty active');
@@ -333,7 +333,7 @@ describe('warnNonBasicToEmptyField', () => {
     const { state, gameLoop, blocked } = setupGame();
 
     const pidgeotto = placeCard(state, 0, 'hand', PIDGEOTTO);
-    gameLoop.submit({ ...moveCardStack(0, [pidgeotto], 'hand', 'active'), source: 'ai' });
+    gameLoop.submit({ ...moveCardStack(0, [pidgeotto], makeZoneKey(0, 'hand'), makeZoneKey(0, 'active')), source: 'ai' });
     gameLoop.processNext();
     expect(blocked).toHaveLength(1);
     expect(blocked[0].reason).toContain('Cannot place Pidgeotto');
@@ -349,7 +349,7 @@ describe('warnOneEnergyAttachment (same-zone)', () => {
     const energy = placeCard(state, 0, 'active', FAIRY_ENERGY);
 
     // Move energy within the same zone (rearrange)
-    gameLoop.submit({ ...moveCard(0, energy, 'active', 'active'), source: 'ai' });
+    gameLoop.submit({ ...moveCard(0, energy, makeZoneKey(0, 'active'), makeZoneKey(0, 'active')), source: 'ai' });
     gameLoop.processNext();
     expect(blocked).toHaveLength(0);
   });
@@ -366,7 +366,7 @@ describe('warnEnergyOnTopOfPokemon', () => {
     const energy = placeCard(state, 0, 'hand', FAIRY_ENERGY);
 
     // position 0 = visual bottom = underneath = correct for energy
-    gameLoop.submit({ ...moveCard(0, energy, 'hand', 'active', 0), source: 'ai' });
+    gameLoop.submit({ ...moveCard(0, energy, makeZoneKey(0, 'hand'), makeZoneKey(0, 'active'), 0), source: 'ai' });
     gameLoop.processNext();
     expect(blocked).toHaveLength(0);
   });
@@ -378,7 +378,7 @@ describe('warnEnergyOnTopOfPokemon', () => {
     const energy = placeCard(state, 0, 'hand', FAIRY_ENERGY);
 
     // No position = append to end = visual top = on top of Pokemon
-    gameLoop.submit({ ...moveCard(0, energy, 'hand', 'active'), source: 'ai' });
+    gameLoop.submit({ ...moveCard(0, energy, makeZoneKey(0, 'hand'), makeZoneKey(0, 'active')), source: 'ai' });
     gameLoop.processNext();
     expect(blocked).toHaveLength(1);
     expect(blocked[0].reason).toContain('Cannot place energy on top of Pokemon');
@@ -391,7 +391,7 @@ describe('warnEnergyOnTopOfPokemon', () => {
     const energy = placeCard(state, 0, 'hand', FAIRY_ENERGY);
 
     // No position = append to end = visual top
-    gameLoop.submit({ ...moveCardStack(0, [energy], 'hand', 'active'), source: 'ai' });
+    gameLoop.submit({ ...moveCardStack(0, [energy], makeZoneKey(0, 'hand'), makeZoneKey(0, 'active')), source: 'ai' });
     gameLoop.processNext();
     expect(blocked).toHaveLength(1);
     expect(blocked[0].reason).toContain('Cannot place energy on top of Pokemon');
@@ -403,7 +403,7 @@ describe('warnStadiumOnly', () => {
     const { state, gameLoop, blocked } = setupGame();
 
     const energy = placeCard(state, 0, 'hand', FAIRY_ENERGY);
-    gameLoop.submit({ ...moveCard(0, energy, 'hand', 'stadium'), source: 'ai' });
+    gameLoop.submit({ ...moveCard(0, energy, makeZoneKey(0, 'hand'), makeZoneKey(0, 'stadium')), source: 'ai' });
     gameLoop.processNext();
     expect(blocked).toHaveLength(1);
     expect(blocked[0].reason).toContain('Only Stadium cards');
@@ -413,7 +413,7 @@ describe('warnStadiumOnly', () => {
     const { state, gameLoop, blocked } = setupGame();
 
     const pidgey = placeCard(state, 0, 'hand', PIDGEY);
-    gameLoop.submit({ ...moveCard(0, pidgey, 'hand', 'stadium'), source: 'ai' });
+    gameLoop.submit({ ...moveCard(0, pidgey, makeZoneKey(0, 'hand'), makeZoneKey(0, 'stadium')), source: 'ai' });
     gameLoop.processNext();
     expect(blocked).toHaveLength(1);
     expect(blocked[0].reason).toContain('Only Stadium cards');
@@ -423,7 +423,7 @@ describe('warnStadiumOnly', () => {
     const { state, gameLoop, blocked } = setupGame();
 
     const potion = placeCard(state, 0, 'hand', POTION);
-    gameLoop.submit({ ...moveCardStack(0, [potion], 'hand', 'stadium'), source: 'ai' });
+    gameLoop.submit({ ...moveCardStack(0, [potion], makeZoneKey(0, 'hand'), makeZoneKey(0, 'stadium')), source: 'ai' });
     gameLoop.processNext();
     expect(blocked).toHaveLength(1);
     expect(blocked[0].reason).toContain('Only Stadium cards');
@@ -433,7 +433,7 @@ describe('warnStadiumOnly', () => {
     const { state, gameLoop, blocked } = setupGame();
 
     const stadium = placeCard(state, 0, 'hand', STADIUM_CARD);
-    gameLoop.submit(moveCard(0, stadium, 'hand', 'stadium'));
+    gameLoop.submit(moveCard(0, stadium, makeZoneKey(0, 'hand'), makeZoneKey(0, 'stadium')));
     gameLoop.processNext();
     expect(blocked).toHaveLength(0);
   });

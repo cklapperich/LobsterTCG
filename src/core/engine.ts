@@ -35,7 +35,6 @@ import { VISIBILITY } from './types';
 // ============================================================================
 
 export const STAGING_ZONE_CONFIG: ZoneConfig = {
-  id: 'staging',
   name: 'Staging',
   ordered: false,
   defaultVisibility: VISIBILITY.PUBLIC,
@@ -71,10 +70,11 @@ export function createCardInstance<T extends CardTemplate>(
 
 function createZone<T extends CardTemplate>(
   config: ZoneConfig,
-  owner: PlayerIndex
+  owner: PlayerIndex,
+  key: string
 ): Zone<T> {
   return {
-    key: makeZoneKey(owner, config.id),
+    key,
     config,
     owner,
     cards: [],
@@ -129,14 +129,14 @@ export function createGameState<T extends CardTemplate>(
   // Create flattened zones for all players
   const zones: Record<string, Zone<T>> = {};
   for (let playerIndex = 0; playerIndex < config.playerCount; playerIndex++) {
-    for (const zoneConfig of config.zones) {
-      const key = makeZoneKey(playerIndex as PlayerIndex, zoneConfig.id);
-      zones[key] = createZone(zoneConfig, playerIndex as PlayerIndex);
+    for (const [zoneId, zoneConfig] of Object.entries(config.zones)) {
+      const key = makeZoneKey(playerIndex as PlayerIndex, zoneId);
+      zones[key] = createZone(zoneConfig, playerIndex as PlayerIndex, key);
     }
 
     // Inject staging zone for each player
-    const stagingKey = makeZoneKey(playerIndex as PlayerIndex, STAGING_ZONE_CONFIG.id);
-    zones[stagingKey] = createZone(STAGING_ZONE_CONFIG, playerIndex as PlayerIndex);
+    const stagingKey = makeZoneKey(playerIndex as PlayerIndex, 'staging');
+    zones[stagingKey] = createZone(STAGING_ZONE_CONFIG, playerIndex as PlayerIndex, stagingKey);
   }
 
   return {
@@ -175,12 +175,11 @@ export interface DeckList {
 export function loadDeck<T extends CardTemplate>(
   state: GameState<T>,
   playerIndex: PlayerIndex,
-  zoneId: string,
+  zoneKey: string,
   deckList: DeckList,
   getTemplate: (templateId: string) => T | undefined,
   shuffle: boolean = true
 ): void {
-  const zoneKey = makeZoneKey(playerIndex, zoneId);
   const zone = state.zones[zoneKey];
   if (!zone) {
     throw new Error(`Zone "${zoneKey}" not found for player ${playerIndex}`);
@@ -243,10 +242,8 @@ export function getCardName<T extends CardTemplate>(
 
 function getZone<T extends CardTemplate>(
   state: GameState<T>,
-  zoneId: string,
-  playerIndex: PlayerIndex
+  zoneKey: string
 ): Zone<T> | null {
-  const zoneKey = makeZoneKey(playerIndex, zoneId);
   return state.zones[zoneKey] ?? null;
 }
 
@@ -274,8 +271,10 @@ function executeDraw<T extends CardTemplate>(
   state: GameState<T>,
   action: DrawAction
 ): void {
-  const deck = getZone(state, 'deck', action.player);
-  const hand = getZone(state, 'hand', action.player);
+  const deckKey = makeZoneKey(action.player, 'deck');
+  const handKey = makeZoneKey(action.player, 'hand');
+  const deck = getZone(state, deckKey);
+  const hand = getZone(state, handKey);
 
   if (!deck || !hand) return;
 
@@ -295,8 +294,8 @@ function executeMoveCard<T extends CardTemplate>(
   state: GameState<T>,
   action: MoveCardAction
 ): void {
-  const fromZone = getZone(state, action.fromZone, action.player);
-  const toZone = getZone(state, action.toZone, action.player);
+  const fromZone = getZone(state, action.fromZone);
+  const toZone = getZone(state, action.toZone);
 
   if (!fromZone || !toZone) return;
 
@@ -317,8 +316,8 @@ function executeMoveCardStack<T extends CardTemplate>(
   state: GameState<T>,
   action: MoveCardStackAction
 ): void {
-  const fromZone = getZone(state, action.fromZone, action.player);
-  const toZone = getZone(state, action.toZone, action.player);
+  const fromZone = getZone(state, action.fromZone);
+  const toZone = getZone(state, action.toZone);
 
   if (!fromZone || !toZone) return;
 
@@ -342,7 +341,7 @@ function executePlaceOnZone<T extends CardTemplate>(
   state: GameState<T>,
   action: PlaceOnZoneAction
 ): void {
-  const zone = getZone(state, action.zoneId, action.player);
+  const zone = getZone(state, action.zoneId);
   if (!zone) return;
 
   const cardsToPlace: CardInstance<T>[] = [];
@@ -369,7 +368,7 @@ function executeShuffle<T extends CardTemplate>(
   state: GameState<T>,
   action: ShuffleAction
 ): void {
-  const zone = getZone(state, action.zoneId, action.player);
+  const zone = getZone(state, action.zoneId);
   if (!zone) return;
 
   shuffleArray(zone.cards);
@@ -535,7 +534,7 @@ function executePeek<T extends CardTemplate>(
   state: GameState<T>,
   action: PeekAction
 ): CardInstance<T>[] {
-  const zone = getZone(state, action.zoneId, action.player);
+  const zone = getZone(state, action.zoneId);
   if (!zone) return [];
 
   const cards: CardInstance<T>[] = [];
@@ -569,19 +568,19 @@ function checkZoneCapacity<T extends CardTemplate>(
 ): string | null {
   switch (action.type) {
     case 'move_card': {
-      const toZone = getZone(state, action.toZone, action.player);
+      const toZone = getZone(state, action.toZone);
       if (toZone && isZoneAtCapacity(toZone))
         return `Move blocked: ${toZone.config.name} is full (${toZone.config.maxCards}/${toZone.config.maxCards} cards)`;
       return null;
     }
     case 'move_card_stack': {
-      const toZone = getZone(state, action.toZone, action.player);
+      const toZone = getZone(state, action.toZone);
       if (toZone && isZoneAtCapacity(toZone, action.cardInstanceIds.length))
         return `Move blocked: ${toZone.config.name} is full (${toZone.config.maxCards}/${toZone.config.maxCards} cards)`;
       return null;
     }
     case 'place_on_zone': {
-      const zone = getZone(state, action.zoneId, action.player);
+      const zone = getZone(state, action.zoneId);
       if (zone && isZoneAtCapacity(zone, action.cardInstanceIds.length))
         return `Place blocked: ${zone.config.name} is full (${zone.config.maxCards}/${zone.config.maxCards} cards)`;
       return null;
@@ -608,33 +607,35 @@ export function checkOpponentZone<T extends CardTemplate>(
   if (action.allowed_by_effect) return null;
 
   // Only check actions that place/move cards into zones
-  let toZoneId: string | undefined;
+  let zoneKey: string | undefined;
   switch (action.type) {
     case 'move_card':
-      toZoneId = action.toZone;
+      zoneKey = action.toZone;
       break;
     case 'move_card_stack':
-      toZoneId = action.toZone;
+      zoneKey = action.toZone;
       break;
     case 'place_on_zone':
-      toZoneId = action.zoneId;
+      zoneKey = action.zoneId;
       break;
     default:
       return null;
   }
 
-  if (!toZoneId) return null;
+  if (!zoneKey) return null;
   if (action.player === state.activePlayer) return null;
 
+  // Parse the zone key to get zone ID
+  const { zoneId } = parseZoneKey(zoneKey);
+
   // Moving cards to opponent's discard is normal gameplay (e.g., knockout)
-  if (toZoneId === 'discard') return null;
+  if (zoneId === 'discard') return null;
 
   // Check if the target zone is shared
-  const zoneKey = makeZoneKey(action.player, toZoneId);
   const zone = state.zones[zoneKey];
   if (zone?.config.shared) return null;
 
-  const reason = `Cannot move cards to opponent's ${toZoneId}. Set allowed_by_effect if a card effect permits this.`;
+  const reason = `Cannot move cards to opponent's ${zoneId}. Set allowed_by_effect if a card effect permits this.`;
   return {
     shouldBlock: action.source === 'ai',
     reason,
