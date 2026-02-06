@@ -28,6 +28,7 @@ export class PluginManager<T extends CardTemplate = CardTemplate> {
   private stateObservers: AggregatedHook<StateObserver<T>>[] = [];
   private blockers: AggregatedHook<ActionBlocker<T>>[] = [];
   private readableStateModifier: ((readable: ReadableGameState) => ReadableGameState) | null = null;
+  private readableStateFormatter: ((readable: ReadableGameState) => string) | null = null;
 
   register(plugin: Plugin<T>): void {
     if (this.plugins.has(plugin.id)) {
@@ -103,6 +104,7 @@ export class PluginManager<T extends CardTemplate = CardTemplate> {
     this.stateObservers = [];
     this.blockers = [];
     this.readableStateModifier = null;
+    this.readableStateFormatter = null;
 
     for (const [pluginId, plugin] of this.plugins) {
       // Aggregate pre-hooks
@@ -136,6 +138,11 @@ export class PluginManager<T extends CardTemplate = CardTemplate> {
       // Use the last registered readable state modifier
       if (plugin.readableStateModifier) {
         this.readableStateModifier = plugin.readableStateModifier;
+      }
+
+      // Use the last registered readable state formatter
+      if (plugin.readableStateFormatter) {
+        this.readableStateFormatter = plugin.readableStateFormatter;
       }
     }
 
@@ -263,6 +270,12 @@ export class PluginManager<T extends CardTemplate = CardTemplate> {
 
   applyReadableStateModifier(readable: ReadableGameState): ReadableGameState {
     return this.readableStateModifier ? this.readableStateModifier(readable) : readable;
+  }
+
+  formatReadableState(readable: ReadableGameState): string {
+    return this.readableStateFormatter
+      ? this.readableStateFormatter(readable)
+      : JSON.stringify(readable);
   }
 
   getCustomExecutor(actionType: string): CustomActionExecutor<T, any> | undefined {

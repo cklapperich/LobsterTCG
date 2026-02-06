@@ -13,7 +13,7 @@
   import CounterDragOverlay from './CounterDragOverlay.svelte';
   import CoinFlip from './CoinFlip.svelte';
   import ActionPanelView from './ActionPanelView.svelte';
-  import { dragStore, startDrag, updateDragPosition, endDrag, executeDrop } from './dragState.svelte';
+  import { dragStore, startDrag, startPileDrag, updateDragPosition, endDrag, executeDrop, executeStackDrop } from './dragState.svelte';
   import {
     counterDragStore,
     executeCounterDrop,
@@ -65,6 +65,10 @@
   const actionPanels = $derived(
     gameState && plugin.getActionPanels ? plugin.getActionPanels(gameState, 0) : []
   );
+
+  // Split attacks panel (goes in grid) from other panels (stay in sidebar)
+  const attacksPanel = $derived(actionPanels.find(p => p.id === 'attacks'));
+  const sidebarPanels = $derived(actionPanels.filter(p => p.id !== 'attacks'));
 
   function handleActionPanelClick(panelId: string, buttonId: string) {
     if (!gameState || !plugin.onActionPanelClick) return;
@@ -422,11 +426,14 @@
   // Debug modal
   let showDebugModal = $state(false);
   let debugJson = $state('');
+  let debugNarrative = $state('');
+  let debugTab = $state<'narrative' | 'json'>('narrative');
 
   function handleDebug() {
     if (!gameState) return;
     const readable = pluginManager.applyReadableStateModifier(toReadableState(gameState, gameState.activePlayer));
     debugJson = JSON.stringify(readable, null, 2);
+    debugNarrative = pluginManager.formatReadableState(readable);
     showDebugModal = true;
   }
 
@@ -441,9 +448,10 @@
       playerIndex: 1,
       isDecisionResponse: options?.isDecisionResponse,
       getState: () => gameState!,
-      getReadableState: () => JSON.stringify(
-        pluginManager.applyReadableStateModifier(toReadableState(gameState!, 1))
-      ),
+      getReadableState: () => {
+        const modified = pluginManager.applyReadableStateModifier(toReadableState(gameState!, 1));
+        return pluginManager.formatReadableState(modified);
+      },
       execute: (action) => {
         const result = queue.then(async () => {
           action.source = 'ai';
@@ -458,17 +466,15 @@
             }
             action.results = results;
             tryAction(action);
-            return JSON.stringify({
-              coin_flip_results: results.map(r => r ? 'heads' : 'tails'),
-              state: JSON.parse(ctx.getReadableState()),
-            });
+            const resultStr = results.map(r => r ? 'HEADS' : 'TAILS').join(', ');
+            return `Coin flip results: ${resultStr}\n\n${ctx.getReadableState()}`;
           }
 
           // Resolve log message BEFORE action executes (card names may change post-move)
           const logMessage = gameState ? describeAction(gameState, action) : null;
 
           const blocked = tryAction(action);
-          if (blocked) return JSON.stringify({ blocked });
+          if (blocked) return `Action blocked: ${blocked}`;
 
           // Log the action
           if (logMessage) addLog(logMessage);
@@ -718,86 +724,137 @@
       triggerAIDecisionTurn();
     }
   }
+
+  function handleMovePile() {
+    if (!gameState || !contextMenu) return;
+    const zoneKey = contextMenu.zoneKey;
+    const zoneName = contextMenu.zoneName;
+    const zone = gameState.zones[zoneKey];
+    if (!zone || zone.cards.length === 0) return;
+
+    const cards = [...zone.cards];
+    const startX = contextMenu.x;
+    const startY = contextMenu.y;
+    closeContextMenuStore();
+    startPileDrag(cards, zoneKey, startX, startY);
+
+    function onMouseMove(e: MouseEvent) {
+      updateDragPosition(e.clientX, e.clientY);
+    }
+    function onMouseUp(e: MouseEvent) {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const zoneEl = el?.closest('[data-zone-key]') as HTMLElement | null;
+      if (zoneEl && gameState) {
+        const toZoneKey = zoneEl.dataset.zoneKey!;
+        const updatedState = executeStackDrop(toZoneKey, gameState, undefined, pluginManager);
+        if (updatedState) {
+          gameState = updatedState;
+          const toZoneName = gameState.zones[toZoneKey]?.config.name ?? toZoneKey;
+          gameState.log.push(`[Player ${gameState.activePlayer + 1}] Moved ${cards.length} cards from ${zoneName} to ${toZoneName}`);
+          gameState = { ...gameState };
+        }
+      }
+      endDrag();
+    }
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  }
 </script>
 
 <div class="game-container font-retro bg-gbc-bg min-h-screen w-screen p-4 box-border relative overflow-auto">
   <div class="scanlines"></div>
 
   <div class="game-content">
-  <header class="gbc-panel text-center mb-4 flex items-center justify-between px-4">
-    <div class="flex-1 flex justify-start">
-      {#if gameState}
-        <div class="turn-info text-[0.5rem]">
-          {#if gameState.phase === 'setup'}
-            <span class="text-gbc-yellow">SETUP</span>
+  <header class="gbc-panel mb-4 px-4 py-3">
+    <div class="flex items-center justify-between">
+      <!-- LEFT: Phase indicator -->
+      <div class="flex-1 flex justify-start">
+        <h1 class="text-xl max-sm:text-sm m-0 tracking-wide title-shadow font-retro phase-title">
+          {#if !gameState}
+            <span class="text-gbc-yellow">LOADING...</span>
+          {:else if gameState.phase === 'setup'}
+            <span class="text-gbc-yellow">SETUP PHASE</span>
+          {:else if aiThinking}
+            <span class="text-gbc-red animate-pulse">AI THINKING...</span>
+          {:else if decisionTargetsHuman}
+            <span class="text-gbc-red animate-pulse">RESOLVE DECISION</span>
+          {:else if gameState.pendingDecision?.targetPlayer === 1}
+            <span class="text-gbc-blue animate-pulse">WAITING FOR AI...</span>
+          {:else if gameState.activePlayer === 0}
+            <span class="text-gbc-green">YOUR TURN</span>
           {:else}
-            <span class="text-gbc-light">TURN</span>
-            <span class="text-gbc-yellow ml-1">{gameState.turnNumber}</span>
+            <span class="text-gbc-blue">AI TURN</span>
           {/if}
-          <span class="text-gbc-light ml-2">PLAYER</span>
-          <span class="text-gbc-green ml-1">{gameState.activePlayer + 1}</span>
-          {#if aiThinking}
-            <span class="text-gbc-red ml-2 animate-pulse">AI THINKING...</span>
-          {/if}
-        </div>
-      {/if}
-    </div>
-    <h1 class="text-gbc-yellow text-xl max-sm:text-sm m-0 tracking-wide title-shadow">
-      {playmat?.name ?? 'LOADING...'}
-    </h1>
-    <div class="flex-1 flex justify-end gap-2">
-      {#if decisionTargetsHuman}
-        <button
-          class="gbc-btn text-[0.5rem] py-1 px-3"
-          onclick={handleResolveDecision}
-          disabled={!gameState}
-        >
-          RESOLVE DECISION
-        </button>
-      {:else}
-        <button
-          class="gbc-btn text-[0.5rem] py-1 px-3"
-          onclick={handleEndTurn}
-          disabled={!gameState || aiThinking}
-        >
-          {gameState?.phase === 'setup' ? 'END SETUP' : 'END TURN'}
-        </button>
-      {/if}
-      <button
-        class="gbc-btn text-[0.5rem] py-1 px-3"
-        onclick={handleRequestAction}
-        disabled={!gameState || aiThinking || !!gameState?.pendingDecision}
-      >
-        REQUEST ACTION
-      </button>
-      <button
-        class="gbc-btn text-[0.5rem] py-1 px-3"
-        onclick={() => coinFlipRef?.flip()}
-        disabled={coinFlipRef?.isFlipping()}
-      >
-        FLIP COIN
-      </button>
-      <button class="gbc-btn text-[0.5rem] py-1 px-3" onclick={handleDebug} disabled={!gameState}>
-        DEBUG
-      </button>
-      <button class="gbc-btn text-[0.5rem] py-1 px-3" onclick={resetGame}>
-        NEW GAME
-      </button>
-      {#if onBackToMenu}
-        <button class="gbc-btn text-[0.5rem] py-1 px-3" onclick={handleBackToMenu}>
-          MENU
-        </button>
-      {/if}
-    </div>
-  </header>
+        </h1>
+      </div>
 
-  {#if decisionTargetsHuman && gameState?.pendingDecision}
-    <div class="gbc-panel text-center mb-2 py-2 px-4 bg-gbc-red/20 border-gbc-red">
-      <span class="text-gbc-yellow text-[0.5rem] font-retro">
-        DECISION: {gameState.pendingDecision.message ?? 'Your opponent requests an action'}
-      </span>
+      <!-- CENTER: Turn counter -->
+      <div class="flex items-center gap-3 font-retro text-sm max-sm:text-[0.5rem] tracking-wide">
+        {#if gameState && gameState.phase !== 'setup'}
+          <span class="text-gbc-light">TURN</span>
+          <span class="text-gbc-yellow">{gameState.turnNumber}</span>
+        {/if}
+      </div>
+
+      <!-- RIGHT: Buttons -->
+      <div class="flex-1 flex justify-end gap-2">
+        {#if decisionTargetsHuman}
+          <button
+            class="gbc-btn text-[0.5rem] py-1 px-3"
+            onclick={handleResolveDecision}
+            disabled={!gameState}
+          >
+            RESOLVE DECISION
+          </button>
+        {:else}
+          <button
+            class="gbc-btn text-[0.5rem] py-1 px-3"
+            onclick={handleEndTurn}
+            disabled={!gameState || aiThinking}
+          >
+            {gameState?.phase === 'setup' ? 'END SETUP' : 'END TURN'}
+          </button>
+        {/if}
+        <button
+          class="gbc-btn text-[0.5rem] py-1 px-3"
+          onclick={handleRequestAction}
+          disabled={!gameState || aiThinking || !!gameState?.pendingDecision}
+        >
+          REQUEST ACTION
+        </button>
+        <button
+          class="gbc-btn text-[0.5rem] py-1 px-3"
+          onclick={() => coinFlipRef?.flip()}
+          disabled={coinFlipRef?.isFlipping()}
+        >
+          FLIP COIN
+        </button>
+        <button class="gbc-btn text-[0.5rem] py-1 px-3" onclick={handleDebug} disabled={!gameState}>
+          DEBUG
+        </button>
+        <button class="gbc-btn text-[0.5rem] py-1 px-3" onclick={resetGame}>
+          NEW GAME
+        </button>
+        {#if onBackToMenu}
+          <button class="gbc-btn text-[0.5rem] py-1 px-3" onclick={handleBackToMenu}>
+            MENU
+          </button>
+        {/if}
+      </div>
     </div>
-  {/if}
+
+    <!-- Decision message bar -->
+    {#if decisionTargetsHuman && gameState?.pendingDecision}
+      <div class="mt-2 pt-2 border-t-2 border-gbc-border text-center">
+        <span class="text-gbc-yellow text-sm max-sm:text-[0.5rem] font-retro tracking-wide">
+          {gameState.pendingDecision.message ?? 'Your opponent requests an action'}
+        </span>
+      </div>
+    {/if}
+  </header>
 
   {#if loading}
     <div class="gbc-panel text-center p-8">
@@ -816,6 +873,8 @@
           {gameState}
           {cardBack}
           {counterDefinitions}
+          {attacksPanel}
+          onAttackClick={handleActionPanelClick}
           onDrop={handleDrop}
           onPreview={handlePreview}
           onToggleVisibility={handleToggleVisibility}
@@ -843,9 +902,9 @@
           {/if}
         </div>
 
-        {#if actionPanels.length > 0}
+        {#if sidebarPanels.length > 0}
           <ActionPanelView
-            panels={actionPanels}
+            panels={sidebarPanels}
             onButtonClick={handleActionPanelClick}
           />
         {/if}
@@ -901,6 +960,7 @@
       onClearCounters={handleClearCounters}
       onSetOrientation={handleSetOrientation}
       onRevealToOpponent={contextMenu.zoneKey.startsWith('player0_') && !gameState?.pendingDecision ? handleRevealToOpponent : undefined}
+      onMovePile={handleMovePile}
       onClose={handleCloseContextMenu}
     />
   {/if}
@@ -927,6 +987,7 @@
       x={dragState.mouseX}
       y={dragState.mouseY}
       {cardBack}
+      pileCount={dragState.pileCardIds?.length}
     />
   {/if}
 
@@ -955,10 +1016,21 @@
     <div class="debug-overlay" onclick={() => showDebugModal = false} onkeydown={(e) => e.key === 'Escape' && (showDebugModal = false)} role="button" tabindex="-1">
       <div class="debug-modal gbc-panel" onclick={(e) => e.stopPropagation()} onkeydown={() => {}} role="dialog" tabindex="-1">
         <div class="flex items-center justify-between mb-2 py-1 px-2 bg-gbc-border">
-          <span class="text-gbc-yellow text-[0.5rem]">READABLE STATE</span>
+          <div class="flex items-center gap-2">
+            <button
+              class="gbc-btn text-[0.45rem] py-0.5 px-2"
+              class:active={debugTab === 'narrative'}
+              onclick={() => debugTab = 'narrative'}
+            >NARRATIVE</button>
+            <button
+              class="gbc-btn text-[0.45rem] py-0.5 px-2"
+              class:active={debugTab === 'json'}
+              onclick={() => debugTab = 'json'}
+            >JSON</button>
+          </div>
           <button class="gbc-btn text-[0.45rem] py-0.5 px-2" onclick={() => showDebugModal = false}>CLOSE</button>
         </div>
-        <pre class="debug-json">{debugJson}</pre>
+        <pre class="debug-json">{debugTab === 'narrative' ? debugNarrative : debugJson}</pre>
       </div>
     </div>
   {/if}
@@ -984,8 +1056,8 @@
       0.25rem 0.25rem 0 var(--color-gbc-border);
   }
 
-  .turn-info {
-    @apply font-retro tracking-wide;
+  .phase-title {
+    white-space: nowrap;
   }
 
   .game-content {
@@ -1090,5 +1162,9 @@
     @apply overflow-auto px-3 py-2 text-[0.45rem] text-gbc-light font-retro leading-relaxed whitespace-pre m-0;
     scrollbar-width: thin;
     scrollbar-color: var(--color-gbc-green) var(--color-gbc-border);
+  }
+
+  :global(.gbc-btn.active) {
+    @apply bg-gbc-green text-gbc-dark-green;
   }
 </style>

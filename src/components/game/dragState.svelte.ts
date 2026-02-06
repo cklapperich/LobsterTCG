@@ -1,5 +1,5 @@
 import type { CardInstance, CardTemplate, Visibility, GameState } from '../../core';
-import { executeAction, moveCard, flipCard, checkOpponentZone, VISIBILITY, type PluginManager } from '../../core';
+import { executeAction, moveCard, moveCardStack, flipCard, checkOpponentZone, VISIBILITY, type PluginManager } from '../../core';
 import { playSfx } from '../../lib/audio.svelte';
 
 export interface DragState {
@@ -9,6 +9,7 @@ export interface DragState {
   card: CardInstance<CardTemplate>;
   mouseX: number;
   mouseY: number;
+  pileCardIds?: string[];
 }
 
 // Export the state directly so Svelte can track it reactively
@@ -27,6 +28,25 @@ export function startDrag(
     card,
     mouseX: x,
     mouseY: y
+  };
+}
+
+export function startPileDrag(
+  cards: CardInstance<CardTemplate>[],
+  fromZoneKey: string,
+  x: number,
+  y: number
+): void {
+  if (cards.length === 0) return;
+  const topCard = cards[cards.length - 1];
+  dragStore.current = {
+    cardInstanceId: topCard.instanceId,
+    fromZoneKey,
+    originalVisibility: [...topCard.visibility] as Visibility,
+    card: topCard,
+    mouseX: x,
+    mouseY: y,
+    pileCardIds: cards.map(c => c.instanceId),
   };
 }
 
@@ -146,5 +166,96 @@ export function executeDrop(
   playSfx('cardDrop');
 
   // Return updated game state for reactivity
+  return { ...gameState };
+}
+
+export function executeStackDrop(
+  toZoneKey: string,
+  gameState: GameState<CardTemplate>,
+  position?: number,
+  pluginManager?: PluginManager<CardTemplate>
+): GameState<CardTemplate> | null {
+  if (!dragStore.current || !dragStore.current.pileCardIds) return null;
+
+  const { fromZoneKey, pileCardIds } = dragStore.current;
+
+  // Don't move to same zone
+  if (fromZoneKey === toZoneKey) {
+    dragStore.current = null;
+    return null;
+  }
+
+  const fromPlayerIndex = fromZoneKey.startsWith('player0_') ? 0 : 1;
+  const toPlayerIndex = toZoneKey.startsWith('player0_') ? 0 : 1;
+  const actionPlayer = toPlayerIndex;
+  const action = moveCardStack(actionPlayer, pileCardIds, fromZoneKey, toZoneKey, position);
+
+  // Opponent zone check
+  const opponentCheck = checkOpponentZone(gameState, action);
+  if (opponentCheck) {
+    if (opponentCheck.shouldBlock) {
+      gameState.log.push(`Action blocked: ${opponentCheck.reason}`);
+      dragStore.current = null;
+      return null;
+    } else {
+      gameState.log.push(`Warning: ${opponentCheck.reason}`);
+    }
+  }
+
+  // Run plugin pre-hooks
+  if (pluginManager) {
+    const preResult = pluginManager.runPreHooks(gameState, action);
+    if (preResult.outcome === 'block') {
+      gameState.log.push(`Action blocked: ${preResult.reason ?? 'Unknown'}`);
+      dragStore.current = null;
+      return null;
+    }
+    if (preResult.outcome === 'warn') {
+      gameState.log.push(`Warning: ${preResult.reason}`);
+    }
+  }
+
+  if (fromPlayerIndex !== toPlayerIndex) {
+    // Cross-player: inline splice for all cards
+    const fromZone = gameState.zones[fromZoneKey];
+    const toZone = gameState.zones[toZoneKey];
+    if (toZone && toZone.config.maxCards !== -1 && toZone.cards.length + pileCardIds.length > toZone.config.maxCards) {
+      gameState.log.push(`Move blocked: ${toZone.config.name} is full`);
+      dragStore.current = null;
+      return null;
+    }
+    if (fromZone && toZone) {
+      const movedCards: CardInstance<CardTemplate>[] = [];
+      for (const id of pileCardIds) {
+        const idx = fromZone.cards.findIndex(c => c.instanceId === id);
+        if (idx !== -1) {
+          const [card] = fromZone.cards.splice(idx, 1);
+          movedCards.push(card);
+        }
+      }
+      if (position !== undefined) {
+        toZone.cards.splice(position, 0, ...movedCards);
+      } else {
+        toZone.cards.push(...movedCards);
+      }
+    }
+  } else {
+    // Same-player: use executeAction
+    const blocked = executeAction(gameState, action);
+    if (blocked) {
+      dragStore.current = null;
+      return null;
+    }
+  }
+
+  // Run post-hooks
+  if (pluginManager) {
+    pluginManager.runPostHooks(gameState, action, gameState);
+  }
+
+  // Clear drag state
+  dragStore.current = null;
+  playSfx('cardDrop');
+
   return { ...gameState };
 }

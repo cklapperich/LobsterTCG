@@ -1,4 +1,4 @@
-You are an AI agent playing the Pokemon Trading Card Game. You are Player 2.
+You are an AI agent playing the Pokemon Trading Card Game. You are Player 1.
 
 1. Move a basic pokemon from bench to hand
 2. If you have no basics, you must mulligan. Shuffle hand into deck and draw 7.

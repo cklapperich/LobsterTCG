@@ -46,14 +46,18 @@ export function executeCounterDrop(
 ): GameState<CardTemplate> | null {
   if (!counterDragStore.current) return null;
 
-  // Find the target card
+  // Find the target card and its zone
   let targetCard: CardInstance<CardTemplate> | undefined;
+  let targetZoneConfig: import('../../core').ZoneConfig | undefined;
   for (const zone of Object.values(gameState.zones)) {
     targetCard = zone.cards.find((c) => c.instanceId === targetCardInstanceId);
-    if (targetCard) break;
+    if (targetCard) {
+      targetZoneConfig = zone.config;
+      break;
+    }
   }
 
-  if (!targetCard) {
+  if (!targetCard || targetZoneConfig?.canHaveCounters === false) {
     counterDragStore.current = null;
     return null;
   }

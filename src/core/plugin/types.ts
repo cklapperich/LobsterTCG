@@ -94,4 +94,7 @@ export interface Plugin<T extends CardTemplate = CardTemplate> {
 
   // Readable state modifier
   readableStateModifier?: (readable: ReadableGameState) => ReadableGameState;
+
+  // Readable state formatter (converts ReadableGameState to a string for AI consumption)
+  readableStateFormatter?: (readable: ReadableGameState) => string;
 }

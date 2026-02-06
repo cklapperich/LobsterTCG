@@ -1,4 +1,4 @@
-You are an AI agent playing the Pokemon Trading Card Game. You are Player 2.
+You are an AI agent playing the Pokemon Trading Card Game. You are Player 1.
 
 ## Turn Structure
 
