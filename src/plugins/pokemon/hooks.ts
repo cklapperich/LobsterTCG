@@ -1,5 +1,5 @@
 import type { Action, GameState, MoveCardAction, MoveCardStackAction, AddCounterAction } from '../../core/types';
-import { VISIBILITY } from '../../core/types';
+import { VISIBILITY, ACTION_TYPES, PHASES, CARD_FLAGS, ACTION_SOURCES } from '../../core/types';
 import type { PreHookResult, PostHookResult, Plugin } from '../../core/plugin/types';
 import type { PokemonCardTemplate } from './cards';
 import { getTemplate } from './cards';
@@ -15,12 +15,19 @@ import {
 } from './helpers';
 import type { ReadableGameState } from '../../core/readable';
 import { formatNarrativeState } from './narrative';
+import {
+  SUPERTYPES,
+  DAMAGE_COUNTER_VALUES,
+  DEGREES_TO_STATUS,
+  TRAINER_BLOCKED_COUNTERS,
+  FIRST_EVOLUTION_TURN,
+} from './constants';
 
 type PokemonState = Readonly<GameState<PokemonCardTemplate>>;
 
 /** Return 'block' for AI actions, 'warn' for UI actions (never block human players). */
 function blockOrWarn(action: Action, reason: string): PreHookResult {
-  if (action.source === 'ai') {
+  if (action.source === ACTION_SOURCES.AI) {
     return { outcome: 'block', reason };
   }
   return { outcome: 'warn', reason };
@@ -39,12 +46,12 @@ function isSupporterPlayed(state: PokemonState, action: Action): boolean {
   let fromZone: string | undefined;
   let toZone: string | undefined;
 
-  if (action.type === 'move_card') {
+  if (action.type === ACTION_TYPES.MOVE_CARD) {
     const a = action as MoveCardAction;
     cardInstanceId = a.cardInstanceId;
     fromZone = a.fromZone;
     toZone = a.toZone;
-  } else if (action.type === 'move_card_stack') {
+  } else if (action.type === ACTION_TYPES.MOVE_CARD_STACK) {
     const a = action as MoveCardStackAction;
     cardInstanceId = a.cardInstanceIds[0];
     fromZone = a.fromZone;
@@ -81,12 +88,12 @@ function warnOneEnergyAttachment(state: PokemonState, action: Action): PreHookRe
   let toZone: string;
   let fromZone: string | undefined;
 
-  if (action.type === 'move_card') {
+  if (action.type === ACTION_TYPES.MOVE_CARD) {
     const moveAction = action as MoveCardAction;
     cardInstanceId = moveAction.cardInstanceId;
     toZone = moveAction.toZone;
     fromZone = moveAction.fromZone;
-  } else if (action.type === 'move_card_stack') {
+  } else if (action.type === ACTION_TYPES.MOVE_CARD_STACK) {
     const stackAction = action as MoveCardStackAction;
     cardInstanceId = stackAction.cardInstanceIds[0];
     toZone = stackAction.toZone;
@@ -111,12 +118,12 @@ function warnOneEnergyAttachment(state: PokemonState, action: Action): PreHookRe
     let prevToZone: string | undefined;
     let prevFromZone: string | undefined;
 
-    if (prev.type === 'move_card') {
+    if (prev.type === ACTION_TYPES.MOVE_CARD) {
       const m = prev as MoveCardAction;
       prevCardId = m.cardInstanceId;
       prevToZone = m.toZone;
       prevFromZone = m.fromZone;
-    } else if (prev.type === 'move_card_stack') {
+    } else if (prev.type === ACTION_TYPES.MOVE_CARD_STACK) {
       const s = prev as MoveCardStackAction;
       prevCardId = s.cardInstanceIds[0];
       prevToZone = s.toZone;
@@ -143,11 +150,11 @@ function warnEvolutionChain(state: PokemonState, action: Action): PreHookResult 
   let cardInstanceId: string;
   let toZone: string;
 
-  if (action.type === 'move_card') {
+  if (action.type === ACTION_TYPES.MOVE_CARD) {
     const a = action as MoveCardAction;
     cardInstanceId = a.cardInstanceId;
     toZone = a.toZone;
-  } else if (action.type === 'move_card_stack') {
+  } else if (action.type === ACTION_TYPES.MOVE_CARD_STACK) {
     const a = action as MoveCardStackAction;
     cardInstanceId = a.cardInstanceIds[0];
     toZone = a.toZone;
@@ -187,11 +194,11 @@ function warnEvolutionTiming(state: PokemonState, action: Action): PreHookResult
   let cardInstanceId: string;
   let toZone: string;
 
-  if (action.type === 'move_card') {
+  if (action.type === ACTION_TYPES.MOVE_CARD) {
     const a = action as MoveCardAction;
     cardInstanceId = a.cardInstanceId;
     toZone = a.toZone;
-  } else if (action.type === 'move_card_stack') {
+  } else if (action.type === ACTION_TYPES.MOVE_CARD_STACK) {
     const a = action as MoveCardStackAction;
     cardInstanceId = a.cardInstanceIds[0];
     toZone = a.toZone;
@@ -206,7 +213,7 @@ function warnEvolutionTiming(state: PokemonState, action: Action): PreHookResult
   if (!template || !isEvolution(template)) return { outcome: 'continue' };
 
   // First turn for either player (turn 1 = player 0's first, turn 2 = player 1's first)
-  if (state.turnNumber <= 2) {
+  if (state.turnNumber <= FIRST_EVOLUTION_TURN) {
     return blockOrWarn(action, 'Cannot evolve on the first turn or the turn a Pokemon was played. Set allowed_by_effect if a card effect permits this.');
   }
 
@@ -214,7 +221,7 @@ function warnEvolutionTiming(state: PokemonState, action: Action): PreHookResult
   const zone = state.zones[toZone];
   if (zone) {
     const targetHasPlayedFlag = zone.cards.some(
-      (card) => card.flags.includes('played_this_turn')
+      (card) => card.flags.includes(CARD_FLAGS.PLAYED_THIS_TURN)
     );
     if (targetHasPlayedFlag) {
       return blockOrWarn(action, 'Cannot evolve on the first turn or the turn a Pokemon was played. Set allowed_by_effect if a card effect permits this.');
@@ -226,18 +233,17 @@ function warnEvolutionTiming(state: PokemonState, action: Action): PreHookResult
 
 // Warning 5: Cannot place damage/status counters on Trainer cards
 function warnCountersOnTrainers(state: PokemonState, action: Action): PreHookResult {
-  if (action.type !== 'add_counter') return { outcome: 'continue' };
+  if (action.type !== ACTION_TYPES.ADD_COUNTER) return { outcome: 'continue' };
   if (action.allowed_by_effect) return { outcome: 'continue' };
 
   const counterAction = action as AddCounterAction;
   const template = getTemplateForCard(state, counterAction.cardInstanceId);
   if (!template) return { outcome: 'continue' };
 
-  if (template.supertype !== 'Trainer') return { outcome: 'continue' };
+  if (template.supertype !== SUPERTYPES.TRAINER) return { outcome: 'continue' };
 
   // Block damage and status counters on trainers
-  const blockedCounters = ['10', '50', '100', 'burn', 'poison'];
-  if (blockedCounters.includes(counterAction.counterType)) {
+  if ((TRAINER_BLOCKED_COUNTERS as readonly string[]).includes(counterAction.counterType)) {
     return blockOrWarn(action, `Cannot place ${counterAction.counterType} counters on a Trainer card. Set allowed_by_effect if a card effect permits this.`);
   }
 
@@ -251,11 +257,11 @@ function warnNonBasicToEmptyField(state: PokemonState, action: Action): PreHookR
   let cardInstanceId: string;
   let toZone: string;
 
-  if (action.type === 'move_card') {
+  if (action.type === ACTION_TYPES.MOVE_CARD) {
     const moveAction = action as MoveCardAction;
     cardInstanceId = moveAction.cardInstanceId;
     toZone = moveAction.toZone;
-  } else if (action.type === 'move_card_stack') {
+  } else if (action.type === ACTION_TYPES.MOVE_CARD_STACK) {
     const stackAction = action as MoveCardStackAction;
     cardInstanceId = stackAction.cardInstanceIds[0];
     toZone = stackAction.toZone;
@@ -273,7 +279,7 @@ function warnNonBasicToEmptyField(state: PokemonState, action: Action): PreHookR
   // Check if the target zone is empty
   const zone = state.zones[toZone];
   if (!zone || zone.cards.length === 0) {
-    const label = template.supertype === 'Pokemon'
+    const label = template.supertype === SUPERTYPES.POKEMON
       ? `${template.name} (${template.subtypes.join('/')})`
       : `${template.name} (${template.supertype})`;
     const zoneName = zone?.config.name?.toLowerCase() ?? toZone;
@@ -292,13 +298,13 @@ function warnEnergyOnTopOfPokemon(state: PokemonState, action: Action): PreHookR
   let fromZone: string | undefined;
   let position: number | undefined;
 
-  if (action.type === 'move_card') {
+  if (action.type === ACTION_TYPES.MOVE_CARD) {
     const moveAction = action as MoveCardAction;
     cardInstanceId = moveAction.cardInstanceId;
     toZone = moveAction.toZone;
     fromZone = moveAction.fromZone;
     position = moveAction.position;
-  } else if (action.type === 'move_card_stack') {
+  } else if (action.type === ACTION_TYPES.MOVE_CARD_STACK) {
     const stackAction = action as MoveCardStackAction;
     cardInstanceId = stackAction.cardInstanceIds[0];
     toZone = stackAction.toZone;
@@ -335,16 +341,16 @@ function warnEnergyOnTopOfPokemon(state: PokemonState, action: Action): PreHookR
 
 // Post-hook: During setup, cards placed on field zones are face-down (hidden from both players)
 function setupFaceDown(state: PokemonState, action: Action): PostHookResult {
-  if (state.phase !== 'setup') return {};
+  if (state.phase !== PHASES.SETUP) return {};
 
   let toZone: string | undefined;
   let cardIds: string[] = [];
 
-  if (action.type === 'move_card') {
+  if (action.type === ACTION_TYPES.MOVE_CARD) {
     const a = action as MoveCardAction;
     toZone = a.toZone;
     cardIds = [a.cardInstanceId];
-  } else if (action.type === 'move_card_stack') {
+  } else if (action.type === ACTION_TYPES.MOVE_CARD_STACK) {
     const a = action as MoveCardStackAction;
     toZone = a.toZone;
     cardIds = a.cardInstanceIds;
@@ -370,12 +376,12 @@ function logTrainerText(state: PokemonState, action: Action): PostHookResult {
   let fromZone: string | undefined;
   let toZone: string | undefined;
 
-  if (action.type === 'move_card') {
+  if (action.type === ACTION_TYPES.MOVE_CARD) {
     const a = action as MoveCardAction;
     cardInstanceId = a.cardInstanceId;
     fromZone = a.fromZone;
     toZone = a.toZone;
-  } else if (action.type === 'move_card_stack') {
+  } else if (action.type === ACTION_TYPES.MOVE_CARD_STACK) {
     const a = action as MoveCardStackAction;
     cardInstanceId = a.cardInstanceIds[0];
     fromZone = a.fromZone;
@@ -388,7 +394,7 @@ function logTrainerText(state: PokemonState, action: Action): PostHookResult {
   if (!fromZone?.endsWith('_hand') || !toZone?.endsWith('_staging')) return {};
 
   const template = getTemplateForCard(state, cardInstanceId);
-  if (!template || template.supertype !== 'Trainer') return {};
+  if (!template || template.supertype !== SUPERTYPES.TRAINER) return {};
 
   if (template.rules && template.rules.length > 0) {
     const header = `[${template.name}]`;
@@ -406,11 +412,11 @@ function warnStadiumOnly(state: PokemonState, action: Action): PreHookResult {
   let cardInstanceId: string;
   let toZone: string;
 
-  if (action.type === 'move_card') {
+  if (action.type === ACTION_TYPES.MOVE_CARD) {
     const moveAction = action as MoveCardAction;
     cardInstanceId = moveAction.cardInstanceId;
     toZone = moveAction.toZone;
-  } else if (action.type === 'move_card_stack') {
+  } else if (action.type === ACTION_TYPES.MOVE_CARD_STACK) {
     const stackAction = action as MoveCardStackAction;
     cardInstanceId = stackAction.cardInstanceIds[0];
     toZone = stackAction.toZone;
@@ -429,9 +435,6 @@ function warnStadiumOnly(state: PokemonState, action: Action): PreHookResult {
 }
 
 // ── Readable State Modifier ──────────────────────────────────────
-
-/** Damage counter IDs and their point values. */
-const DAMAGE_COUNTER_VALUES: Record<string, number> = { '10': 10, '50': 50, '100': 100 };
 
 /**
  * Modify readable state for Pokemon TCG:
@@ -459,7 +462,6 @@ export function modifyReadableState(
       }
 
       // Translate degree-based orientation to human-readable status field
-      const DEGREES_TO_STATUS: Record<string, string> = { '90': 'paralyzed', '-90': 'asleep', '180': 'confused' };
       const orientation = card.orientation as string | undefined;
       if (orientation && DEGREES_TO_STATUS[orientation]) {
         card.status = DEGREES_TO_STATUS[orientation];
@@ -478,17 +480,17 @@ export const pokemonHooksPlugin: Plugin<PokemonCardTemplate> = {
   readableStateModifier: modifyReadableState,
   readableStateFormatter: formatNarrativeState,
   postHooks: {
-    'move_card': [
+    [ACTION_TYPES.MOVE_CARD]: [
       { hook: setupFaceDown, priority: 50 },
       { hook: logTrainerText, priority: 100 },
     ],
-    'move_card_stack': [
+    [ACTION_TYPES.MOVE_CARD_STACK]: [
       { hook: setupFaceDown, priority: 50 },
       { hook: logTrainerText, priority: 100 },
     ],
   },
   preHooks: {
-    'move_card': [
+    [ACTION_TYPES.MOVE_CARD]: [
       { hook: warnOneSupporter, priority: 100 },
       { hook: warnOneEnergyAttachment, priority: 100 },
       { hook: warnEvolutionChain, priority: 100 },
@@ -497,7 +499,7 @@ export const pokemonHooksPlugin: Plugin<PokemonCardTemplate> = {
       { hook: warnEnergyOnTopOfPokemon, priority: 90 },
       { hook: warnStadiumOnly, priority: 90 },
     ],
-    'move_card_stack': [
+    [ACTION_TYPES.MOVE_CARD_STACK]: [
       { hook: warnOneSupporter, priority: 100 },
       { hook: warnOneEnergyAttachment, priority: 100 },
       { hook: warnEvolutionChain, priority: 100 },
@@ -506,7 +508,7 @@ export const pokemonHooksPlugin: Plugin<PokemonCardTemplate> = {
       { hook: warnEnergyOnTopOfPokemon, priority: 90 },
       { hook: warnStadiumOnly, priority: 90 },
     ],
-    'add_counter': [
+    [ACTION_TYPES.ADD_COUNTER]: [
       { hook: warnCountersOnTrainers, priority: 100 },
     ],
   },

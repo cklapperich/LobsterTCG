@@ -5,6 +5,7 @@ import type { GamePlugin } from '../core';
 import type { ToolContext, RunnableTool } from '../core/ai-tools';
 import { createSpawnSubagentTool } from './tools/spawn-subagent';
 import { logStepFinish } from './logging';
+import { AI_CONFIG, TERMINAL_TOOL_NAMES } from './constants';
 
 export interface AITurnConfig {
   context: ToolContext;
@@ -18,13 +19,7 @@ export interface AITurnConfig {
 }
 
 /** Tools that signal the end of an AI turn — no further steps needed. */
-const TERMINAL_TOOLS = new Set([
-  'end_turn',
-  'end_phase',
-  'concede',
-  'declare_victory',
-  'resolve_decision',
-]);
+const TERMINAL_TOOLS = new Set<string>(TERMINAL_TOOL_NAMES);
 
 /**
  * Convert our RunnableTool[] array into the Record<string, CoreTool>
@@ -53,7 +48,7 @@ export function toAISDKTools(tools: RunnableTool[], abort?: AbortController): To
 
 export async function runAITurn(config: AITurnConfig): Promise<void> {
   const { context, plugin, heuristics, apiKey } = config;
-  const modelId = config.model ?? 'accounts/fireworks/models/kimi-k2p5';
+  const modelId = config.model ?? AI_CONFIG.DEFAULT_MODEL;
 
   const fireworks = createFireworks({ apiKey });
   const model = fireworks(modelId);
@@ -87,10 +82,10 @@ export async function runAITurn(config: AITurnConfig): Promise<void> {
   try {
     await generateText({
       model,
-      maxTokens: 4096,
+      maxTokens: AI_CONFIG.MAX_TOKENS,
       system: heuristics,
       tools: toAISDKTools(allTools, abort),
-      maxSteps: 30,
+      maxSteps: AI_CONFIG.MAX_STEPS,
       abortSignal: abort.signal,
       messages: [{ role: 'user', content: userMessage }],
       onStepFinish: (step) => {

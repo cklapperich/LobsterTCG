@@ -10,6 +10,9 @@ import {
   resolveCardName,
   findCardInZones,
   VISIBILITY,
+  ACTION_TYPES,
+  PHASES,
+  INSTANCE_ID_PREFIX,
 } from '../../core';
 import { createDefaultTools, resolveCardByPosition, type RunnableTool, type ToolContext } from '../../core/ai-tools';
 import { ZONE_IDS } from './zones';
@@ -19,6 +22,15 @@ import {
   getTemplate as getCardTemplate,
 } from './cards';
 import { isBasicPokemon, isEnergy, isFieldZone } from './helpers';
+import {
+  SUPERTYPES,
+  ENERGY_TYPES,
+  STATUS_TO_DEGREES,
+  STATUS_CONDITIONS,
+  COUNTER_IDS,
+  COUNTER_CATEGORIES,
+  SETUP,
+} from './constants';
 
 // Import counter images
 import burnImg from './counters/burn.png';
@@ -36,12 +48,12 @@ export type PokemonGameState = GameState<PokemonCardTemplate>;
 // Pokemon TCG Counter Definitions
 const POKEMON_COUNTERS: CounterDefinition[] = [
   // Status conditions
-  { id: 'burn', name: 'Burned', imageUrl: burnImg, category: 'status', sortOrder: 1 },
-  { id: 'poison', name: 'Poisoned', imageUrl: poisonImg, category: 'status', sortOrder: 2 },
+  { id: COUNTER_IDS.BURN, name: 'Burned', imageUrl: burnImg, category: COUNTER_CATEGORIES.STATUS, sortOrder: 1 },
+  { id: COUNTER_IDS.POISON, name: 'Poisoned', imageUrl: poisonImg, category: COUNTER_CATEGORIES.STATUS, sortOrder: 2 },
   // Damage counters
-  { id: '10', name: '10 Damage', imageUrl: damage10Img, category: 'damage', sortOrder: 1 },
-  { id: '50', name: '50 Damage', imageUrl: damage50Img, category: 'damage', sortOrder: 2 },
-  { id: '100', name: '100 Damage', imageUrl: damage100Img, category: 'damage', sortOrder: 3 },
+  { id: COUNTER_IDS.DAMAGE_10, name: '10 Damage', imageUrl: damage10Img, category: COUNTER_CATEGORIES.DAMAGE, sortOrder: 1 },
+  { id: COUNTER_IDS.DAMAGE_50, name: '50 Damage', imageUrl: damage50Img, category: COUNTER_CATEGORIES.DAMAGE, sortOrder: 2 },
+  { id: COUNTER_IDS.DAMAGE_100, name: '100 Damage', imageUrl: damage100Img, category: COUNTER_CATEGORIES.DAMAGE, sortOrder: 3 },
 ];
 
 export function getCounterDefinitions(): CounterDefinition[] {
@@ -138,10 +150,10 @@ export function executeSetup(state: GameState<CardTemplate>, playerIndex: Player
   executeAction(state, shuffleAction(playerIndex, deckKey));
 
   // Draw 7 cards
-  executeAction(state, { type: 'draw', player: playerIndex, count: 7 });
+  executeAction(state, { type: ACTION_TYPES.DRAW, player: playerIndex, count: SETUP.HAND_SIZE });
 
   // Set 6 prize cards (move top 6 from deck to prizes zone)
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < SETUP.PRIZE_COUNT; i++) {
     const deckZone = state.zones[deckKey];
     if (deckZone.cards.length > 0) {
       const topCard = deckZone.cards[0];
@@ -189,7 +201,7 @@ export function autoMulligan(state: GameState<CardTemplate>, playerIndex: Player
   const handKey = `player${playerIndex + 1}_hand`;
   const deckKey = `player${playerIndex + 1}_deck`;
 
-  while (count < 20) {
+  while (count < SETUP.MAX_MULLIGANS) {
     const hand = state.zones[handKey];
     const hasBasic = hand.cards.some(c => isBasicPokemon(c.template as PokemonCardTemplate));
     if (hasBasic) break;
@@ -202,7 +214,7 @@ export function autoMulligan(state: GameState<CardTemplate>, playerIndex: Player
     }
     // Shuffle and redraw 7
     executeAction(state, shuffleAction(playerIndex, deckKey));
-    executeAction(state, { type: 'draw', player: playerIndex, count: 7 });
+    executeAction(state, { type: ACTION_TYPES.DRAW, player: playerIndex, count: SETUP.HAND_SIZE });
     state.log.push(`Player ${playerIndex + 1} mulliganed (no Basic Pokemon)`);
   }
   return count;
@@ -234,13 +246,13 @@ export function flipFieldCardsFaceUp(state: GameState<CardTemplate>): void {
  * - search_zone: handled by peek instead for AI
  * - place_on_zone: not a standard Pokemon action for AI
  */
-const HIDDEN_DEFAULT_TOOLS = new Set([
-  'dice_roll',
-  'flip_card',
-  'declare_victory',
-  'search_zone',
-  'place_on_zone',
-  'set_orientation',
+const HIDDEN_DEFAULT_TOOLS: Set<string> = new Set([
+  ACTION_TYPES.DICE_ROLL,
+  ACTION_TYPES.FLIP_CARD,
+  ACTION_TYPES.DECLARE_VICTORY,
+  ACTION_TYPES.SEARCH_ZONE,
+  ACTION_TYPES.PLACE_ON_ZONE,
+  ACTION_TYPES.SET_ORIENTATION,
 ]);
 
 /** Local tool factory matching RunnableTool shape. */
@@ -273,17 +285,17 @@ function getAutoPosition(
   const template = found.card.template as PokemonCardTemplate;
   if (!template.supertype) return undefined;
 
-  if (template.supertype === 'Pokemon') {
+  if (template.supertype === SUPERTYPES.POKEMON) {
     return undefined; // top (push to end)
   }
 
-  if (template.supertype === 'Energy') {
+  if (template.supertype === SUPERTYPES.ENERGY) {
     // Insert before the first Pokemon card in the zone
     const zoneCards = state.zones[toZone]?.cards;
     if (!zoneCards) return undefined;
     for (let i = 0; i < zoneCards.length; i++) {
       const t = zoneCards[i].template as PokemonCardTemplate;
-      if (t.supertype === 'Pokemon') return i;
+      if (t.supertype === SUPERTYPES.POKEMON) return i;
     }
     return undefined; // no Pokemon → top
   }
@@ -298,14 +310,14 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
 
   // Start with filtered defaults (remove hidden tools and default move_card)
   let tools = createDefaultTools(ctx).filter(
-    t => !HIDDEN_DEFAULT_TOOLS.has(t.name) && t.name !== 'move_card'
+    t => !HIDDEN_DEFAULT_TOOLS.has(t.name) && t.name !== ACTION_TYPES.MOVE_CARD
   );
 
   // Setup phase: only allow move_card, move_card_stack, end_turn
-  if (ctx.getState().phase === 'setup') {
-    let setupTools = tools.filter(t => ['move_card_stack', 'end_turn'].includes(t.name));
+  if (ctx.getState().phase === PHASES.SETUP) {
+    let setupTools = tools.filter(t => ([ACTION_TYPES.MOVE_CARD_STACK, ACTION_TYPES.END_TURN] as string[]).includes(t.name));
     // Add end_phase alias (agent0.md references it)
-    const endTurnTool = setupTools.find(t => t.name === 'end_turn');
+    const endTurnTool = setupTools.find(t => t.name === ACTION_TYPES.END_TURN);
     if (endTurnTool) {
       setupTools.push({ ...endTurnTool, name: 'end_phase', description: 'End the setup phase' });
     }
@@ -343,10 +355,10 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
   // Decision-aware filtering
   if (isDecision) {
     // During a decision mini-turn: hide end_turn and create_decision, show resolve_decision
-    tools = tools.filter(t => t.name !== 'end_turn' && t.name !== 'create_decision');
+    tools = tools.filter(t => t.name !== ACTION_TYPES.END_TURN && t.name !== ACTION_TYPES.CREATE_DECISION);
   } else {
     // Normal turn: hide resolve_decision, show end_turn and create_decision
-    tools = tools.filter(t => t.name !== 'resolve_decision');
+    tools = tools.filter(t => t.name !== ACTION_TYPES.RESOLVE_DECISION);
   }
 
   // ── Pokemon move_card with auto-position ────────────────────
@@ -417,7 +429,7 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
           const used: Record<string, number> = {};
           let unmet = 0;
           for (const costType of attack.cost) {
-            if (costType === 'Colorless') continue;
+            if (costType === ENERGY_TYPES.COLORLESS) continue;
             const available = (attached[costType] ?? 0) - (used[costType] ?? 0);
             if (available > 0) {
               used[costType] = (used[costType] ?? 0) + 1;
@@ -426,7 +438,7 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
             }
           }
           const totalUsed = Object.values(used).reduce((s, n) => s + n, 0);
-          const colorlessCost = attack.cost.filter(c => c === 'Colorless').length;
+          const colorlessCost = attack.cost.filter(c => c === ENERGY_TYPES.COLORLESS).length;
           const remainingEnergy = totalAttached - totalUsed;
           if (unmet > 0 || remainingEnergy < colorlessCost) {
             const costStr = attack.cost.join('/');
@@ -476,13 +488,6 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
   }));
 
   // ── Status condition tool (Pokemon-specific wrapper around orientation) ──
-  const STATUS_TO_DEGREES: Record<string, string> = {
-    normal: '0',
-    paralyzed: '90',
-    asleep: '-90',
-    confused: '180',
-  };
-
   tools.push(tool({
     name: 'set_status',
     description: 'Set a Pokemon\'s status condition. Only active Pokemon can have status.',
@@ -491,16 +496,16 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
       properties: {
         cardName: { type: 'string', description: 'Name of the Pokemon' },
         zone: { type: 'string', description: 'Zone key the card is in' },
-        status: { type: 'string', enum: ['normal', 'paralyzed', 'asleep', 'confused'], description: 'Status condition to apply, or "normal" to clear' },
+        status: { type: 'string', enum: [STATUS_CONDITIONS.NORMAL, STATUS_CONDITIONS.PARALYZED, STATUS_CONDITIONS.ASLEEP, STATUS_CONDITIONS.CONFUSED], description: 'Status condition to apply, or "normal" to clear' },
       },
       required: ['cardName', 'zone', 'status'],
     },
     async run(input) {
       const state = ctx.getState();
-      const cardId = input.cardName.startsWith('card_')
+      const cardId = input.cardName.startsWith(INSTANCE_ID_PREFIX)
         ? input.cardName
         : resolveCardName(state, input.cardName, input.zone);
-      const degrees = STATUS_TO_DEGREES[input.status] ?? '0';
+      const degrees = STATUS_TO_DEGREES[input.status] ?? STATUS_TO_DEGREES[STATUS_CONDITIONS.NORMAL];
       return ctx.execute(setOrientation(p, cardId, degrees));
     },
   }));
@@ -573,7 +578,7 @@ function onActionPanelClick(state: GameState<PokemonCardTemplate>, player: Playe
     executeAction(state, shuffleAction(player, deckKey));
 
     // Draw 7
-    executeAction(state, { type: 'draw', player, count: 7 });
+    executeAction(state, { type: ACTION_TYPES.DRAW, player, count: SETUP.HAND_SIZE });
 
     const otherPlayer = player === 0 ? 2 : 1;
     state.log.push(`Player ${player + 1} mulliganed. Don't forget to draw 1 extra card Player ${otherPlayer}!`);

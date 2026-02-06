@@ -1,13 +1,14 @@
 import type { CardTemplate, Action, GameState } from '../types';
+import type { HOOK_OUTCOMES } from '../types';
 import type { ReadableGameState } from '../readable';
 import type { PluginManager } from './plugin-manager';
 
 // Hook result types
 export type PreHookResult =
-  | { outcome: 'continue' }
-  | { outcome: 'warn'; reason: string }
-  | { outcome: 'block'; reason: string }
-  | { outcome: 'replace'; action: Action };
+  | { outcome: typeof HOOK_OUTCOMES.CONTINUE }
+  | { outcome: typeof HOOK_OUTCOMES.WARN; reason: string }
+  | { outcome: typeof HOOK_OUTCOMES.BLOCK; reason: string }
+  | { outcome: typeof HOOK_OUTCOMES.REPLACE; action: Action };
 
 export type PostHookResult = { followUpActions?: Action[] };
 

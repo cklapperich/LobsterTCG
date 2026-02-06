@@ -32,6 +32,16 @@ import type {
   Turn,
 } from './types';
 import { VISIBILITY } from './types';
+import {
+  ACTION_TYPES,
+  PHASES,
+  ACTION_SOURCES,
+  ORIENTATION_NAMES,
+  HIDDEN_CARD,
+  COIN_FLIP_THRESHOLD,
+  CARD_FLAGS,
+  UNLIMITED_CAPACITY,
+} from './types';
 
 // ============================================================================
 // Staging Zone Configuration
@@ -41,7 +51,7 @@ export const STAGING_ZONE_CONFIG: ZoneConfig = {
   name: 'Staging',
   ordered: false,
   defaultVisibility: VISIBILITY.PUBLIC,
-  maxCards: -1,
+  maxCards: UNLIMITED_CAPACITY,
   ownerCanSeeContents: true,
   opponentCanSeeCount: true,
 };
@@ -65,7 +75,7 @@ export function createCardInstance<T extends CardTemplate>(
     instanceId,
     template,
     visibility,
-    orientation: 'normal',
+    orientation: ORIENTATION_NAMES.NORMAL,
     flags: [],
     counters: {},
   };
@@ -130,7 +140,7 @@ export function createGameState<T extends CardTemplate>(
   return {
     id: `game_${now}_${Math.random().toString(36).slice(2, 9)}`,
     config,
-    phase: 'setup',
+    phase: PHASES.SETUP,
     setupComplete: [false, false],
     turnNumber: 0,
     activePlayer: 0,
@@ -534,7 +544,7 @@ function executeCoinFlip<T extends CardTemplate>(
 
   const results: boolean[] = [];
   for (let i = 0; i < action.count; i++) {
-    results.push(Math.random() < 0.5);
+    results.push(Math.random() < COIN_FLIP_THRESHOLD);
   }
   return results;
 }
@@ -578,13 +588,13 @@ function executeEndTurn<T extends CardTemplate>(
   }
 
   // Setup phase: track per-player completion, transition to playing when both done
-  if (state.phase === 'setup') {
+  if (state.phase === PHASES.SETUP) {
     state.setupComplete[state.activePlayer] = true;
     state.currentTurn.ended = true;
 
     if (state.setupComplete[0] && state.setupComplete[1]) {
       // Both done → transition to playing phase
-      state.phase = 'playing';
+      state.phase = PHASES.PLAYING;
       state.turnNumber = 1;
       state.activePlayer = 0;
       state.currentTurn = createTurn(1, 0);
@@ -604,7 +614,7 @@ function executeEndTurn<T extends CardTemplate>(
   // Clear "played_this_turn" flag from all cards
   for (const zone of Object.values(state.zones)) {
     for (const card of zone.cards) {
-      const idx = card.flags.indexOf('played_this_turn');
+      const idx = card.flags.indexOf(CARD_FLAGS.PLAYED_THIS_TURN);
       if (idx !== -1) {
         card.flags.splice(idx, 1);
       }
@@ -770,7 +780,7 @@ function executeRevealHand<T extends CardTemplate>(
 // ============================================================================
 
 function isZoneAtCapacity(zone: Zone<any>, additionalCards = 1): boolean {
-  if (zone.config.maxCards === -1) return false;
+  if (zone.config.maxCards === UNLIMITED_CAPACITY) return false;
   return zone.cards.length + additionalCards > zone.config.maxCards;
 }
 
@@ -779,19 +789,19 @@ function checkZoneCapacity<T extends CardTemplate>(
   action: Action
 ): string | null {
   switch (action.type) {
-    case 'move_card': {
+    case ACTION_TYPES.MOVE_CARD: {
       const toZone = getZone(state, action.toZone);
       if (toZone && isZoneAtCapacity(toZone))
         return `Move blocked: ${toZone.config.name} is full (${toZone.config.maxCards}/${toZone.config.maxCards} cards)`;
       return null;
     }
-    case 'move_card_stack': {
+    case ACTION_TYPES.MOVE_CARD_STACK: {
       const toZone = getZone(state, action.toZone);
       if (toZone && isZoneAtCapacity(toZone, action.cardInstanceIds.length))
         return `Move blocked: ${toZone.config.name} is full (${toZone.config.maxCards}/${toZone.config.maxCards} cards)`;
       return null;
     }
-    case 'place_on_zone': {
+    case ACTION_TYPES.PLACE_ON_ZONE: {
       const zone = getZone(state, action.zoneId);
       if (zone && isZoneAtCapacity(zone, action.cardInstanceIds.length))
         return `Place blocked: ${zone.config.name} is full (${zone.config.maxCards}/${zone.config.maxCards} cards)`;
@@ -821,13 +831,13 @@ export function checkOpponentZone<T extends CardTemplate>(
   // Only check actions that place/move cards into zones
   let zoneKey: string | undefined;
   switch (action.type) {
-    case 'move_card':
+    case ACTION_TYPES.MOVE_CARD:
       zoneKey = action.toZone;
       break;
-    case 'move_card_stack':
+    case ACTION_TYPES.MOVE_CARD_STACK:
       zoneKey = action.toZone;
       break;
-    case 'place_on_zone':
+    case ACTION_TYPES.PLACE_ON_ZONE:
       zoneKey = action.zoneId;
       break;
     default:
@@ -847,7 +857,7 @@ export function checkOpponentZone<T extends CardTemplate>(
   const zoneName = zone?.config.name ?? zoneKey;
   const reason = `Cannot move cards to opponent's ${zoneName}. Set allowed_by_effect if a card effect permits this.`;
   return {
-    shouldBlock: action.source === 'ai',
+    shouldBlock: action.source === ACTION_SOURCES.AI,
     reason,
   };
 }
@@ -873,55 +883,55 @@ export function executeAction<T extends CardTemplate>(
   state.currentTurn.actions.push(action);
 
   switch (action.type) {
-    case 'draw':
+    case ACTION_TYPES.DRAW:
       executeDraw(state, action);
       break;
-    case 'move_card':
+    case ACTION_TYPES.MOVE_CARD:
       executeMoveCard(state, action);
       break;
-    case 'move_card_stack':
+    case ACTION_TYPES.MOVE_CARD_STACK:
       executeMoveCardStack(state, action);
       break;
-    case 'place_on_zone':
+    case ACTION_TYPES.PLACE_ON_ZONE:
       executePlaceOnZone(state, action);
       break;
-    case 'shuffle':
+    case ACTION_TYPES.SHUFFLE:
       executeShuffle(state, action);
       break;
-    case 'search_zone':
+    case ACTION_TYPES.SEARCH_ZONE:
       // Search is read-only, no state mutation
       break;
-    case 'flip_card':
+    case ACTION_TYPES.FLIP_CARD:
       executeFlipCard(state, action);
       break;
-    case 'set_orientation':
+    case ACTION_TYPES.SET_ORIENTATION:
       executeSetOrientation(state, action);
       break;
-    case 'add_counter':
+    case ACTION_TYPES.ADD_COUNTER:
       executeAddCounter(state, action);
       break;
-    case 'remove_counter':
+    case ACTION_TYPES.REMOVE_COUNTER:
       executeRemoveCounter(state, action);
       break;
-    case 'set_counter':
+    case ACTION_TYPES.SET_COUNTER:
       executeSetCounter(state, action);
       break;
-    case 'coin_flip':
+    case ACTION_TYPES.COIN_FLIP:
       executeCoinFlip(state, action);
       break;
-    case 'dice_roll':
+    case ACTION_TYPES.DICE_ROLL:
       executeDiceRoll(state, action);
       break;
-    case 'end_turn':
+    case ACTION_TYPES.END_TURN:
       executeEndTurn(state, action);
       break;
-    case 'concede':
+    case ACTION_TYPES.CONCEDE:
       executeConcede(state, action);
       break;
-    case 'declare_victory':
+    case ACTION_TYPES.DECLARE_VICTORY:
       executeDeclareVictory(state, action);
       break;
-    case 'create_decision': {
+    case ACTION_TYPES.CREATE_DECISION: {
       const decErr = executeCreateDecision(state, action);
       if (decErr) {
         state.log.push(decErr);
@@ -929,7 +939,7 @@ export function executeAction<T extends CardTemplate>(
       }
       break;
     }
-    case 'resolve_decision': {
+    case ACTION_TYPES.RESOLVE_DECISION: {
       const resErr = executeResolveDecision(state, action);
       if (resErr) {
         state.log.push(resErr);
@@ -937,7 +947,7 @@ export function executeAction<T extends CardTemplate>(
       }
       break;
     }
-    case 'reveal_hand': {
+    case ACTION_TYPES.REVEAL_HAND: {
       const rhErr = executeRevealHand(state, action);
       if (rhErr) {
         state.log.push(rhErr);
@@ -945,10 +955,10 @@ export function executeAction<T extends CardTemplate>(
       }
       break;
     }
-    case 'reveal':
+    case ACTION_TYPES.REVEAL:
       executeReveal(state, action);
       break;
-    case 'peek':
+    case ACTION_TYPES.PEEK:
       executePeek(state, action);
       break;
   }
@@ -984,8 +994,8 @@ function filterCardForPlayer<T extends CardTemplate>(
     return {
       instanceId: card.instanceId,
       template: {
-        id: 'hidden',
-        name: 'Hidden Card',
+        id: HIDDEN_CARD.TEMPLATE_ID,
+        name: HIDDEN_CARD.DISPLAY_NAME,
       } as unknown as T,
       visibility: card.visibility,
       orientation: card.orientation,

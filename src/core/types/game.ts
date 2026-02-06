@@ -1,6 +1,7 @@
 import type { CardTemplate, PlayerIndex } from './card';
 import type { Zone, ZoneConfig } from './zone';
 import type { Action } from './action';
+import type { Phase } from './constants';
 
 export interface Decision {
   createdBy: PlayerIndex;
@@ -39,7 +40,7 @@ export interface GameResult {
 export interface GameState<T extends CardTemplate = CardTemplate> {
   id: string;
   config: GameConfig;
-  phase: 'setup' | 'playing';
+  phase: Phase;
   setupComplete: [boolean, boolean];
   turnNumber: number;
   activePlayer: PlayerIndex;

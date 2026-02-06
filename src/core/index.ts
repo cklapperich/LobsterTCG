@@ -18,7 +18,6 @@ export {
 
 // Re-export GameLoop
 export { GameLoop } from './game-loop';
-export type { GameEventType } from './game-loop';
 
 // Re-export plugin system
 export { PluginManager } from './plugin';

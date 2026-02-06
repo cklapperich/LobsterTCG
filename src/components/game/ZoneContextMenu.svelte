@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { ZoneConfig } from '../../core';
+  import { ORIENTATIONS } from '../../core';
 
   interface Props {
     x: number;
@@ -45,8 +46,10 @@
   let menuRef: HTMLDivElement;
   let activeSubmenu = $state<'peek' | 'arrange' | 'rotate' | null>(null);
 
+  const PEEK_COUNTS = [1, 3, 5, 7];
+
   // Counts available for peek/arrange
-  const availableCounts = $derived([1, 3, 5, 7].filter(n => n <= cardCount));
+  const availableCounts = $derived(PEEK_COUNTS.filter(n => n <= cardCount));
 
   // Zone visibility/ordered state for View All / Arrange All
   const isPublic = $derived(zoneConfig.defaultVisibility === 'public');
@@ -127,11 +130,11 @@
 
       {#if activeSubmenu === 'rotate'}
         <div class="submenu gbc-panel">
-          <button class="menu-item" onclick={() => handleAction(() => onSetOrientation('90'))}>90°</button>
-          <button class="menu-item" onclick={() => handleAction(() => onSetOrientation('180'))}>180°</button>
-          <button class="menu-item" onclick={() => handleAction(() => onSetOrientation('-90'))}>270°</button>
+          <button class="menu-item" onclick={() => handleAction(() => onSetOrientation(ORIENTATIONS.TAPPED))}>90°</button>
+          <button class="menu-item" onclick={() => handleAction(() => onSetOrientation(ORIENTATIONS.FLIPPED))}>180°</button>
+          <button class="menu-item" onclick={() => handleAction(() => onSetOrientation(ORIENTATIONS.COUNTER_TAPPED))}>270°</button>
           <div class="submenu-divider"></div>
-          <button class="menu-item" onclick={() => handleAction(() => onSetOrientation('0'))}>Reset (0°)</button>
+          <button class="menu-item" onclick={() => handleAction(() => onSetOrientation(ORIENTATIONS.NORMAL))}>Reset (0°)</button>
         </div>
       {/if}
     </div>

@@ -1,5 +1,7 @@
 import type { ReadableGameState, ReadableZone, ReadableCard, ReadableTurn } from '../../core/readable';
+import { ACTION_TYPES } from '../../core/types/constants';
 import { isFieldZone } from './helpers';
+import { SUPERTYPES, COUNTER_IDS, NARRATIVE } from './constants';
 
 /**
  * Convert a ReadableGameState into a compact narrative text format for AI consumption.
@@ -68,7 +70,7 @@ export function formatNarrativeState(readable: ReadableGameState): string {
   if (readable.log.length > 0) {
     lines.push('');
     lines.push('--- LOG (recent) ---');
-    const recent = readable.log.slice(-15);
+    const recent = readable.log.slice(-NARRATIVE.RECENT_LOG_LIMIT);
     for (const entry of recent) {
       lines.push(entry);
     }
@@ -95,7 +97,7 @@ function collectUniqueCards(readable: ReadableGameState): ReadableCard[] {
     for (let i = 0; i < zone.cards.length; i++) {
       const card = zone.cards[i];
       const isTop = field && i === zone.cards.length - 1;
-      const isPokemon = card.supertype === 'Pokemon';
+      const isPokemon = card.supertype === SUPERTYPES.POKEMON;
 
       // Skip non-top Pokemon in field zones (evolved-from cards under the stack)
       if (field && !isTop && isPokemon) continue;
@@ -116,7 +118,7 @@ function formatCardReference(card: ReadableCard): string[] {
   const lines: string[] = [];
   const supertype = card.supertype as string | undefined;
 
-  if (supertype === 'Pokemon') {
+  if (supertype === SUPERTYPES.POKEMON) {
     lines.push(formatPokemonReference(card));
 
     const attacks = card.attacks as Array<{ name: string; cost: string[]; damage: string; effect?: string }> | undefined;
@@ -133,7 +135,7 @@ function formatCardReference(card: ReadableCard): string[] {
         lines.push(`  ${formatAbility(ab)}`);
       }
     }
-  } else if (supertype === 'Trainer') {
+  } else if (supertype === SUPERTYPES.TRAINER) {
     const subtypes = card.subtypes as string[] | undefined;
     const sub = subtypes && subtypes.length > 0 ? `, ${subtypes.join('/')}` : '';
     lines.push(`${card.name} \u2014 Trainer${sub}`);
@@ -144,7 +146,7 @@ function formatCardReference(card: ReadableCard): string[] {
         lines.push(`  ${rule}`);
       }
     }
-  } else if (supertype === 'Energy') {
+  } else if (supertype === SUPERTYPES.ENERGY) {
     const subtypes = card.subtypes as string[] | undefined;
     const sub = subtypes && subtypes.length > 0 ? `, ${subtypes.join('/')}` : '';
     lines.push(`${card.name} \u2014 Energy${sub}`);
@@ -254,7 +256,7 @@ function formatBoard(readable: ReadableGameState, playerPrefix: string): string[
   const discardKey = `${playerPrefix}_discard`;
   const discard = zones[discardKey];
   if (discard && discard.cards.length > 0) {
-    if (discard.cards.length <= 10) {
+    if (discard.cards.length <= NARRATIVE.DISCARD_DISPLAY_LIMIT) {
       lines.push(`  Discard: ${condenseNames(discard.cards)}`);
     }
   }
@@ -329,8 +331,8 @@ function formatInstanceStats(card: ReadableCard): string {
 
   const counters = card.counters as Record<string, number> | undefined;
   if (counters) {
-    if (counters['burn']) parts.push('BURNED');
-    if (counters['poison']) parts.push('POISONED');
+    if (counters[COUNTER_IDS.BURN]) parts.push('BURNED');
+    if (counters[COUNTER_IDS.POISON]) parts.push('POISONED');
   }
 
   return parts.join(' \u2014 ');
@@ -401,24 +403,24 @@ function formatAction(a: Record<string, unknown>): string {
   const nameStr = Array.isArray(cardName) ? cardName.join(', ') : (cardName ?? '');
 
   switch (type) {
-    case 'move_card':
-    case 'move_card_stack':
+    case ACTION_TYPES.MOVE_CARD:
+    case ACTION_TYPES.MOVE_CARD_STACK:
       return `${type} ${nameStr}: ${fromZone} -> ${toZone}`;
-    case 'draw':
+    case ACTION_TYPES.DRAW:
       return `draw ${a.count} from ${zoneId ?? fromZone ?? '?'}`;
-    case 'shuffle':
+    case ACTION_TYPES.SHUFFLE:
       return `shuffle ${zoneId}`;
-    case 'add_counter':
+    case ACTION_TYPES.ADD_COUNTER:
       return `add_counter ${a.amount}x ${a.counterType} to ${nameStr}`;
-    case 'remove_counter':
+    case ACTION_TYPES.REMOVE_COUNTER:
       return `remove_counter ${a.amount}x ${a.counterType} from ${nameStr}`;
-    case 'set_counter':
+    case ACTION_TYPES.SET_COUNTER:
       return `set_counter ${a.counterType}=${a.value} on ${nameStr}`;
-    case 'coin_flip':
+    case ACTION_TYPES.COIN_FLIP:
       return `coin_flip x${a.count}`;
-    case 'end_turn':
+    case ACTION_TYPES.END_TURN:
       return 'end_turn';
-    case 'set_orientation':
+    case ACTION_TYPES.SET_ORIENTATION:
       return `set_orientation ${nameStr} ${a.orientation}`;
     default:
       return `${type}${nameStr ? ' ' + nameStr : ''}`;

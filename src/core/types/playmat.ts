@@ -1,5 +1,6 @@
 import type { ZoneConfig } from './zone';
 import type { PlayerIndex } from './card';
+import type { StackDirection } from './constants';
 
 // Position on the playmat grid
 export interface PlaymatPosition {
@@ -15,7 +16,7 @@ export interface PlaymatSlot {
   zoneId: string; // references ZoneConfig.id
   position: PlaymatPosition;
   label?: string; // optional display label
-  stackDirection?: 'none' | 'down' | 'up' | 'right' | 'fan'; // how cards stack visually
+  stackDirection?: StackDirection; // how cards stack visually
   fixedSize?: boolean; // if true, zone won't auto-expand based on card count
 }
 

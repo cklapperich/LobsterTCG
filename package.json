@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
+    "count": "git ls-files '*.ts' '*.svelte' '*.sql' '*.html' | xargs wc -l",
     "test": "vitest run"
   },
   "devDependencies": {

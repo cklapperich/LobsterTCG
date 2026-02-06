@@ -8,6 +8,8 @@ import {
   moveCardStack,
   addCounter,
   VISIBILITY,
+  ACTION_SOURCES,
+  GAME_EVENTS,
 } from './index';
 import type { GameState, CardTemplate, ZoneConfig } from './types';
 
@@ -37,7 +39,7 @@ function setupGame() {
   const gameLoop = new GameLoop<CardTemplate>(state);
 
   const blocked: Array<{ action: any; reason: string }> = [];
-  gameLoop.on('action:blocked', (_event, data) => {
+  gameLoop.on(GAME_EVENTS.ACTION_BLOCKED, (_event, data) => {
     if (data.action && data.reason) {
       blocked.push({ action: data.action, reason: data.reason });
     }
@@ -62,7 +64,7 @@ describe('checkOpponentZone', () => {
   it('blocks AI move_card to opponent zone', () => {
     const { state, gameLoop, blocked } = setupGame();
     const card = placeCard(state, 0, 'hand');
-    gameLoop.submit({ ...moveCard(1, card, 'player2_hand', 'player2_field'), source: 'ai' });
+    gameLoop.submit({ ...moveCard(1, card, 'player2_hand', 'player2_field'), source: ACTION_SOURCES.AI });
     gameLoop.processNext();
     expect(blocked).toHaveLength(1);
     expect(blocked[0].reason).toContain("opponent's Field");
@@ -80,7 +82,7 @@ describe('checkOpponentZone', () => {
   it('allows move_card to own zone', () => {
     const { state, gameLoop, blocked } = setupGame();
     const card = placeCard(state, 0, 'hand');
-    gameLoop.submit({ ...moveCard(0, card, 'player1_hand', 'player1_field'), source: 'ai' });
+    gameLoop.submit({ ...moveCard(0, card, 'player1_hand', 'player1_field'), source: ACTION_SOURCES.AI });
     gameLoop.processNext();
     expect(blocked).toHaveLength(0);
   });
@@ -98,7 +100,7 @@ describe('checkOpponentZone', () => {
   it('allows opponent zone move with allowed_by_effect', () => {
     const { state, gameLoop, blocked } = setupGame();
     const card = placeCard(state, 0, 'hand');
-    gameLoop.submit({ ...moveCard(1, card, 'player2_hand', 'player2_field'), source: 'ai', allowed_by_effect: true });
+    gameLoop.submit({ ...moveCard(1, card, 'player2_hand', 'player2_field'), source: ACTION_SOURCES.AI, allowed_by_effect: true });
     gameLoop.processNext();
     expect(blocked).toHaveLength(0);
   });
@@ -106,7 +108,7 @@ describe('checkOpponentZone', () => {
   it('blocks AI move_card_stack to opponent zone', () => {
     const { state, gameLoop, blocked } = setupGame();
     const card = placeCard(state, 0, 'hand');
-    gameLoop.submit({ ...moveCardStack(1, [card], 'player2_hand', 'player2_field'), source: 'ai' });
+    gameLoop.submit({ ...moveCardStack(1, [card], 'player2_hand', 'player2_field'), source: ACTION_SOURCES.AI });
     gameLoop.processNext();
     expect(blocked).toHaveLength(1);
     expect(blocked[0].reason).toContain("opponent's Field");
@@ -116,7 +118,7 @@ describe('checkOpponentZone', () => {
     const { state, gameLoop, blocked } = setupGame();
     const card = placeCard(state, 1, 'field');
     // Player 0 places counter on player 1's card — should always be allowed
-    gameLoop.submit({ ...addCounter(1, card, 'damage', 1), source: 'ai' });
+    gameLoop.submit({ ...addCounter(1, card, 'damage', 1), source: ACTION_SOURCES.AI });
     gameLoop.processNext();
     expect(blocked).toHaveLength(0);
   });

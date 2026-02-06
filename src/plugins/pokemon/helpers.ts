@@ -1,4 +1,5 @@
 import type { PokemonCardTemplate } from './cards';
+import { SUPERTYPES, STAGES, TRAINER_SUBTYPES } from './constants';
 
 // Normalize subtypes: "Stage 1" and "Stage1" both match
 function hasSubtype(t: PokemonCardTemplate, ...names: string[]): boolean {
@@ -9,15 +10,15 @@ function hasSubtype(t: PokemonCardTemplate, ...names: string[]): boolean {
 }
 
 export function isBasicPokemon(t: PokemonCardTemplate): boolean {
-  return t.supertype === 'Pokemon' && hasSubtype(t, 'Basic');
+  return t.supertype === SUPERTYPES.POKEMON && hasSubtype(t, STAGES.BASIC);
 }
 
 export function isStage1(t: PokemonCardTemplate): boolean {
-  return t.supertype === 'Pokemon' && hasSubtype(t, 'Stage1', 'Stage 1');
+  return t.supertype === SUPERTYPES.POKEMON && hasSubtype(t, STAGES.STAGE_1, STAGES.STAGE_1_ALT);
 }
 
 export function isStage2(t: PokemonCardTemplate): boolean {
-  return t.supertype === 'Pokemon' && hasSubtype(t, 'Stage2', 'Stage 2');
+  return t.supertype === SUPERTYPES.POKEMON && hasSubtype(t, STAGES.STAGE_2, STAGES.STAGE_2_ALT);
 }
 
 export function isEvolution(t: PokemonCardTemplate): boolean {
@@ -25,15 +26,15 @@ export function isEvolution(t: PokemonCardTemplate): boolean {
 }
 
 export function isSupporter(t: PokemonCardTemplate): boolean {
-  return t.supertype === 'Trainer' && hasSubtype(t, 'Supporter');
+  return t.supertype === SUPERTYPES.TRAINER && hasSubtype(t, TRAINER_SUBTYPES.SUPPORTER);
 }
 
 export function isStadium(t: PokemonCardTemplate): boolean {
-  return t.supertype === 'Trainer' && hasSubtype(t, 'Stadium');
+  return t.supertype === SUPERTYPES.TRAINER && hasSubtype(t, TRAINER_SUBTYPES.STADIUM);
 }
 
 export function isEnergy(t: PokemonCardTemplate): boolean {
-  return t.supertype === 'Energy';
+  return t.supertype === SUPERTYPES.ENERGY;
 }
 
 export function isFieldZone(zoneKey: string): boolean {

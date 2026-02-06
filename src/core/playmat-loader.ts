@@ -1,8 +1,8 @@
 import type { Playmat, Visibility, ZoneConfig } from './types';
-import { VISIBILITY } from './types';
+import { VISIBILITY, PLAYMAT_VISIBILITY } from './types';
 
 // JSON representation uses string visibility
-type VisibilityString = 'public' | 'hidden' | 'player_a_only' | 'player_b_only';
+type VisibilityString = typeof PLAYMAT_VISIBILITY[keyof typeof PLAYMAT_VISIBILITY];
 
 interface ZoneConfigJson {
   id: string;
@@ -22,13 +22,13 @@ interface PlaymatJson extends Omit<Playmat, 'zones'> {
 
 function parseVisibility(vis: VisibilityString): Visibility {
   switch (vis) {
-    case 'public':
+    case PLAYMAT_VISIBILITY.PUBLIC:
       return VISIBILITY.PUBLIC;
-    case 'hidden':
+    case PLAYMAT_VISIBILITY.HIDDEN:
       return VISIBILITY.HIDDEN;
-    case 'player_a_only':
+    case PLAYMAT_VISIBILITY.PLAYER_A_ONLY:
       return VISIBILITY.PLAYER_A_ONLY;
-    case 'player_b_only':
+    case PLAYMAT_VISIBILITY.PLAYER_B_ONLY:
       return VISIBILITY.PLAYER_B_ONLY;
     default:
       throw new Error(`Unknown visibility: ${vis}`);

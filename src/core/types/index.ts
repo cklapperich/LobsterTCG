@@ -2,6 +2,37 @@
 export type { Visibility, PlayerIndex, CardTemplate, CardInstance } from './card';
 export { VISIBILITY } from './card';
 
+// Constants
+export {
+  ACTION_TYPES,
+  PHASES,
+  ACTION_SOURCES,
+  HOOK_OUTCOMES,
+  POSITIONS,
+  REVEAL_TARGETS,
+  ORIENTATIONS,
+  ORIENTATION_NAMES,
+  STACK_DIRECTIONS,
+  GAME_EVENTS,
+  PLAYMAT_VISIBILITY,
+  HIDDEN_CARD,
+  INSTANCE_ID_PREFIX,
+  CARD_FLAGS,
+  DEFAULT_HOOK_PRIORITY,
+  READABLE_LOG_LIMIT,
+  COIN_FLIP_THRESHOLD,
+  UNLIMITED_CAPACITY,
+} from './constants';
+export type {
+  ActionType,
+  Phase,
+  ActionSource,
+  HookOutcome,
+  Position,
+  StackDirection,
+  GameEventType,
+} from './constants';
+
 // Deck types
 export type { DeckEntry, DeckList } from './deck';
 

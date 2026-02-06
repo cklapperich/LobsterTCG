@@ -1,4 +1,5 @@
 import type { CardTemplate, Action, GameState } from '../types';
+import { DEFAULT_HOOK_PRIORITY } from '../types';
 import type { ReadableGameState } from '../readable';
 import type {
   Plugin,
@@ -123,14 +124,14 @@ export class PluginManager<T extends CardTemplate = CardTemplate> {
 
       // Aggregate state observers
       if (plugin.stateObservers) {
-        for (const { observer, priority = 100 } of plugin.stateObservers) {
+        for (const { observer, priority = DEFAULT_HOOK_PRIORITY } of plugin.stateObservers) {
           this.stateObservers.push({ pluginId, hook: observer, priority });
         }
       }
 
       // Aggregate blockers
       if (plugin.blockers) {
-        for (const { blocker, priority = 100 } of plugin.blockers) {
+        for (const { blocker, priority = DEFAULT_HOOK_PRIORITY } of plugin.blockers) {
           this.blockers.push({ pluginId, hook: blocker, priority });
         }
       }
@@ -166,7 +167,7 @@ export class PluginManager<T extends CardTemplate = CardTemplate> {
       this.preHooks.set(actionType, []);
     }
     const list = this.preHooks.get(actionType)!;
-    for (const { hook, priority = 100 } of hooks) {
+    for (const { hook, priority = DEFAULT_HOOK_PRIORITY } of hooks) {
       list.push({ pluginId, hook, priority });
     }
   }
@@ -180,7 +181,7 @@ export class PluginManager<T extends CardTemplate = CardTemplate> {
       this.postHooks.set(actionType, []);
     }
     const list = this.postHooks.get(actionType)!;
-    for (const { hook, priority = 100 } of hooks) {
+    for (const { hook, priority = DEFAULT_HOOK_PRIORITY } of hooks) {
       list.push({ pluginId, hook, priority });
     }
   }
