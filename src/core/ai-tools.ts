@@ -87,7 +87,7 @@ function resolveCard(
  * Helper: resolve a card by position in a zone (for face-down cards the AI can't name).
  * Index 0 = top of zone (consistent with draw/peek).
  */
-function resolveCardByPosition(
+export function resolveCardByPosition(
   state: GameState<CardTemplate>,
   zoneKey: string,
   fromPosition?: string
