@@ -39,6 +39,8 @@ export interface GameResult {
 export interface GameState<T extends CardTemplate = CardTemplate> {
   id: string;
   config: GameConfig;
+  phase: 'setup' | 'playing';
+  setupComplete: [boolean, boolean];
   turnNumber: number;
   activePlayer: PlayerIndex;
   zones: Record<string, Zone<T>>;  // flattened: "player0_hand", "player1_tableau_1", etc.

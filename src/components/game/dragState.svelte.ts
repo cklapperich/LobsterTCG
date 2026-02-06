@@ -126,6 +126,11 @@ export function executeDrop(
   const flipAction = flipCard(fromPlayerIndex, cardInstanceId, newVisibility);
   executeAction(gameState, flipAction);
 
+  // Run post-hooks (e.g., setup face-down during setup phase)
+  if (pluginManager) {
+    pluginManager.runPostHooks(gameState, action, gameState);
+  }
+
   // Clear counters when moving to hand zone
   if (isHandZone) {
     // Find the card in the destination zone and clear its counters

@@ -130,14 +130,16 @@ export function createGameState<T extends CardTemplate>(
   return {
     id: `game_${now}_${Math.random().toString(36).slice(2, 9)}`,
     config,
-    turnNumber: 1,
+    phase: 'setup',
+    setupComplete: [false, false],
+    turnNumber: 0,
     activePlayer: 0,
     zones,
     players: [
       createPlayerInfo(0, player1Id),
       createPlayerInfo(1, player2Id),
     ],
-    currentTurn: createTurn(1, 0),
+    currentTurn: createTurn(0, 0),
     pendingDecision: null,
     result: null,
     startedAt: now,
@@ -552,6 +554,25 @@ function executeEndTurn<T extends CardTemplate>(
     state.pendingDecision = null;
     state.activePlayer = creator;
     state.log.push('Decision auto-resolved (end_turn called during decision)');
+    return;
+  }
+
+  // Setup phase: track per-player completion, transition to playing when both done
+  if (state.phase === 'setup') {
+    state.setupComplete[state.activePlayer] = true;
+    state.currentTurn.ended = true;
+
+    if (state.setupComplete[0] && state.setupComplete[1]) {
+      // Both done → transition to playing phase
+      state.phase = 'playing';
+      state.turnNumber = 1;
+      state.activePlayer = 0;
+      state.currentTurn = createTurn(1, 0);
+    } else {
+      // Switch to the other player's setup turn
+      state.activePlayer = state.activePlayer === 0 ? 1 : 0;
+      state.currentTurn = createTurn(0, state.activePlayer);
+    }
     return;
   }
 

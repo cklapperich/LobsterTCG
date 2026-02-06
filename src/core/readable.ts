@@ -43,6 +43,7 @@ export interface ReadableTurn {
 }
 
 export interface ReadableGameState {
+  phase: 'setup' | 'playing';
   turnNumber: number;
   activePlayer: 0 | 1;
   zones: Record<string, ReadableZone>;
@@ -74,6 +75,7 @@ export function toReadableState<T extends CardTemplate>(
   const idToName = buildCardNameMap(state, playerIndex);
 
   const readable: ReadableGameState = {
+    phase: state.phase,
     turnNumber: state.turnNumber,
     activePlayer: state.activePlayer,
     zones: readableZones,
