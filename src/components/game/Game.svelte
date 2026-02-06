@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { Playmat, CardInstance, CardTemplate, GameState, CounterDefinition, DeckList, ZoneConfig, Action } from '../../core';
-  import { executeAction, shuffle, VISIBILITY, flipCard, endTurn, loadDeck, getCardName, findCardInZones, toReadableState, PluginManager, setOrientation, createDecision, resolveDecision, revealHand } from '../../core';
+  import { executeAction, shuffle, VISIBILITY, flipCard, endTurn, loadDeck, getCardName, findCardInZones, toReadableState, PluginManager, setOrientation, createDecision, resolveDecision, revealHand, ACTION_TYPES, PHASES, ACTION_SOURCES } from '../../core';
   import type { ToolContext } from '../../core/ai-tools';
   import { plugin, executeSetup, ZONE_IDS, pokemonHooksPlugin, autoMulligan, flipFieldCardsFaceUp } from '../../plugins/pokemon';
   import { getTemplate } from '../../plugins/pokemon/cards';
@@ -24,6 +24,7 @@
   import { runAITurn } from '../../ai';
   import agentsMd from '../../plugins/pokemon/agents.md?raw';
   import agent0Md from '../../plugins/pokemon/agent0.md?raw';
+  const ACTION_DELAY_MS = 500;
   // gameLog store no longer used - log lives in gameState.log
   import { contextMenuStore, openContextMenu, closeContextMenu as closeContextMenuStore } from './contextMenu.svelte';
   import { cardModalStore, openCardModal, closeCardModal as closeCardModalStore } from './cardModal.svelte';
@@ -169,48 +170,48 @@
     const counterName = (id: string) => getCounterById(id)?.name ?? id;
 
     switch (action.type) {
-      case 'draw':
+      case ACTION_TYPES.DRAW:
         return `[AI] Drew ${action.count} card(s)`;
-      case 'move_card':
+      case ACTION_TYPES.MOVE_CARD:
         return `[AI] Moved ${cardName(action.cardInstanceId)} from ${zoneId(action.fromZone)} to ${zoneId(action.toZone)}`;
-      case 'move_card_stack':
+      case ACTION_TYPES.MOVE_CARD_STACK:
         return `[AI] Moved ${action.cardInstanceIds.length} cards from ${zoneId(action.fromZone)} to ${zoneId(action.toZone)}`;
-      case 'place_on_zone':
+      case ACTION_TYPES.PLACE_ON_ZONE:
         return `[AI] Placed ${action.cardInstanceIds.length} card(s) on ${action.position} of ${zoneId(action.zoneId)}`;
-      case 'shuffle':
+      case ACTION_TYPES.SHUFFLE:
         return `[AI] Shuffled ${zoneId(action.zoneId)}`;
-      case 'flip_card':
+      case ACTION_TYPES.FLIP_CARD:
         return `[AI] Flipped ${cardName(action.cardInstanceId)} ${action.newVisibility[0] ? 'face up' : 'face down'}`;
-      case 'set_orientation':
+      case ACTION_TYPES.SET_ORIENTATION:
         return action.orientation === '0'
           ? `[AI] ${cardName(action.cardInstanceId)} rotation cleared`
           : `[AI] ${cardName(action.cardInstanceId)} rotated to ${action.orientation}°`;
-      case 'add_counter':
+      case ACTION_TYPES.ADD_COUNTER:
         return `[AI] Added ${action.amount}x ${counterName(action.counterType)} to ${cardName(action.cardInstanceId)}`;
-      case 'remove_counter':
+      case ACTION_TYPES.REMOVE_COUNTER:
         return `[AI] Removed ${action.amount}x ${counterName(action.counterType)} from ${cardName(action.cardInstanceId)}`;
-      case 'set_counter':
+      case ACTION_TYPES.SET_COUNTER:
         return `[AI] Set ${counterName(action.counterType)} on ${cardName(action.cardInstanceId)} to ${action.value}`;
-      case 'dice_roll':
+      case ACTION_TYPES.DICE_ROLL:
         return `[AI] Rolled ${action.count}d${action.sides}`;
-      case 'end_turn':
+      case ACTION_TYPES.END_TURN:
         return `[AI] Ended turn`;
-      case 'concede':
+      case ACTION_TYPES.CONCEDE:
         return `[AI] Conceded`;
-      case 'declare_victory':
+      case ACTION_TYPES.DECLARE_VICTORY:
         return `[AI] Declared victory: ${action.reason ?? 'unknown'}`;
-      case 'reveal':
+      case ACTION_TYPES.REVEAL:
         return `[AI] Revealed ${action.cardInstanceIds.map(id => cardName(id)).join(', ')}`;
-      case 'peek':
+      case ACTION_TYPES.PEEK:
         return `[AI] Peeked at ${action.count} cards from ${action.fromPosition} of ${zoneId(action.zoneId)}`;
-      case 'reveal_hand':
+      case ACTION_TYPES.REVEAL_HAND:
         return `[AI] Revealed ${zoneId(action.zoneKey)}`;
-      case 'create_decision':
+      case ACTION_TYPES.CREATE_DECISION:
         return `[AI] Requested decision: ${action.message ?? 'Action needed'}`;
-      case 'resolve_decision':
+      case ACTION_TYPES.RESOLVE_DECISION:
         return `[AI] Resolved decision`;
-      case 'coin_flip':
-      case 'search_zone':
+      case ACTION_TYPES.COIN_FLIP:
+      case ACTION_TYPES.SEARCH_ZONE:
         return null;
       default:
         return null;
@@ -459,10 +460,10 @@
       },
       execute: (action) => {
         const result = queue.then(async () => {
-          action.source = 'ai';
+          action.source = ACTION_SOURCES.AI;
 
           // Special case: coin_flip uses visual CoinFlip animation
-          if (action.type === 'coin_flip' && coinFlipRef) {
+          if (action.type === ACTION_TYPES.COIN_FLIP && coinFlipRef) {
             const results: boolean[] = [];
             for (let i = 0; i < action.count; i++) {
               const isHeads = Math.random() < 0.5;
@@ -486,27 +487,27 @@
 
           // SFX based on action type
           const sfxMap: Record<string, Parameters<typeof playSfx>[0]> = {
-            draw: 'cardDrop',
-            move_card: 'cardDrop',
-            move_card_stack: 'cardDrop',
-            shuffle: 'shuffle',
-            end_turn: 'confirm',
-            add_counter: 'cursor',
-            remove_counter: 'cursor',
-            set_counter: 'cursor',
+            [ACTION_TYPES.DRAW]: 'cardDrop',
+            [ACTION_TYPES.MOVE_CARD]: 'cardDrop',
+            [ACTION_TYPES.MOVE_CARD_STACK]: 'cardDrop',
+            [ACTION_TYPES.SHUFFLE]: 'shuffle',
+            [ACTION_TYPES.END_TURN]: 'confirm',
+            [ACTION_TYPES.ADD_COUNTER]: 'cursor',
+            [ACTION_TYPES.REMOVE_COUNTER]: 'cursor',
+            [ACTION_TYPES.SET_COUNTER]: 'cursor',
           };
           const sfx = sfxMap[action.type];
           if (sfx) playSfx(sfx);
 
           // If AI created a decision targeting human (player 0), block until human resolves
-          if ((action.type === 'create_decision' || action.type === 'reveal_hand') && gameState?.pendingDecision?.targetPlayer === 0) {
+          if ((action.type === ACTION_TYPES.CREATE_DECISION || action.type === ACTION_TYPES.REVEAL_HAND) && gameState?.pendingDecision?.targetPlayer === 0) {
             await new Promise<void>(resolve => {
               pendingDecisionResolve = resolve;
             });
           }
 
           // Delay for visual feedback
-          await new Promise(r => setTimeout(r, 500));
+          await new Promise(r => setTimeout(r, ACTION_DELAY_MS));
           return ctx.getReadableState();
         });
         queue = result.then(() => {}, () => {});
@@ -566,7 +567,7 @@
     }
 
     // After AI setup turn, check if phase transitioned to playing
-    if (gameState && gameState.phase === 'playing' && gameState.turnNumber === 1) {
+    if (gameState && gameState.phase === PHASES.PLAYING && gameState.turnNumber === 1) {
       flipFieldCardsFaceUp(gameState);
       gameState = { ...gameState };
     }
@@ -612,7 +613,7 @@
   function handleEndTurn() {
     if (!gameState) return;
     const currentPlayer = gameState.activePlayer;
-    const wasSetup = gameState.phase === 'setup';
+    const wasSetup = gameState.phase === PHASES.SETUP;
     const action = endTurn(currentPlayer);
     executeAction(gameState, action);
 
@@ -625,20 +626,20 @@
     playSfx('confirm');
 
     // Check if setup just transitioned to playing
-    if (wasSetup && gameState.phase === 'playing' && gameState.turnNumber === 1) {
+    if (wasSetup && gameState.phase === PHASES.PLAYING && gameState.turnNumber === 1) {
       flipFieldCardsFaceUp(gameState);
       gameState = { ...gameState };
       return; // Human's turn 1 — no AI trigger
     }
 
     // During setup, if it's now AI's turn, trigger AI setup
-    if (gameState.phase === 'setup' && gameState.activePlayer === 1) {
+    if (gameState.phase === PHASES.SETUP && gameState.activePlayer === 1) {
       triggerAISetupTurn();
       return;
     }
 
     // Normal play: if it's now the AI's turn, trigger it
-    if (gameState.phase === 'playing') {
+    if (gameState.phase === PHASES.PLAYING) {
       triggerAITurn();
     }
   }
@@ -780,7 +781,7 @@
         <h1 class="text-xl max-sm:text-sm m-0 tracking-wide title-shadow font-retro phase-title">
           {#if !gameState}
             <span class="text-gbc-yellow">LOADING...</span>
-          {:else if gameState.phase === 'setup'}
+          {:else if gameState.phase === PHASES.SETUP}
             <span class="text-gbc-yellow">SETUP PHASE</span>
           {:else if aiThinking}
             <span class="text-gbc-red animate-pulse">AI THINKING...</span>
@@ -798,7 +799,7 @@
 
       <!-- CENTER: Turn counter -->
       <div class="flex items-center gap-3 font-retro text-sm max-sm:text-[0.5rem] tracking-wide">
-        {#if gameState && gameState.phase !== 'setup'}
+        {#if gameState && gameState.phase !== PHASES.SETUP}
           <span class="text-gbc-light">TURN</span>
           <span class="text-gbc-yellow">{gameState.turnNumber}</span>
         {/if}
@@ -820,7 +821,7 @@
             onclick={handleEndTurn}
             disabled={!gameState || aiThinking}
           >
-            {gameState?.phase === 'setup' ? 'END SETUP' : 'END TURN'}
+            {gameState?.phase === PHASES.SETUP ? 'END SETUP' : 'END TURN'}
           </button>
         {/if}
         <button

@@ -2,6 +2,7 @@ import { generateText } from 'ai';
 import type { LanguageModelV1 } from 'ai';
 import type { RunnableTool } from '../../core/ai-tools';
 import { toAISDKTools } from '../run-turn';
+import { SUBAGENT_CONFIG } from '../constants';
 
 /**
  * Create a tool that spawns a subagent for analysis tasks.
@@ -30,10 +31,10 @@ export function createSpawnSubagentTool(
     async execute(input: Record<string, any>) {
       const result = await generateText({
         model,
-        maxTokens: 2048,
+        maxTokens: SUBAGENT_CONFIG.MAX_TOKENS,
         system: systemPrompt,
         tools: toAISDKTools(tools),
-        maxSteps: 20,
+        maxSteps: SUBAGENT_CONFIG.MAX_STEPS,
         messages: [{ role: 'user', content: input.task }],
       });
 

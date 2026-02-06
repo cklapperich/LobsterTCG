@@ -1,5 +1,6 @@
 import type { CardTemplate, PlayerIndex, Action } from './types';
 import type { GameState } from './types';
+import { INSTANCE_ID_PREFIX, POSITIONS, ORIENTATIONS, REVEAL_TARGETS } from './types';
 import { resolveCardName } from './readable';
 import {
   draw,
@@ -79,7 +80,7 @@ function resolveCard(
   cardName: string,
   zoneKey: string
 ): string {
-  if (cardName.startsWith('card_')) return cardName;
+  if (cardName.startsWith(INSTANCE_ID_PREFIX)) return cardName;
   return resolveCardName(state, cardName, zoneKey);
 }
 
@@ -203,14 +204,14 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
             description: 'Names of the cards to place',
           },
           zone: { type: 'string', description: 'Target zone key (e.g. "player2_deck")' },
-          position: { type: 'string', enum: ['top', 'bottom'], description: 'Place on top or bottom of the zone' },
+          position: { type: 'string', enum: [POSITIONS.TOP, POSITIONS.BOTTOM], description: 'Place on top or bottom of the zone' },
         },
         required: ['cardNames', 'zone', 'position'],
       },
       async run(input) {
         const state = ctx.getState();
         const cardIds = input.cardNames.map((name: string) => {
-          if (name.startsWith('card_')) return name;
+          if (name.startsWith(INSTANCE_ID_PREFIX)) return name;
           for (const zk of Object.keys(state.zones)) {
             try {
               return resolveCardName(state, name, zk);
@@ -250,7 +251,7 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
           zone: { type: 'string', description: 'Zone key to search (e.g. "player2_deck")' },
           filter: { type: 'string', description: 'Optional filter string to match card names' },
           count: { type: 'number', description: 'Max number of results' },
-          fromPosition: { type: 'string', enum: ['top', 'bottom'], description: 'Search from top or bottom' },
+          fromPosition: { type: 'string', enum: [POSITIONS.TOP, POSITIONS.BOTTOM], description: 'Search from top or bottom' },
         },
         required: ['zone'],
       },
@@ -303,7 +304,7 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
         properties: {
           cardName: { type: 'string', description: 'Name of the card' },
           zone: { type: 'string', description: 'Zone key the card is in' },
-          orientation: { type: 'string', enum: ['0', '90', '-90', '180'], description: '"0" = upright, "90" = 90° clockwise, "-90" = 90° counter-clockwise, "180" = upside-down' },
+          orientation: { type: 'string', enum: [ORIENTATIONS.NORMAL, ORIENTATIONS.TAPPED, ORIENTATIONS.COUNTER_TAPPED, ORIENTATIONS.FLIPPED], description: '"0" = upright, "90" = 90° clockwise, "-90" = 90° counter-clockwise, "180" = upside-down' },
         },
         required: ['cardName', 'zone', 'orientation'],
       },
@@ -420,7 +421,7 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
         properties: {
           zone: { type: 'string', description: 'Zone key to peek at (e.g. "player2_deck")' },
           count: { type: 'number', description: 'Number of cards to peek at (default 1)' },
-          fromPosition: { type: 'string', enum: ['top', 'bottom'], description: 'Peek from top or bottom (default "top")' },
+          fromPosition: { type: 'string', enum: [POSITIONS.TOP, POSITIONS.BOTTOM], description: 'Peek from top or bottom (default "top")' },
         },
         required: ['zone'],
       },
@@ -444,7 +445,7 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
             description: 'Names of cards to reveal',
           },
           zone: { type: 'string', description: 'Zone key the cards are in' },
-          to: { type: 'string', enum: ['opponent', 'both'], description: 'Who to reveal to (default "both")' },
+          to: { type: 'string', enum: [REVEAL_TARGETS.OPPONENT, REVEAL_TARGETS.BOTH], description: 'Who to reveal to (default "both")' },
         },
         required: ['cardNames', 'zone'],
       },

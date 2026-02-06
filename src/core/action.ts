@@ -23,13 +23,20 @@ import type {
   RevealAction,
   PeekAction,
 } from './types';
+import {
+  ACTION_TYPES,
+  POSITIONS,
+  REVEAL_TARGETS,
+  ORIENTATION_NAMES,
+} from './types';
+import type { Position } from './types';
 
 // ============================================================================
 // Action Factory Functions
 // ============================================================================
 
 export function draw(player: PlayerIndex, count: number = 1): DrawAction {
-  return { type: 'draw', player, count };
+  return { type: ACTION_TYPES.DRAW, player, count };
 }
 
 export function moveCard(
@@ -39,7 +46,7 @@ export function moveCard(
   toZone: string,
   position?: number
 ): MoveCardAction {
-  return { type: 'move_card', player, cardInstanceId, fromZone, toZone, position };
+  return { type: ACTION_TYPES.MOVE_CARD, player, cardInstanceId, fromZone, toZone, position };
 }
 
 export function moveCardStack(
@@ -49,16 +56,16 @@ export function moveCardStack(
   toZone: string,
   position?: number
 ): MoveCardStackAction {
-  return { type: 'move_card_stack', player, cardInstanceIds, fromZone, toZone, position };
+  return { type: ACTION_TYPES.MOVE_CARD_STACK, player, cardInstanceIds, fromZone, toZone, position };
 }
 
 export function placeOnZone(
   player: PlayerIndex,
   cardInstanceIds: string[],
   zoneKey: string,
-  position: 'top' | 'bottom'
+  position: Position
 ): PlaceOnZoneAction {
-  return { type: 'place_on_zone', player, cardInstanceIds, zoneId: zoneKey, position };
+  return { type: ACTION_TYPES.PLACE_ON_ZONE, player, cardInstanceIds, zoneId: zoneKey, position };
 }
 
 export function placeOnTop(
@@ -66,7 +73,7 @@ export function placeOnTop(
   cardInstanceIds: string[],
   zoneKey: string
 ): PlaceOnZoneAction {
-  return placeOnZone(player, cardInstanceIds, zoneKey, 'top');
+  return placeOnZone(player, cardInstanceIds, zoneKey, POSITIONS.TOP);
 }
 
 export function placeOnBottom(
@@ -74,20 +81,20 @@ export function placeOnBottom(
   cardInstanceIds: string[],
   zoneKey: string
 ): PlaceOnZoneAction {
-  return placeOnZone(player, cardInstanceIds, zoneKey, 'bottom');
+  return placeOnZone(player, cardInstanceIds, zoneKey, POSITIONS.BOTTOM);
 }
 
 export function shuffle(player: PlayerIndex, zoneKey: string): ShuffleAction {
-  return { type: 'shuffle', player, zoneId: zoneKey };
+  return { type: ACTION_TYPES.SHUFFLE, player, zoneId: zoneKey };
 }
 
 export function searchZone(
   player: PlayerIndex,
   zoneKey: string,
-  options?: { filter?: string; count?: number; fromPosition?: 'top' | 'bottom' }
+  options?: { filter?: string; count?: number; fromPosition?: Position }
 ): SearchZoneAction {
   return {
-    type: 'search_zone',
+    type: ACTION_TYPES.SEARCH_ZONE,
     player,
     zoneId: zoneKey,
     filter: options?.filter,
@@ -101,7 +108,7 @@ export function flipCard(
   cardInstanceId: string,
   newVisibility: Visibility
 ): FlipCardAction {
-  return { type: 'flip_card', player, cardInstanceId, newVisibility };
+  return { type: ACTION_TYPES.FLIP_CARD, player, cardInstanceId, newVisibility };
 }
 
 export function setOrientation(
@@ -109,15 +116,15 @@ export function setOrientation(
   cardInstanceId: string,
   orientation: string
 ): SetOrientationAction {
-  return { type: 'set_orientation', player, cardInstanceId, orientation };
+  return { type: ACTION_TYPES.SET_ORIENTATION, player, cardInstanceId, orientation };
 }
 
 export function tap(player: PlayerIndex, cardInstanceId: string): SetOrientationAction {
-  return setOrientation(player, cardInstanceId, 'tapped');
+  return setOrientation(player, cardInstanceId, ORIENTATION_NAMES.TAPPED);
 }
 
 export function untap(player: PlayerIndex, cardInstanceId: string): SetOrientationAction {
-  return setOrientation(player, cardInstanceId, 'normal');
+  return setOrientation(player, cardInstanceId, ORIENTATION_NAMES.NORMAL);
 }
 
 export function addCounter(
@@ -126,7 +133,7 @@ export function addCounter(
   counterType: string,
   amount: number = 1
 ): AddCounterAction {
-  return { type: 'add_counter', player, cardInstanceId, counterType, amount };
+  return { type: ACTION_TYPES.ADD_COUNTER, player, cardInstanceId, counterType, amount };
 }
 
 export function removeCounter(
@@ -135,7 +142,7 @@ export function removeCounter(
   counterType: string,
   amount: number = 1
 ): RemoveCounterAction {
-  return { type: 'remove_counter', player, cardInstanceId, counterType, amount };
+  return { type: ACTION_TYPES.REMOVE_COUNTER, player, cardInstanceId, counterType, amount };
 }
 
 export function setCounter(
@@ -144,7 +151,7 @@ export function setCounter(
   counterType: string,
   value: number
 ): SetCounterAction {
-  return { type: 'set_counter', player, cardInstanceId, counterType, value };
+  return { type: ACTION_TYPES.SET_COUNTER, player, cardInstanceId, counterType, value };
 }
 
 export function coinFlip(
@@ -152,7 +159,7 @@ export function coinFlip(
   count: number = 1,
   results?: boolean[]
 ): CoinFlipAction {
-  return { type: 'coin_flip', player, count, results };
+  return { type: ACTION_TYPES.COIN_FLIP, player, count, results };
 }
 
 export function diceRoll(
@@ -161,39 +168,39 @@ export function diceRoll(
   count: number = 1,
   results?: number[]
 ): DiceRollAction {
-  return { type: 'dice_roll', player, count, sides, results };
+  return { type: ACTION_TYPES.DICE_ROLL, player, count, sides, results };
 }
 
 export function endTurn(player: PlayerIndex): EndTurnAction {
-  return { type: 'end_turn', player };
+  return { type: ACTION_TYPES.END_TURN, player };
 }
 
 export function concede(player: PlayerIndex): ConcedeAction {
-  return { type: 'concede', player };
+  return { type: ACTION_TYPES.CONCEDE, player };
 }
 
 export function declareVictory(
   player: PlayerIndex,
   reason?: string
 ): DeclareVictoryAction {
-  return { type: 'declare_victory', player, reason };
+  return { type: ACTION_TYPES.DECLARE_VICTORY, player, reason };
 }
 
 export function reveal(
   player: PlayerIndex,
   cardInstanceIds: string[],
-  to: 'opponent' | 'both'
+  to: typeof REVEAL_TARGETS.OPPONENT | typeof REVEAL_TARGETS.BOTH
 ): RevealAction {
-  return { type: 'reveal', player, cardInstanceIds, to };
+  return { type: ACTION_TYPES.REVEAL, player, cardInstanceIds, to };
 }
 
 export function peek(
   player: PlayerIndex,
   zoneKey: string,
   count: number,
-  fromPosition: 'top' | 'bottom' = 'top'
+  fromPosition: Position = POSITIONS.TOP
 ): PeekAction {
-  return { type: 'peek', player, zoneId: zoneKey, count, fromPosition };
+  return { type: ACTION_TYPES.PEEK, player, zoneId: zoneKey, count, fromPosition };
 }
 
 export function createDecision(
@@ -201,13 +208,13 @@ export function createDecision(
   targetPlayer: PlayerIndex,
   message?: string
 ): CreateDecisionAction {
-  return { type: 'create_decision', player, targetPlayer, message };
+  return { type: ACTION_TYPES.CREATE_DECISION, player, targetPlayer, message };
 }
 
 export function resolveDecision(player: PlayerIndex): ResolveDecisionAction {
-  return { type: 'resolve_decision', player };
+  return { type: ACTION_TYPES.RESOLVE_DECISION, player };
 }
 
 export function revealHand(player: PlayerIndex, zoneKey: string): RevealHandAction {
-  return { type: 'reveal_hand', player, zoneKey };
+  return { type: ACTION_TYPES.REVEAL_HAND, player, zoneKey };
 }

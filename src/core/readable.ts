@@ -9,6 +9,12 @@ import type {
   Decision,
   PlayerIndex,
 } from './types';
+import type { Phase } from './types';
+import {
+  HIDDEN_CARD,
+  READABLE_LOG_LIMIT,
+  ORIENTATION_NAMES,
+} from './types';
 
 /**
  * Readable card: template fields (minus id/imageUrl) with a
@@ -43,7 +49,7 @@ export interface ReadableTurn {
 }
 
 export interface ReadableGameState {
-  phase: 'setup' | 'playing';
+  phase: Phase;
   turnNumber: number;
   activePlayer: 0 | 1;
   zones: Record<string, ReadableZone>;
@@ -88,7 +94,7 @@ export function toReadableState<T extends CardTemplate>(
     currentTurn: convertTurn(state.currentTurn, idToName),
     pendingDecision: state.pendingDecision,
     result: state.result,
-    log: state.log.slice(-100),
+    log: state.log.slice(-READABLE_LOG_LIMIT),
   };
 
   return readable;
@@ -113,7 +119,7 @@ function buildCardNameMap<T extends CardTemplate>(
     if (card.visibility[playerIndex]) {
       map.set(card.instanceId, computeDisplayName(card, ambiguousNames));
     } else {
-      map.set(card.instanceId, '[hidden card]');
+      map.set(card.instanceId, HIDDEN_CARD.AI_NAME);
     }
   }
 
@@ -262,7 +268,7 @@ function convertCard<T extends CardTemplate>(
   }
 
   // Only include orientation if not default
-  if (card.orientation && card.orientation !== 'normal') {
+  if (card.orientation && card.orientation !== ORIENTATION_NAMES.NORMAL) {
     result.orientation = card.orientation;
   }
 

@@ -1,19 +1,10 @@
 import type { CardTemplate, Action, GameState, PlayerIndex } from './types';
+import { ACTION_TYPES, GAME_EVENTS } from './types';
+import type { GameEventType } from './types';
 import type { ReadableGameState } from './readable';
 import { toReadableState } from './readable';
 import { executeAction, checkOpponentZone } from './engine';
 import type { PluginManager } from './plugin';
-
-export type GameEventType =
-  | 'action:queued'
-  | 'action:executing'
-  | 'action:executed'
-  | 'action:rejected'
-  | 'action:blocked'
-  | 'action:replaced'
-  | 'auto-action:queued'
-  | 'turn:ended'
-  | 'turn:started';
 
 type GameEventListener<T extends CardTemplate = CardTemplate> = (
   event: GameEventType,
@@ -79,7 +70,7 @@ export class GameLoop<T extends CardTemplate = CardTemplate> {
 
   submit(action: Action): void {
     this.queue.push(action);
-    this.emit('action:queued', { state: this.state, action });
+    this.emit(GAME_EVENTS.ACTION_QUEUED, { state: this.state, action });
   }
 
   processNext(): void {
@@ -91,7 +82,7 @@ export class GameLoop<T extends CardTemplate = CardTemplate> {
       const blockReason = this.pluginManager.validateAction(this.state, action);
       if (blockReason) {
         this.state.log.push(`Action blocked: ${blockReason}`);
-        this.emit('action:blocked', { state: this.state, action, reason: blockReason });
+        this.emit(GAME_EVENTS.ACTION_BLOCKED, { state: this.state, action, reason: blockReason });
         return;
       }
     }
@@ -101,7 +92,7 @@ export class GameLoop<T extends CardTemplate = CardTemplate> {
     if (opponentCheck) {
       if (opponentCheck.shouldBlock) {
         this.state.log.push(`Action blocked: ${opponentCheck.reason}`);
-        this.emit('action:blocked', { state: this.state, action, reason: opponentCheck.reason });
+        this.emit(GAME_EVENTS.ACTION_BLOCKED, { state: this.state, action, reason: opponentCheck.reason });
         return;
       } else {
         this.state.log.push(`Warning: ${opponentCheck.reason}`);
@@ -112,7 +103,7 @@ export class GameLoop<T extends CardTemplate = CardTemplate> {
     if (this.validator) {
       const error = this.validator(this.state, action);
       if (error) {
-        this.emit('action:rejected', { state: this.state, action, reason: error });
+        this.emit(GAME_EVENTS.ACTION_REJECTED, { state: this.state, action, reason: error });
         return;
       }
     }
@@ -122,7 +113,7 @@ export class GameLoop<T extends CardTemplate = CardTemplate> {
       const preResult = this.pluginManager.runPreHooks(this.state, action);
       if (preResult.outcome === 'block') {
         this.state.log.push(`Action blocked: ${preResult.reason ?? 'Unknown reason'}`);
-        this.emit('action:blocked', { state: this.state, action, reason: preResult.reason });
+        this.emit(GAME_EVENTS.ACTION_BLOCKED, { state: this.state, action, reason: preResult.reason });
         return;
       }
       if (preResult.outcome === 'warn') {
@@ -131,7 +122,7 @@ export class GameLoop<T extends CardTemplate = CardTemplate> {
       if (preResult.outcome === 'replace') {
         const originalAction = action;
         action = preResult.action;
-        this.emit('action:replaced', { state: this.state, action, originalAction });
+        this.emit(GAME_EVENTS.ACTION_REPLACED, { state: this.state, action, originalAction });
       }
     }
 
@@ -139,7 +130,7 @@ export class GameLoop<T extends CardTemplate = CardTemplate> {
     const previousPlayer = this.state.activePlayer;
     const prevState = deepClone(this.state);
 
-    this.emit('action:executing', { state: this.state, action });
+    this.emit(GAME_EVENTS.ACTION_EXECUTING, { state: this.state, action });
 
     // Execute the action - check for custom executor first
     let executed = false;
@@ -153,7 +144,7 @@ export class GameLoop<T extends CardTemplate = CardTemplate> {
     if (!executed) {
       const blocked = executeAction(this.state, action);
       if (blocked) {
-        this.emit('action:blocked', { state: this.state, action, reason: blocked });
+        this.emit(GAME_EVENTS.ACTION_BLOCKED, { state: this.state, action, reason: blocked });
         return;
       }
     }
@@ -164,7 +155,7 @@ export class GameLoop<T extends CardTemplate = CardTemplate> {
       this.actions.push(action);
     }
 
-    this.emit('action:executed', { state: this.state, action });
+    this.emit(GAME_EVENTS.ACTION_EXECUTED, { state: this.state, action });
 
     // Plugin post-hooks and state observers
     if (this.pluginManager) {
@@ -175,17 +166,17 @@ export class GameLoop<T extends CardTemplate = CardTemplate> {
       if (allFollowUps.length > 0) {
         // Queue follow-up actions at front
         this.queue.unshift(...allFollowUps);
-        this.emit('auto-action:queued', { state: this.state, autoActions: allFollowUps });
+        this.emit(GAME_EVENTS.AUTO_ACTION_QUEUED, { state: this.state, autoActions: allFollowUps });
       }
     }
 
     // Check for turn change
-    if (action.type === 'end_turn') {
-      this.emit('turn:ended', { state: this.state, action });
-      this.emit('turn:started', { state: this.state, action });
+    if (action.type === ACTION_TYPES.END_TURN) {
+      this.emit(GAME_EVENTS.TURN_ENDED, { state: this.state, action });
+      this.emit(GAME_EVENTS.TURN_STARTED, { state: this.state, action });
     } else if (this.state.turnNumber !== previousTurn || this.state.activePlayer !== previousPlayer) {
-      this.emit('turn:ended', { state: this.state, action });
-      this.emit('turn:started', { state: this.state, action });
+      this.emit(GAME_EVENTS.TURN_ENDED, { state: this.state, action });
+      this.emit(GAME_EVENTS.TURN_STARTED, { state: this.state, action });
     }
   }
 

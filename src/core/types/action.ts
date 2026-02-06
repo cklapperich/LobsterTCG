@@ -1,21 +1,22 @@
 import type { PlayerIndex, Visibility } from './card';
+import type { ACTION_TYPES, ACTION_SOURCES, POSITIONS, REVEAL_TARGETS } from './constants';
 
 // Base action interface
 interface BaseAction {
   type: string;
   player: PlayerIndex;
   allowed_by_effect?: boolean;  // Card effect overrides normal rules
-  source?: 'ui' | 'ai';        // Origin of the action (ui = never blocked by warnings)
+  source?: typeof ACTION_SOURCES.UI | typeof ACTION_SOURCES.AI;
 }
 
 // Card Movement Actions
 export interface DrawAction extends BaseAction {
-  type: 'draw';
+  type: typeof ACTION_TYPES.DRAW;
   count: number;
 }
 
 export interface MoveCardAction extends BaseAction {
-  type: 'move_card';
+  type: typeof ACTION_TYPES.MOVE_CARD;
   cardInstanceId: string;
   fromZone: string;  // Zone key (e.g., "player2_hand")
   toZone: string;    // Zone key (e.g., "player2_discard")
@@ -23,7 +24,7 @@ export interface MoveCardAction extends BaseAction {
 }
 
 export interface MoveCardStackAction extends BaseAction {
-  type: 'move_card_stack';
+  type: typeof ACTION_TYPES.MOVE_CARD_STACK;
   cardInstanceIds: string[];
   fromZone: string;  // Zone key (e.g., "player1_deck")
   toZone: string;    // Zone key (e.g., "player1_hand")
@@ -31,56 +32,56 @@ export interface MoveCardStackAction extends BaseAction {
 }
 
 export interface PlaceOnZoneAction extends BaseAction {
-  type: 'place_on_zone';
+  type: typeof ACTION_TYPES.PLACE_ON_ZONE;
   cardInstanceIds: string[];
   zoneId: string;    // Zone key (e.g., "player2_deck")
-  position: 'top' | 'bottom';
+  position: typeof POSITIONS.TOP | typeof POSITIONS.BOTTOM;
 }
 
 // Zone Actions
 export interface ShuffleAction extends BaseAction {
-  type: 'shuffle';
+  type: typeof ACTION_TYPES.SHUFFLE;
   zoneId: string;    // Zone key (e.g., "player1_deck")
 }
 
 export interface SearchZoneAction extends BaseAction {
-  type: 'search_zone';
+  type: typeof ACTION_TYPES.SEARCH_ZONE;
   zoneId: string;    // Zone key (e.g., "player2_deck")
   filter?: string;
   count?: number;
-  fromPosition?: 'top' | 'bottom';
+  fromPosition?: typeof POSITIONS.TOP | typeof POSITIONS.BOTTOM;
 }
 
 // Card State Actions
 export interface FlipCardAction extends BaseAction {
-  type: 'flip_card';
+  type: typeof ACTION_TYPES.FLIP_CARD;
   cardInstanceId: string;
   newVisibility: Visibility;
 }
 
 export interface SetOrientationAction extends BaseAction {
-  type: 'set_orientation';
+  type: typeof ACTION_TYPES.SET_ORIENTATION;
   cardInstanceId: string;
   orientation: string;
 }
 
 // Counter Actions
 export interface AddCounterAction extends BaseAction {
-  type: 'add_counter';
+  type: typeof ACTION_TYPES.ADD_COUNTER;
   cardInstanceId: string;
   counterType: string;
   amount: number;
 }
 
 export interface RemoveCounterAction extends BaseAction {
-  type: 'remove_counter';
+  type: typeof ACTION_TYPES.REMOVE_COUNTER;
   cardInstanceId: string;
   counterType: string;
   amount: number;
 }
 
 export interface SetCounterAction extends BaseAction {
-  type: 'set_counter';
+  type: typeof ACTION_TYPES.SET_COUNTER;
   cardInstanceId: string;
   counterType: string;
   value: number;
@@ -88,13 +89,13 @@ export interface SetCounterAction extends BaseAction {
 
 // Randomness Actions
 export interface CoinFlipAction extends BaseAction {
-  type: 'coin_flip';
+  type: typeof ACTION_TYPES.COIN_FLIP;
   count: number;
   results?: boolean[];
 }
 
 export interface DiceRollAction extends BaseAction {
-  type: 'dice_roll';
+  type: typeof ACTION_TYPES.DICE_ROLL;
   count: number;
   sides: number;
   results?: number[];
@@ -102,48 +103,48 @@ export interface DiceRollAction extends BaseAction {
 
 // Game Flow Actions
 export interface EndTurnAction extends BaseAction {
-  type: 'end_turn';
+  type: typeof ACTION_TYPES.END_TURN;
 }
 
 export interface ConcedeAction extends BaseAction {
-  type: 'concede';
+  type: typeof ACTION_TYPES.CONCEDE;
 }
 
 export interface DeclareVictoryAction extends BaseAction {
-  type: 'declare_victory';
+  type: typeof ACTION_TYPES.DECLARE_VICTORY;
   reason?: string;
 }
 
 // Decision Actions
 export interface CreateDecisionAction extends BaseAction {
-  type: 'create_decision';
+  type: typeof ACTION_TYPES.CREATE_DECISION;
   targetPlayer: PlayerIndex;
   message?: string;
 }
 
 export interface ResolveDecisionAction extends BaseAction {
-  type: 'resolve_decision';
+  type: typeof ACTION_TYPES.RESOLVE_DECISION;
 }
 
 // Reveal Hand Action - reveals a zone to opponent, logs contents, creates decision
 export interface RevealHandAction extends BaseAction {
-  type: 'reveal_hand';
+  type: typeof ACTION_TYPES.REVEAL_HAND;
   zoneKey: string;
 }
 
 // Reveal Action
 export interface RevealAction extends BaseAction {
-  type: 'reveal';
+  type: typeof ACTION_TYPES.REVEAL;
   cardInstanceIds: string[];
-  to: 'opponent' | 'both';
+  to: typeof REVEAL_TARGETS.OPPONENT | typeof REVEAL_TARGETS.BOTH;
 }
 
 // Peek Action - look at cards without changing visibility
 export interface PeekAction extends BaseAction {
-  type: 'peek';
+  type: typeof ACTION_TYPES.PEEK;
   zoneId: string;    // Zone key (e.g., "player1_deck")
   count: number;
-  fromPosition: 'top' | 'bottom';
+  fromPosition: typeof POSITIONS.TOP | typeof POSITIONS.BOTTOM;
 }
 
 // Union of all action types

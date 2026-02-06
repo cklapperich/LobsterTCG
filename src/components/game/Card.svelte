@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { CardInstance, CardTemplate, CounterDefinition } from '../../core';
+  import { ORIENTATIONS } from '../../core';
   import { startDrag, updateDragPosition, endDrag } from './dragState.svelte';
   import {
     startCounterDrag,
@@ -184,7 +185,7 @@
   class:dragging={isDragging}
   class:drop-target={isDragOver}
   class:counter-drop-target={isCounterDragOver}
-  data-orientation={card.orientation ?? '0'}
+  data-orientation={card.orientation ?? ORIENTATIONS.NORMAL}
   style="--i: {index}"
   {draggable}
   ondragstart={handleDragStart}
