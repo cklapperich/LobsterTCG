@@ -27,7 +27,7 @@ Pre-hooks can block, warn, or replace actions. Post-hooks emit follow-up actions
 Actions carry an optional `source?: 'ui' | 'ai'` field. `PreHookResult` supports `warn` in addition to `block`/`replace`/`continue`. Warnings log to `state.log` but never prevent the action. The `blockOrWarn()` helper in `warnings.ts` returns `block` for AI actions and `warn` for UI actions — human players are never blocked by warnings. AI tools in `ai-tools.ts` automatically tag actions with `source: 'ai'`.
 
 ### Zone Keys
-Format: `player{0|1}_{zoneId}` (e.g., "player0_hand"). Zone keys are the canonical identifier everywhere — readable state, AI tools, action factories, and `state.zones` all use zone keys directly. `makeZoneKey()` still exists as a construction helper but is being phased out (see `ZONE_KEY_REFACTOR.md`). AI tools pass zone keys straight through to action factories with no conversion.
+Format: `player{0|1}_{zoneId}` (e.g., "player0_hand"). Zone keys are the canonical identifier everywhere — readable state, AI tools, action factories, `state.zones`, warning hooks, and helper functions all use zone keys directly. Zone keys are constructed inline via template literals (e.g., `` `player${p}_${ZONE_IDS.DECK}` ``). `ZONE_IDS` constants name zone *types* (bare IDs like `'deck'`, `'hand'`) used only in construction. Playmat JSON uses bare zone type names since zone definitions are player-agnostic templates.
 
 ### Card Array Order
 `zone.cards` array: **index 0 = visual bottom, end of array = visual top.** The last element is the card rendered on top with the highest z-index. `position: 0` inserts underneath all existing cards. `push()` / no position appends to the visual top. This convention is consistent across Zone.svelte drops, CardStack rendering, and warning hooks.
@@ -75,7 +75,7 @@ Tools extract SFX from Pokemon TCG GB ROM using PyBoy emulator. Memory addresses
 
 | File | Purpose |
 |------|---------|
-| `engine.ts` | Core game state operations: `createGameState()`, `executeAction()`, `getPlayerView()`, `loadDeck()`, `makeZoneKey()`, `findCardInZones()`, `getCardName()`. Moving cards between zones auto-clears `card.orientation`. |
+| `engine.ts` | Core game state operations: `createGameState()`, `executeAction()`, `getPlayerView()`, `loadDeck()`, `findCardInZones()`, `getCardName()`, `checkOpponentZone()`. Moving cards between zones auto-clears `card.orientation`. |
 | `game-loop.ts` | Turn sequencing with plugin integration. Manages action queues, validation, pre/post hooks, event emission, history tracking. |
 | `action.ts` | Factory functions for all action types: `draw()`, `moveCard()`, `playCard()`, `shuffle()`, `addCounter()`, `coinFlip()`, `endTurn()`, `peek()`, `reveal()`, etc. |
 | `readable.ts` | Converts internal state to human-readable format. `toReadableState()`, `resolveCardName()`. Types: `ReadableCard`, `ReadableZone`, `ReadableGameState`, `ReadableAction`, `ReadableTurn`. |
@@ -142,7 +142,7 @@ Tools extract SFX from Pokemon TCG GB ROM using PyBoy emulator. Memory addresses
 | File | Purpose |
 |------|---------|
 | `index.ts` | Main plugin: `startPokemonGame()`, `executeSetup()`, `initializeGame()`, `loadPlayerDeck()`, `getCounterDefinitions()`, `getCoinFront()`, `getCoinBack()`, `getCardInfo()`. Exports `plugin` object implementing `GamePlugin`. `listTools(ctx)` filters defaults and adds Pokemon-specific tools: `declare_attack`, `declare_retreat`, `declare_ability`. `set_orientation` is exposed for status conditions. |
-| `helpers.ts` | Pokemon card type helpers: `isBasicPokemon()`, `isEvolution()`, `isSupporter()`, `isStadium()`, `isEnergy()`, `isFieldZone()`. |
+| `helpers.ts` | Pokemon card type helpers: `isBasicPokemon()`, `isEvolution()`, `isSupporter()`, `isStadium()`, `isEnergy()`, `isFieldZone()`, `isStadiumZone()`. Zone helpers accept zone keys (e.g., `isFieldZone('player0_active')` → true). |
 | `cards.ts` | Card database backed by `cards-western.json`. `PokemonCardTemplate`, `PokemonAttack`, `PokemonAbility`, `POKEMON_TEMPLATE_MAP`, `getTemplate()`, `getCardBack()`, `parsePTCGODeck()`. |
 | `cards-western.json` | Western card database (all sets). Card data including names, images, attacks, abilities, HP, types. |
 | `set-codes.json` | Mapping of Pokemon TCG set names to set code prefixes for image lookup. |
@@ -186,4 +186,4 @@ Tools extract SFX from Pokemon TCG GB ROM using PyBoy emulator. Memory addresses
 | `AI_AGENT_PLAN.md` | AI agent integration planning. |
 | `plugin_todolist.md` | Plugin system TODO/planning notes. |
 | `sharpen.md` | Project sharpening/improvement notes. |
-| `ZONE_KEY_REFACTOR.md` | Zone key refactor status — tracks what's done (action factories, AI tools, Zone.key) and what's not (warnings plugin, helpers, makeZoneKey deletion). Warnings plugin is broken by partial refactor (16 failing tests). |
+| `ZONE_KEY_REFACTOR.md` | Zone key refactor status — complete. `makeZoneKey()` and `parseZoneKey()` deleted. All code uses zone keys directly. |
