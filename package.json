@@ -21,7 +21,8 @@
     "vitest": "^3.2.4"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.73.0",
+    "@ai-sdk/fireworks": "^0.1.0",
+    "ai": "^4.0.0",
     "@supabase/supabase-js": "^2.45.0",
     "@tailwindcss/vite": "^4.1.18",
     "lucide-svelte": "^0.563.0",

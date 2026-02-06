@@ -44,21 +44,17 @@ export interface ToolContext {
 }
 
 /**
- * A runnable tool compatible with the Anthropic SDK toolRunner.
- * Mirrors BetaRunnableTool shape without importing the SDK.
+ * A runnable tool compatible with the Vercel AI SDK.
  */
 export interface RunnableTool {
-  type: 'custom';
   name: string;
   description: string;
-  input_schema: Record<string, unknown>;
-  run: (input: Record<string, any>) => Promise<string> | string;
-  parse: (content: unknown) => any;
+  parameters: Record<string, unknown>;
+  execute: (input: Record<string, any>) => Promise<string> | string;
 }
 
 /**
  * Create a runnable tool from a schema definition.
- * Equivalent to the SDK's betaTool() but avoids the deep import.
  */
 function tool(options: {
   name: string;
@@ -67,12 +63,10 @@ function tool(options: {
   run: (input: any) => Promise<string> | string;
 }): RunnableTool {
   return {
-    type: 'custom',
     name: options.name,
     description: options.description,
-    input_schema: options.inputSchema,
-    run: options.run,
-    parse: (content: unknown) => content,
+    parameters: options.inputSchema,
+    execute: options.run,
   };
 }
 

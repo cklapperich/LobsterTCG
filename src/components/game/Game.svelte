@@ -489,7 +489,7 @@
 
   async function triggerAITurn() {
     if (!gameState || gameState.activePlayer !== 1 || aiThinking) return;
-    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+    const apiKey = import.meta.env.VITE_FIREWORKS_API_KEY;
     if (!apiKey) return;
     aiThinking = true;
     addLog('[AI] Thinking...');
@@ -515,7 +515,7 @@
    */
   async function triggerAIDecisionTurn() {
     if (!gameState || aiThinking) return;
-    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+    const apiKey = import.meta.env.VITE_FIREWORKS_API_KEY;
     if (!apiKey) return;
     aiThinking = true;
     addLog('[AI] Responding to decision...');

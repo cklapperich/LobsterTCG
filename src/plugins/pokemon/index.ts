@@ -202,12 +202,10 @@ function tool(options: {
   run: (input: any) => Promise<string> | string;
 }): RunnableTool {
   return {
-    type: 'custom',
     name: options.name,
     description: options.description,
-    input_schema: options.inputSchema,
-    run: options.run,
-    parse: (content: unknown) => content,
+    parameters: options.inputSchema,
+    execute: options.run,
   };
 }
 
