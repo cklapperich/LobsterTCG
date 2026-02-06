@@ -1,5 +1,5 @@
 import type { CardInstance, CardTemplate, Visibility, GameState } from '../../core';
-import { executeAction, moveCard, moveCardStack, flipCard, checkOpponentZone, VISIBILITY, type PluginManager } from '../../core';
+import { executeAction, moveCard, moveCardStack, checkOpponentZone, zoneVisibility, type PluginManager } from '../../core';
 import { playSfx } from '../../lib/audio.svelte';
 
 export interface DragState {
@@ -76,8 +76,6 @@ export function executeDrop(
     return null;
   }
 
-  const savedVisibility = dragStore.current.originalVisibility;
-
   // Extract player indices from zone keys for cross-player check
   const fromPlayerIndex = dragStore.current.fromZoneKey.startsWith('player0_') ? 0 : 1;
   const toPlayerIndex = toZoneKey.startsWith('player0_') ? 0 : 1;
@@ -124,6 +122,10 @@ export function executeDrop(
     const cardIndex = fromZone.cards.findIndex(c => c.instanceId === cardInstanceId);
     if (cardIndex !== -1 && toZone) {
       const [card] = fromZone.cards.splice(cardIndex, 1);
+      // Set visibility based on destination zone defaults
+      card.visibility = zoneVisibility(toZoneKey, toZone.config);
+      card.orientation = undefined;
+      if (toZone.config.canHaveCounters === false) card.counters = {};
       if (position !== undefined) {
         toZone.cards.splice(position, 0, card);
       } else {
@@ -131,7 +133,7 @@ export function executeDrop(
       }
     }
   } else {
-    // Same-player: use executeAction
+    // Same-player: use executeAction (handles visibility via zoneVisibility internally)
     const blocked = executeAction(gameState, action);
     if (blocked) {
       dragStore.current = null;
@@ -139,26 +141,9 @@ export function executeDrop(
     }
   }
 
-  // Determine visibility for the card
-  // Auto-reveal cards moved to hand zones, otherwise restore original visibility
-  const isHandZone = toZoneKey.toLowerCase().includes('hand');
-  const newVisibility = isHandZone ? VISIBILITY.PUBLIC : savedVisibility;
-  const flipAction = flipCard(fromPlayerIndex, cardInstanceId, newVisibility);
-  executeAction(gameState, flipAction);
-
   // Run post-hooks (e.g., setup face-down during setup phase)
   if (pluginManager) {
     pluginManager.runPostHooks(gameState, action, gameState);
-  }
-
-  // Clear counters when moving to hand zone
-  if (isHandZone) {
-    // Find the card in the destination zone and clear its counters
-    const toZone = gameState.zones[toZoneKey];
-    const movedCard = toZone?.cards.find(c => c.instanceId === cardInstanceId);
-    if (movedCard) {
-      movedCard.counters = {};
-    }
   }
 
   // Clear drag state
@@ -225,11 +210,15 @@ export function executeStackDrop(
       return null;
     }
     if (fromZone && toZone) {
+      const vis = zoneVisibility(toZoneKey, toZone.config);
       const movedCards: CardInstance<CardTemplate>[] = [];
       for (const id of pileCardIds) {
         const idx = fromZone.cards.findIndex(c => c.instanceId === id);
         if (idx !== -1) {
           const [card] = fromZone.cards.splice(idx, 1);
+          card.visibility = vis;
+          card.orientation = undefined;
+          if (toZone.config.canHaveCounters === false) card.counters = {};
           movedCards.push(card);
         }
       }

@@ -67,6 +67,9 @@ During one player's turn, actions can require the OTHER player to make a decisio
 
 **AI flow:** AI calls `reveal_hand` tool → cards go PUBLIC → execute callback blocks (decision targets human) → human sees auto-opened browse modal → clicks "Resolve Decision" → cards hidden, AI unblocked.
 
+### Narrative State Formatting
+Plugins can register a `readableStateFormatter` that converts `ReadableGameState` into a compact text string for AI consumption. The Pokemon plugin's `formatNarrativeState()` produces a structured format: (1) **CARD REFERENCE** — full details for every visible unique card, printed once and deduplicated by name; (2) **GAME STATE** header — turn, phase, pending decision; (3) **YOUR BOARD / OPPONENT BOARD** — compact layout with instance state only (damage, status, attached energy) since card details are in the reference; (4) **STADIUM**, **ACTIONS THIS TURN**, **LOG** (last 15). Field zone Pokemon buried under evolution stacks are excluded from the reference (their attacks are irrelevant). `PluginManager.formatReadableState()` delegates to the registered formatter, falling back to `JSON.stringify` if none is set.
+
 ### Counter Position Locking
 Counters are locked to the top card in a zone. When a card is removed from a zone, its counters transfer to the new top card (`transferCountersOnRemoval`). When cards are added or reordered, all counters consolidate to the top card (`consolidateCountersToTop`). This keeps damage counters visually attached to the Pokemon on top of the stack.
 
@@ -122,8 +125,8 @@ Tools extract SFX from Pokemon TCG GB ROM using PyBoy emulator. Memory addresses
 
 | File | Purpose |
 |------|---------|
-| `types.ts` | Plugin interface: `PreHookResult` (continue/warn/block/replace), `PostHookResult`, hooks, observers, blockers, custom action executors. |
-| `plugin-manager.ts` | Registers plugins, executes hooks with priority, manages state observers. |
+| `types.ts` | Plugin interface: `PreHookResult` (continue/warn/block/replace), `PostHookResult`, hooks, observers, blockers, custom action executors. `readableStateModifier` transforms readable state objects. `readableStateFormatter` converts readable state to a string for AI consumption. |
+| `plugin-manager.ts` | Registers plugins, executes hooks with priority, manages state observers. `modifyReadableState()` and `formatReadableState()` delegate to plugin-registered readable state modifier/formatter. |
 | `index.ts` | Barrel re-export. |
 
 ### /src/components/game/ - UI

@@ -317,7 +317,7 @@ function consolidateCountersToTop<T extends CardTemplate>(zone: Zone<T>): void {
  * - Hidden zones with ownerCanSeeContents → owner-only visibility
  * - Hidden zones without ownerCanSeeContents → HIDDEN
  */
-function zoneVisibility(zoneKey: string, config: ZoneConfig): Visibility {
+export function zoneVisibility(zoneKey: string, config: ZoneConfig): Visibility {
   if (config.defaultVisibility[0] && config.defaultVisibility[1]) {
     return VISIBILITY.PUBLIC;
   }
@@ -449,6 +449,12 @@ function executeShuffle<T extends CardTemplate>(
 ): void {
   const zone = getZone(state, action.zoneId);
   if (!zone) return;
+
+  // Reset all card visibilities to zone defaults (hides peeked cards)
+  const vis = zoneVisibility(action.zoneId, zone.config);
+  for (const card of zone.cards) {
+    card.visibility = vis;
+  }
 
   shuffleArray(zone.cards);
   consolidateCountersToTop(zone);
