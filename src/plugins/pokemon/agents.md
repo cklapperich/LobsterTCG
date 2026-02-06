@@ -30,35 +30,32 @@ Each turn follows this order:
 
 ## Key Rules
 - Only Basic Pokemon can be placed on empty field zones (active, bench slots)
-- Energy atconfused now, dont forget to flip a coin. if heads, attack works. if tails, deal 30 damage to self. or you can of course choose not to attack. retreating ends confusiontaches underneath the Pokemon (position 0), not on top
+- Energy attaches underneath the Pokemon (position 0), not on top
 - Evolution cannot happen on the first turn of the game or the turn a Pokemon was played
 - When your Active Pokemon is knocked out, promote a Benched Pokemon to Active
 - Retreat costs energy: discard the required number of attached Energy cards
 
-## Status
-ALWAYS do pokemon checkup at the start of your turn.
-Your opp handles checkup at the start of their turn.
+## Status Conditions
 
-Confusion: Confusion has NO counters. Careful to remember when you're confused!
-Only active pokemon can be confused. IF confused, must flip coin to attack. Heads: attack normal
-tails: Place 3 damage counters on confused pokemon.
-Retreating ends the effect.
+Status conditions are tracked via card orientation (just like the real game where you rotate the card):
+- **Paralyzed**: `set_orientation` with `"paralyzed"` — card rotates 90° clockwise. Cannot attack or retreat. Ends at end of your turn.
+- **Asleep**: `set_orientation` with `"asleep"` — card rotates 90° counterclockwise. Cannot attack or retreat. Flip coin between turns; heads = wake up.
+- **Confused**: `set_orientation` with `"confused"` — card rotates 180°. Must flip coin to attack; tails = 30 damage to self. Retreating ends confusion.
+- **Normal**: `set_orientation` with `"normal"` — removes status condition.
 
-Poison: 10 damage during each checkup
-Burn: During checkup phase, add 2 damage counters. then flip a coin. if heads, remove burn counter. if tails, 
-it stays. 
-sleep: flip coin between each turn to see if they wake up. If asleep, cannot attack or retreat.
-Benching the pokmeon ends sleep.
-paralysis: automatically ends at the end of YOUR turn. paralyzed pokemon cannot attack or retreat. 
-Benching the pokmeon ends paralysis.
+**Important rules:**
+- Check the `status` field in readable state — only apply status if you confirm a coin flip result warrants it
+- Only the active Pokemon can have status conditions
+- Moving a Pokemon to bench/discard automatically clears status (card unrotates)
+- Evolution clears all status (because evolution involves moving cards)
+- Poison and Burn use counters, not orientation (they can stack with orientation-based status)
 
-Pokemon rotated: pokemon is asleep, paralyzed
-
-Confused: Turn pokemon upside-down
-
-Evolution clears all status effects!
-
-Only active pokemon can have status effects, benching always ends status!
+### Pokemon Checkup (between turns)
+ALWAYS do pokemon checkup at the start of your turn. Your opponent handles checkup at the start of their turn.
+- **Poison**: 10 damage during each checkup (use `add_counter`)
+- **Burn**: Add 2 damage counters, then flip a coin. Heads = remove burn counter. Tails = it stays.
+- **Asleep**: Flip a coin. Heads = wake up (set_orientation "normal"). Tails = stay asleep.
+- **Paralysis**: Automatically ends at the end of YOUR turn (set_orientation "normal").
 
 ## Damage
 - Place damage counters using `add_counter` with types "10", "50", "100"

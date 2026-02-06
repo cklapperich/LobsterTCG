@@ -184,6 +184,7 @@
   class:dragging={isDragging}
   class:drop-target={isDragOver}
   class:counter-drop-target={isCounterDragOver}
+  data-orientation={card.orientation ?? 'normal'}
   style="--i: {index}"
   {draggable}
   ondragstart={handleDragStart}
@@ -262,6 +263,10 @@
     user-select: none;
   }
 
+  .card[data-orientation="paralyzed"] { transform: rotate(90deg); }
+  .card[data-orientation="asleep"] { transform: rotate(-90deg); }
+  .card[data-orientation="confused"] { transform: rotate(180deg); }
+
   .card:hover {
     z-index: 100;
     transform: translateY(-0.25rem);
@@ -269,6 +274,10 @@
       0 0.25rem 0 rgba(0,0,0,0.3),
       0 0 0 0.125rem var(--color-gbc-yellow);
   }
+
+  .card[data-orientation="paralyzed"]:hover { transform: rotate(90deg) translateY(-0.25rem); }
+  .card[data-orientation="asleep"]:hover { transform: rotate(-90deg) translateY(-0.25rem); }
+  .card[data-orientation="confused"]:hover { transform: rotate(180deg) translateY(-0.25rem); }
 
   .card.dragging {
     opacity: 0;

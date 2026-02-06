@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { Playmat, CardInstance, GameState, CardTemplate, CounterDefinition, ZoneConfig } from '../../core';
-  import { makeZoneKey } from '../../core';
   import Zone from './Zone.svelte';
 
   interface Props {
@@ -55,12 +54,12 @@
   // Get zone by slot - uses correct player index based on slot ownership
   function getZone(slot: { id: string; zoneId: string }) {
     const playerIndex = slotToPlayer[slot.id] ?? 0;
-    const zoneKey = makeZoneKey(playerIndex, slot.zoneId);
+    const zoneKey = `player${playerIndex}_${slot.zoneId}`;
     return gameState.zones[zoneKey];
   }
 
   // Get staging zone
-  const stagingZone = $derived(gameState.zones[makeZoneKey(0, 'staging')]);
+  const stagingZone = $derived(gameState.zones['player0_staging']);
   const stagingHasCards = $derived(stagingZone?.cards.length > 0);
 </script>
 

@@ -16,6 +16,7 @@
     onViewAll?: () => void;
     onArrangeAll?: () => void;
     onClearCounters?: () => void;
+    onSetStatus?: (status: string) => void;
     onClose: () => void;
   }
 
@@ -33,11 +34,12 @@
     onViewAll,
     onArrangeAll,
     onClearCounters,
+    onSetStatus,
     onClose,
   }: Props = $props();
 
   let menuRef: HTMLDivElement;
-  let activeSubmenu = $state<'peek' | 'arrange' | null>(null);
+  let activeSubmenu = $state<'peek' | 'arrange' | 'status' | null>(null);
 
   // Counts available for peek/arrange
   const availableCounts = $derived([1, 3, 5, 7].filter(n => n <= cardCount));
@@ -94,6 +96,29 @@
     <button class="menu-item" onclick={() => handleAction(onClearCounters)} disabled={cardCount < 1}>
       Clear Counters
     </button>
+  {/if}
+
+  <!-- Status submenu wrapper -->
+  {#if onSetStatus && cardCount > 0}
+    <div
+      class="submenu-wrapper"
+      onmouseenter={() => { activeSubmenu = 'status'; }}
+    >
+      <div class="menu-item has-submenu" class:open={activeSubmenu === 'status'}>
+        <span>Status...</span>
+        <span class="arrow">▶</span>
+      </div>
+
+      {#if activeSubmenu === 'status'}
+        <div class="submenu gbc-panel">
+          <button class="menu-item" onclick={() => handleAction(() => onSetStatus('paralyzed'))}>Paralyzed</button>
+          <button class="menu-item" onclick={() => handleAction(() => onSetStatus('asleep'))}>Asleep</button>
+          <button class="menu-item" onclick={() => handleAction(() => onSetStatus('confused'))}>Confused</button>
+          <div class="submenu-divider"></div>
+          <button class="menu-item" onclick={() => handleAction(() => onSetStatus('normal'))}>Clear Status</button>
+        </div>
+      {/if}
+    </div>
   {/if}
 
   <!-- Peek submenu wrapper -->

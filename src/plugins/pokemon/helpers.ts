@@ -36,10 +36,10 @@ export function isEnergy(t: PokemonCardTemplate): boolean {
   return t.supertype === 'Energy';
 }
 
-export function isFieldZone(zoneId: string): boolean {
-  return zoneId === 'active' || /^bench_\d+$/.test(zoneId);
+export function isFieldZone(zoneKey: string): boolean {
+  return zoneKey.endsWith('_active') || /_bench_\d+$/.test(zoneKey);
 }
 
-export function isStadiumZone(zoneId: string): boolean {
-  return zoneId === 'stadium';
+export function isStadiumZone(zoneKey: string): boolean {
+  return zoneKey.endsWith('_stadium');
 }

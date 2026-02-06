@@ -3,7 +3,6 @@ import {
   createGameState,
   loadDeck,
   loadPlaymat,
-  makeZoneKey,
   shuffle as shuffleAction,
   moveCard,
   executeAction,
@@ -117,7 +116,7 @@ export function loadPlayerDeck(
   getTemplate: (id: string) => CardTemplate | undefined,
   shuffleDeck: boolean = true
 ): void {
-  const deckKey = makeZoneKey(playerIndex, ZONE_IDS.DECK);
+  const deckKey = `player${playerIndex}_${ZONE_IDS.DECK}`;
   loadDeck(state, playerIndex, deckKey, deckList, getTemplate, shuffleDeck);
 }
 
@@ -126,8 +125,8 @@ export function loadPlayerDeck(
  * Shuffles the deck, draws 7 cards, and sets 6 prizes.
  */
 export function executeSetup(state: GameState<CardTemplate>, playerIndex: PlayerIndex): void {
-  const deckKey = makeZoneKey(playerIndex, ZONE_IDS.DECK);
-  const prizesKey = makeZoneKey(playerIndex, ZONE_IDS.PRIZES);
+  const deckKey = `player${playerIndex}_${ZONE_IDS.DECK}`;
+  const prizesKey = `player${playerIndex}_${ZONE_IDS.PRIZES}`;
 
   // Shuffle the deck
   executeAction(state, shuffleAction(playerIndex, deckKey));
@@ -179,7 +178,6 @@ export function getCardInfo(template: CardTemplate): string {
  * Actions that don't apply to Pokemon TCG.
  * - dice_roll: Pokemon uses coins, not dice
  * - flip_card: visibility is managed by zones, not manual flips
- * - set_orientation: Pokemon doesn't use tap/untap
  * - declare_victory: victory is determined by prize cards, deck-out, or bench-out
  * - search_zone: handled by peek instead for AI
  * - move_card_stack: not a standard Pokemon action
@@ -188,7 +186,6 @@ export function getCardInfo(template: CardTemplate): string {
 const HIDDEN_DEFAULT_TOOLS = new Set([
   'dice_roll',
   'flip_card',
-  'set_orientation',
   'declare_victory',
   'search_zone',
   'move_card_stack',
@@ -235,7 +232,7 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
     },
     async run(input) {
       const state = ctx.getState();
-      const activeKey = makeZoneKey(p, ZONE_IDS.ACTIVE);
+      const activeKey = `player${p}_${ZONE_IDS.ACTIVE}`;
       const activeZone = state.zones[activeKey];
       const activeName = activeZone?.cards.at(-1)?.template?.name ?? 'Active Pokemon';
       const target = input.targetCardName ? ` targeting ${input.targetCardName}` : '';
