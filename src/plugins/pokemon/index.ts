@@ -1,4 +1,4 @@
-import type { GameState, Playmat, DeckList, PlayerIndex, CardTemplate, GameConfig, GamePlugin, CounterDefinition } from '../../core';
+import type { GameState, Playmat, DeckList, PlayerIndex, CardTemplate, GameConfig, GamePlugin, CounterDefinition, ActionPanel } from '../../core';
 import {
   createGameState,
   loadDeck,
@@ -6,12 +6,15 @@ import {
   shuffle as shuffleAction,
   moveCard,
   executeAction,
+  setOrientation,
+  resolveCardName,
 } from '../../core';
 import { createDefaultTools, type RunnableTool, type ToolContext } from '../../core/ai-tools';
 import { ZONE_IDS } from './zones';
 import type { PokemonCardTemplate } from './cards';
 import {
   getCardBack,
+  getTemplate as getCardTemplate,
 } from './cards';
 
 // Import counter images
@@ -180,7 +183,6 @@ export function getCardInfo(template: CardTemplate): string {
  * - flip_card: visibility is managed by zones, not manual flips
  * - declare_victory: victory is determined by prize cards, deck-out, or bench-out
  * - search_zone: handled by peek instead for AI
- * - move_card_stack: not a standard Pokemon action
  * - place_on_zone: not a standard Pokemon action for AI
  */
 const HIDDEN_DEFAULT_TOOLS = new Set([
@@ -188,8 +190,8 @@ const HIDDEN_DEFAULT_TOOLS = new Set([
   'flip_card',
   'declare_victory',
   'search_zone',
-  'move_card_stack',
   'place_on_zone',
+  'set_orientation',
 ]);
 
 /** Local tool factory matching RunnableTool shape. */
@@ -211,11 +213,21 @@ function tool(options: {
 
 function createPokemonTools(ctx: ToolContext): RunnableTool[] {
   const p = ctx.playerIndex;
+  const isDecision = ctx.isDecisionResponse ?? false;
 
   // Start with filtered defaults
-  const tools = createDefaultTools(ctx).filter(
+  let tools = createDefaultTools(ctx).filter(
     t => !HIDDEN_DEFAULT_TOOLS.has(t.name)
   );
+
+  // Decision-aware filtering
+  if (isDecision) {
+    // During a decision mini-turn: hide end_turn and create_decision, show resolve_decision
+    tools = tools.filter(t => t.name !== 'end_turn' && t.name !== 'create_decision');
+  } else {
+    // Normal turn: hide resolve_decision, show end_turn and create_decision
+    tools = tools.filter(t => t.name !== 'resolve_decision');
+  }
 
   // ── Pokemon-specific tools ──────────────────────────────────
 
@@ -276,7 +288,109 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
     },
   }));
 
+  // ── Status condition tool (Pokemon-specific wrapper around orientation) ──
+  const STATUS_TO_DEGREES: Record<string, string> = {
+    normal: '0',
+    paralyzed: '90',
+    asleep: '-90',
+    confused: '180',
+  };
+
+  tools.push(tool({
+    name: 'set_status',
+    description: 'Set a Pokemon\'s status condition. Only active Pokemon can have status.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        cardName: { type: 'string', description: 'Name of the Pokemon' },
+        zone: { type: 'string', description: 'Zone key the card is in' },
+        status: { type: 'string', enum: ['normal', 'paralyzed', 'asleep', 'confused'], description: 'Status condition to apply, or "normal" to clear' },
+      },
+      required: ['cardName', 'zone', 'status'],
+    },
+    async run(input) {
+      const state = ctx.getState();
+      const cardId = input.cardName.startsWith('card_')
+        ? input.cardName
+        : resolveCardName(state, input.cardName, input.zone);
+      const degrees = STATUS_TO_DEGREES[input.status] ?? '0';
+      return ctx.execute(setOrientation(p, cardId, degrees));
+    },
+  }));
+
   return tools;
+}
+
+// ── Action Panels ────────────────────────────────────────────────
+
+function getActionPanels(state: GameState<PokemonCardTemplate>, player: PlayerIndex): ActionPanel[] {
+  const panels: ActionPanel[] = [];
+
+  // ATTACKS panel — shows attacks from the active Pokemon
+  const activeKey = `player${player}_${ZONE_IDS.ACTIVE}`;
+  const activeZone = state.zones[activeKey];
+  const activeCard = activeZone?.cards.at(-1);
+  const template = activeCard ? getCardTemplate(activeCard.template.id) : undefined;
+
+  const attackButtons = (template?.attacks ?? []).map(atk => {
+    const costStr = atk.cost.length > 0 ? atk.cost.join('') : 'Free';
+    const damageStr = atk.damage || '';
+    const sublabel = damageStr ? `${costStr} — ${damageStr}` : costStr;
+    return {
+      id: atk.name,
+      label: atk.name,
+      sublabel,
+      tooltip: atk.effect,
+    };
+  });
+
+  panels.push({
+    id: 'attacks',
+    title: 'ATTACKS',
+    buttons: attackButtons,
+    emptyMessage: 'No active Pokemon',
+  });
+
+  // MULLIGAN panel
+  panels.push({
+    id: 'mulligan',
+    title: 'MULLIGAN',
+    buttons: [{
+      id: 'mulligan',
+      label: 'Mulligan',
+      sublabel: 'Shuffle hand, draw 7',
+    }],
+  });
+
+  return panels;
+}
+
+function onActionPanelClick(state: GameState<PokemonCardTemplate>, player: PlayerIndex, panelId: string, buttonId: string): void {
+  if (panelId === 'attacks') {
+    const activeKey = `player${player}_${ZONE_IDS.ACTIVE}`;
+    const activeZone = state.zones[activeKey];
+    const activeName = activeZone?.cards.at(-1)?.template?.name ?? 'Active Pokemon';
+    state.log.push(`${activeName} used ${buttonId}!`);
+  } else if (panelId === 'mulligan') {
+    const handKey = `player${player}_${ZONE_IDS.HAND}`;
+    const deckKey = `player${player}_${ZONE_IDS.DECK}`;
+    const handZone = state.zones[handKey];
+
+    // Move all hand cards to deck
+    const cardIds = handZone.cards.map(c => c.instanceId);
+    for (const id of cardIds) {
+      executeAction(state, moveCard(player, id, handKey, deckKey));
+    }
+
+    // Shuffle deck
+    executeAction(state, shuffleAction(player, deckKey));
+
+    // Draw 7
+    executeAction(state, { type: 'draw', player, count: 7 });
+
+    const otherPlayer = player === 0 ? 2 : 1;
+    state.log.push(`Player ${player + 1} mulliganed. Don't forget to draw 1 extra card Player ${otherPlayer}!`);
+  }
 }
 
 // Plugin object conforming to GamePlugin interface
@@ -289,10 +403,12 @@ export const plugin: GamePlugin<PokemonCardTemplate> = {
   getCoinFront,
   getCoinBack,
   listTools: createPokemonTools,
+  getActionPanels,
+  onActionPanelClick,
 };
 
 // Re-exports
-export { pokemonWarningsPlugin, modifyReadableState } from './warnings';
+export { pokemonHooksPlugin, modifyReadableState } from './hooks';
 export { ZONE_IDS, BENCH_ZONE_IDS, PRIZE_ZONE_IDS, ALL_ZONE_IDS } from './zones';
 export type { PokemonCardTemplate } from './cards';
 export {

@@ -6,6 +6,7 @@ import type {
   Action,
   PlayerInfo,
   GameResult,
+  Decision,
   PlayerIndex,
 } from './types';
 
@@ -47,6 +48,7 @@ export interface ReadableGameState {
   zones: Record<string, ReadableZone>;
   players: [PlayerInfo, PlayerInfo];
   currentTurn: ReadableTurn;
+  pendingDecision: Decision | null;
   result: GameResult | null;
   log: string[];
 }
@@ -82,6 +84,7 @@ export function toReadableState<T extends CardTemplate>(
       return rp;
     }) as unknown as [PlayerInfo, PlayerInfo],
     currentTurn: convertTurn(state.currentTurn, idToName),
+    pendingDecision: state.pendingDecision,
     result: state.result,
     log: state.log.slice(-100),
   };

@@ -114,6 +114,17 @@ export interface DeclareVictoryAction extends BaseAction {
   reason?: string;
 }
 
+// Decision Actions
+export interface CreateDecisionAction extends BaseAction {
+  type: 'create_decision';
+  targetPlayer: PlayerIndex;
+  message?: string;
+}
+
+export interface ResolveDecisionAction extends BaseAction {
+  type: 'resolve_decision';
+}
+
 // Reveal Action
 export interface RevealAction extends BaseAction {
   type: 'reveal';
@@ -147,5 +158,7 @@ export type Action =
   | EndTurnAction
   | ConcedeAction
   | DeclareVictoryAction
+  | CreateDecisionAction
+  | ResolveDecisionAction
   | RevealAction
   | PeekAction;

@@ -20,7 +20,7 @@
     return coinFlipping;
   }
 
-  export async function flip() {
+  export async function flip(predeterminedResult?: boolean) {
     if (coinFlipping) return;
 
     // Reset state and start animation
@@ -30,8 +30,8 @@
     // Play initial toss sound
     playSfx('coinToss');
 
-    // Determine result randomly
-    const isHeads = Math.random() < 0.5;
+    // Determine result — use predetermined if provided, otherwise random
+    const isHeads = predeterminedResult ?? Math.random() < 0.5;
 
     // Animate several flips (12 half-rotations over ~1.5 seconds)
     const flipCount = 12;

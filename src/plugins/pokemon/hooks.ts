@@ -1,5 +1,5 @@
 import type { Action, GameState, MoveCardAction, MoveCardStackAction, AddCounterAction } from '../../core/types';
-import type { PreHookResult, Plugin } from '../../core/plugin/types';
+import type { PreHookResult, PostHookResult, Plugin } from '../../core/plugin/types';
 import type { PokemonCardTemplate } from './cards';
 import { getTemplate } from './cards';
 import { findCardInZones } from '../../core/engine';
@@ -331,6 +331,41 @@ function warnEnergyOnTopOfPokemon(state: PokemonState, action: Action): PreHookR
   return { outcome: 'continue' };
 }
 
+// Post-hook: Log trainer card text when played to staging
+function logTrainerText(state: PokemonState, action: Action): PostHookResult {
+  let cardInstanceId: string;
+  let fromZone: string | undefined;
+  let toZone: string | undefined;
+
+  if (action.type === 'move_card') {
+    const a = action as MoveCardAction;
+    cardInstanceId = a.cardInstanceId;
+    fromZone = a.fromZone;
+    toZone = a.toZone;
+  } else if (action.type === 'move_card_stack') {
+    const a = action as MoveCardStackAction;
+    cardInstanceId = a.cardInstanceIds[0];
+    fromZone = a.fromZone;
+    toZone = a.toZone;
+    if (!cardInstanceId) return {};
+  } else {
+    return {};
+  }
+
+  if (!fromZone?.endsWith('_hand') || !toZone?.endsWith('_staging')) return {};
+
+  const template = getTemplateForCard(state, cardInstanceId);
+  if (!template || template.supertype !== 'Trainer') return {};
+
+  if (template.rules && template.rules.length > 0) {
+    const header = `[${template.name}]`;
+    const text = template.rules.join(' ');
+    (state as GameState<PokemonCardTemplate>).log.push(`${header} ${text}`);
+  }
+
+  return {};
+}
+
 // Warning 8: Only Stadium cards can be placed in the stadium zone
 function warnStadiumOnly(state: PokemonState, action: Action): PreHookResult {
   if (action.allowed_by_effect) return { outcome: 'continue' };
@@ -390,11 +425,11 @@ export function modifyReadableState(
         card.retreatCost = card.retreatCost.length;
       }
 
-      // Translate orientation to human-readable status field
-      const STATUS_ORIENTATIONS = new Set(['paralyzed', 'asleep', 'confused']);
+      // Translate degree-based orientation to human-readable status field
+      const DEGREES_TO_STATUS: Record<string, string> = { '90': 'paralyzed', '-90': 'asleep', '180': 'confused' };
       const orientation = card.orientation as string | undefined;
-      if (orientation && STATUS_ORIENTATIONS.has(orientation)) {
-        card.status = orientation;
+      if (orientation && DEGREES_TO_STATUS[orientation]) {
+        card.status = DEGREES_TO_STATUS[orientation];
       }
       // Remove raw orientation — AI should use 'status' field instead
       delete card.orientation;
@@ -403,11 +438,19 @@ export function modifyReadableState(
   return readable;
 }
 
-export const pokemonWarningsPlugin: Plugin<PokemonCardTemplate> = {
-  id: 'pokemon-warnings',
-  name: 'Pokemon TCG Warnings',
+export const pokemonHooksPlugin: Plugin<PokemonCardTemplate> = {
+  id: 'pokemon-hooks',
+  name: 'Pokemon TCG Hooks',
   version: '1.0.0',
   readableStateModifier: modifyReadableState,
+  postHooks: {
+    'move_card': [
+      { hook: logTrainerText, priority: 100 },
+    ],
+    'move_card_stack': [
+      { hook: logTrainerText, priority: 100 },
+    ],
+  },
   preHooks: {
     'move_card': [
       { hook: warnOneSupporter, priority: 100 },

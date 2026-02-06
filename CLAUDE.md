@@ -24,7 +24,7 @@ Cards have `Visibility = [playerA_sees, playerB_sees]` tuples. `getPlayerView()`
 Pre-hooks can block, warn, or replace actions. Post-hooks emit follow-up actions. State observers watch for changes and generate auto-actions. This enables game-specific rules without modifying core.
 
 ### Action Source & Warn vs Block
-Actions carry an optional `source?: 'ui' | 'ai'` field. `PreHookResult` supports `warn` in addition to `block`/`replace`/`continue`. Warnings log to `state.log` but never prevent the action. The `blockOrWarn()` helper in `warnings.ts` returns `block` for AI actions and `warn` for UI actions — human players are never blocked by warnings. AI tools in `ai-tools.ts` automatically tag actions with `source: 'ai'`.
+Actions carry an optional `source?: 'ui' | 'ai'` field. `PreHookResult` supports `warn` in addition to `block`/`replace`/`continue`. Warnings log to `state.log` but never prevent the action. The `blockOrWarn()` helper in `hooks.ts` returns `block` for AI actions and `warn` for UI actions — human players are never blocked by warnings. AI tools in `ai-tools.ts` automatically tag actions with `source: 'ai'`.
 
 ### Zone Keys
 Format: `player{0|1}_{zoneId}` (e.g., "player0_hand"). Zone keys are the canonical identifier everywhere — readable state, AI tools, action factories, `state.zones`, warning hooks, and helper functions all use zone keys directly. Zone keys are constructed inline via template literals (e.g., `` `player${p}_${ZONE_IDS.DECK}` ``). `ZONE_IDS` constants name zone *types* (bare IDs like `'deck'`, `'hand'`) used only in construction. Playmat JSON uses bare zone type names since zone definitions are player-agnostic templates.
@@ -146,8 +146,8 @@ Tools extract SFX from Pokemon TCG GB ROM using PyBoy emulator. Memory addresses
 | `cards.ts` | Card database backed by `cards-western.json`. `PokemonCardTemplate`, `PokemonAttack`, `PokemonAbility`, `POKEMON_TEMPLATE_MAP`, `getTemplate()`, `getCardBack()`, `parsePTCGODeck()`. |
 | `cards-western.json` | Western card database (all sets). Card data including names, images, attacks, abilities, HP, types. |
 | `set-codes.json` | Mapping of Pokemon TCG set names to set code prefixes for image lookup. |
-| `warnings.ts` | Pokemon warnings plugin (validation rules). Uses `blockOrWarn()` — blocks AI, warns UI. `modifyReadableState()` translates orientation→status field, computes totalDamage, converts retreatCost. Exported as `pokemonWarningsPlugin`. |
-| `warnings.test.ts` | Tests for Pokemon warnings plugin. |
+| `hooks.ts` | Pokemon hooks plugin (validation rules, post-hooks). Uses `blockOrWarn()` — blocks AI, warns UI. `modifyReadableState()` translates orientation→status field, computes totalDamage, converts retreatCost. Post-hook logs trainer card text on play. Exported as `pokemonHooksPlugin`. |
+| `hooks.test.ts` | Tests for Pokemon hooks plugin. |
 | `zones.ts` | Pokemon zone IDs: deck, hand, active, bench_1-5, discard, prizes, lost_zone, stadium. |
 | `decks/*.txt` | PTCGO-format deck lists (brushfire, overgrowth, raindance). |
 | `counters/*.png` | Counter images: burn, poison, damage-10/50/100. |

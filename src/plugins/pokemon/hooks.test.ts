@@ -13,7 +13,7 @@ import {
 import type { GameState, Action, ZoneConfig } from '../../core';
 import type { PokemonCardTemplate } from './cards';
 import { getTemplate } from './cards';
-import { pokemonWarningsPlugin } from './warnings';
+import { pokemonHooksPlugin } from './hooks';
 
 // ---------------------------------------------------------------------------
 // Zone configs (minimal subset matching the pokemon playmat)
@@ -61,7 +61,7 @@ function setupGame(): SetupResult {
   state.currentTurn.number = 3;
 
   const pm = new PluginManager<PokemonCardTemplate>();
-  pm.register(pokemonWarningsPlugin);
+  pm.register(pokemonHooksPlugin);
   const gameLoop = new GameLoop<PokemonCardTemplate>(state, pm);
 
   const blocked: Array<{ action: Action; reason: string }> = [];

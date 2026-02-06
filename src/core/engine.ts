@@ -21,6 +21,8 @@ import type {
   EndTurnAction,
   ConcedeAction,
   DeclareVictoryAction,
+  CreateDecisionAction,
+  ResolveDecisionAction,
   RevealAction,
   PeekAction,
   PlayerInfo,
@@ -135,6 +137,7 @@ export function createGameState<T extends CardTemplate>(
       createPlayerInfo(1, player2Id),
     ],
     currentTurn: createTurn(1, 0),
+    pendingDecision: null,
     result: null,
     startedAt: now,
     lastActionAt: now,
@@ -249,6 +252,72 @@ function shuffleArray<T>(array: T[]): void {
 }
 
 // ============================================================================
+// Counter Position Locking
+// ============================================================================
+
+/**
+ * When a card is removed from a zone, transfer its counters to the
+ * new top card so counters "stay" at the top position.
+ */
+function transferCountersOnRemoval<T extends CardTemplate>(
+  zone: Zone<T>,
+  removedCard: CardInstance<T>
+): void {
+  const counterEntries = Object.entries(removedCard.counters);
+  if (counterEntries.length === 0 || zone.cards.length === 0) return;
+
+  const newTop = zone.cards[zone.cards.length - 1];
+  for (const [counterType, amount] of counterEntries) {
+    if (amount > 0) {
+      newTop.counters[counterType] = (newTop.counters[counterType] ?? 0) + amount;
+    }
+  }
+  removedCard.counters = {};
+}
+
+/**
+ * Ensure all counters in a zone are on the top card.
+ * Called after adding a card or reordering to keep counters locked on top.
+ */
+function consolidateCountersToTop<T extends CardTemplate>(zone: Zone<T>): void {
+  if (zone.cards.length <= 1) return;
+
+  const topCard = zone.cards[zone.cards.length - 1];
+  for (let i = 0; i < zone.cards.length - 1; i++) {
+    const card = zone.cards[i];
+    const counterEntries = Object.entries(card.counters);
+    if (counterEntries.length === 0) continue;
+    for (const [counterType, amount] of counterEntries) {
+      if (amount > 0) {
+        topCard.counters[counterType] = (topCard.counters[counterType] ?? 0) + amount;
+      }
+    }
+    card.counters = {};
+  }
+}
+
+// ============================================================================
+// Zone Visibility Helper
+// ============================================================================
+
+/**
+ * Compute the correct visibility for a card entering a zone.
+ * - Public zones → PUBLIC
+ * - Hidden zones with ownerCanSeeContents → owner-only visibility
+ * - Hidden zones without ownerCanSeeContents → HIDDEN
+ */
+function zoneVisibility(zoneKey: string, config: ZoneConfig): Visibility {
+  if (config.defaultVisibility[0] && config.defaultVisibility[1]) {
+    return VISIBILITY.PUBLIC;
+  }
+  if (config.ownerCanSeeContents) {
+    const ownerIndex = zoneKey.startsWith('player0_') ? 0 : 1;
+    return ownerIndex === 0 ? VISIBILITY.PLAYER_A_ONLY : VISIBILITY.PLAYER_B_ONLY;
+  }
+  return VISIBILITY.HIDDEN;
+}
+
+// ============================================================================
 // Individual Action Executors
 // ============================================================================
 
@@ -266,10 +335,7 @@ function executeDraw<T extends CardTemplate>(
   for (let i = 0; i < action.count && deck.cards.length > 0; i++) {
     const card = deck.cards.shift();
     if (card) {
-      // Update visibility for hand
-      if (hand.config.ownerCanSeeContents) {
-        card.visibility = action.player === 0 ? VISIBILITY.PLAYER_A_ONLY : VISIBILITY.PLAYER_B_ONLY;
-      }
+      card.visibility = zoneVisibility(handKey, hand.config);
       card.orientation = undefined;
       hand.cards.push(card);
     }
@@ -288,8 +354,9 @@ function executeMoveCard<T extends CardTemplate>(
   const card = removeCardFromZone(fromZone, action.cardInstanceId);
   if (!card) return;
 
-  // Update visibility based on target zone
-  card.visibility = toZone.config.defaultVisibility;
+  transferCountersOnRemoval(fromZone, card);
+
+  card.visibility = zoneVisibility(action.toZone, toZone.config);
   card.orientation = undefined;
 
   if (action.position !== undefined && action.position >= 0) {
@@ -297,6 +364,8 @@ function executeMoveCard<T extends CardTemplate>(
   } else {
     toZone.cards.push(card);
   }
+
+  consolidateCountersToTop(toZone);
 }
 
 function executeMoveCardStack<T extends CardTemplate>(
@@ -312,7 +381,8 @@ function executeMoveCardStack<T extends CardTemplate>(
   for (const cardId of action.cardInstanceIds) {
     const card = removeCardFromZone(fromZone, cardId);
     if (card) {
-      card.visibility = toZone.config.defaultVisibility;
+      transferCountersOnRemoval(fromZone, card);
+      card.visibility = zoneVisibility(action.toZone, toZone.config);
       card.orientation = undefined;
       cards.push(card);
     }
@@ -323,6 +393,8 @@ function executeMoveCardStack<T extends CardTemplate>(
   } else {
     toZone.cards.push(...cards);
   }
+
+  consolidateCountersToTop(toZone);
 }
 
 function executePlaceOnZone<T extends CardTemplate>(
@@ -339,7 +411,8 @@ function executePlaceOnZone<T extends CardTemplate>(
     if (result) {
       const removed = removeCardFromZone(result.zone, cardId);
       if (removed) {
-        removed.visibility = zone.config.defaultVisibility;
+        transferCountersOnRemoval(result.zone, removed);
+        removed.visibility = zoneVisibility(action.zoneId, zone.config);
         removed.orientation = undefined;
         cardsToPlace.push(removed);
       }
@@ -351,6 +424,8 @@ function executePlaceOnZone<T extends CardTemplate>(
   } else {
     zone.cards.push(...cardsToPlace);
   }
+
+  consolidateCountersToTop(zone);
 }
 
 function executeShuffle<T extends CardTemplate>(
@@ -361,6 +436,7 @@ function executeShuffle<T extends CardTemplate>(
   if (!zone) return;
 
   shuffleArray(zone.cards);
+  consolidateCountersToTop(zone);
 }
 
 function executeFlipCard<T extends CardTemplate>(
@@ -459,6 +535,15 @@ function executeEndTurn<T extends CardTemplate>(
   state: GameState<T>,
   _action: EndTurnAction
 ): void {
+  // Safety net: if a decision is pending, auto-resolve instead of ending turn
+  if (state.pendingDecision) {
+    const creator = state.pendingDecision.createdBy;
+    state.pendingDecision = null;
+    state.activePlayer = creator;
+    state.log.push('Decision auto-resolved (end_turn called during decision)');
+    return;
+  }
+
   state.currentTurn.ended = true;
   state.turnNumber++;
   state.activePlayer = state.activePlayer === 0 ? 1 : 0;
@@ -479,6 +564,7 @@ function executeConcede<T extends CardTemplate>(
   state: GameState<T>,
   action: ConcedeAction
 ): void {
+  state.pendingDecision = null;
   state.players[action.player].hasConceded = true;
   state.result = {
     winner: action.player === 0 ? 1 : 0,
@@ -490,6 +576,7 @@ function executeDeclareVictory<T extends CardTemplate>(
   state: GameState<T>,
   action: DeclareVictoryAction
 ): void {
+  state.pendingDecision = null;
   state.players[action.player].hasDeclaredVictory = true;
   state.result = {
     winner: action.player,
@@ -540,6 +627,44 @@ function executePeek<T extends CardTemplate>(
   }
 
   return cards;
+}
+
+// ============================================================================
+// Decision Executors
+// ============================================================================
+
+function executeCreateDecision<T extends CardTemplate>(
+  state: GameState<T>,
+  action: CreateDecisionAction
+): string | null {
+  if (state.pendingDecision) {
+    return 'A decision is already pending';
+  }
+  state.pendingDecision = {
+    createdBy: action.player,
+    targetPlayer: action.targetPlayer,
+    message: action.message,
+  };
+  state.activePlayer = action.targetPlayer;
+  state.log.push(`Decision requested: ${action.message ?? 'Action needed'} (Player ${action.targetPlayer + 1} to respond)`);
+  return null;
+}
+
+function executeResolveDecision<T extends CardTemplate>(
+  state: GameState<T>,
+  action: ResolveDecisionAction
+): string | null {
+  if (!state.pendingDecision) {
+    return 'No pending decision to resolve';
+  }
+  if (action.player !== state.pendingDecision.targetPlayer) {
+    return `Only Player ${state.pendingDecision.targetPlayer + 1} can resolve this decision`;
+  }
+  const creator = state.pendingDecision.createdBy;
+  state.pendingDecision = null;
+  state.activePlayer = creator;
+  state.log.push(`Decision resolved by Player ${action.player + 1}`);
+  return null;
 }
 
 // ============================================================================
@@ -698,6 +823,22 @@ export function executeAction<T extends CardTemplate>(
     case 'declare_victory':
       executeDeclareVictory(state, action);
       break;
+    case 'create_decision': {
+      const decErr = executeCreateDecision(state, action);
+      if (decErr) {
+        state.log.push(decErr);
+        return decErr;
+      }
+      break;
+    }
+    case 'resolve_decision': {
+      const resErr = executeResolveDecision(state, action);
+      if (resErr) {
+        state.log.push(resErr);
+        return resErr;
+      }
+      break;
+    }
     case 'reveal':
       executeReveal(state, action);
       break;

@@ -16,7 +16,7 @@
     onViewAll?: () => void;
     onArrangeAll?: () => void;
     onClearCounters?: () => void;
-    onSetStatus?: (status: string) => void;
+    onSetOrientation?: (degrees: string) => void;
     onClose: () => void;
   }
 
@@ -34,12 +34,12 @@
     onViewAll,
     onArrangeAll,
     onClearCounters,
-    onSetStatus,
+    onSetOrientation,
     onClose,
   }: Props = $props();
 
   let menuRef: HTMLDivElement;
-  let activeSubmenu = $state<'peek' | 'arrange' | 'status' | null>(null);
+  let activeSubmenu = $state<'peek' | 'arrange' | 'rotate' | null>(null);
 
   // Counts available for peek/arrange
   const availableCounts = $derived([1, 3, 5, 7].filter(n => n <= cardCount));
@@ -98,24 +98,24 @@
     </button>
   {/if}
 
-  <!-- Status submenu wrapper -->
-  {#if onSetStatus && cardCount > 0}
+  <!-- Rotate submenu wrapper -->
+  {#if onSetOrientation && cardCount > 0}
     <div
       class="submenu-wrapper"
-      onmouseenter={() => { activeSubmenu = 'status'; }}
+      onmouseenter={() => { activeSubmenu = 'rotate'; }}
     >
-      <div class="menu-item has-submenu" class:open={activeSubmenu === 'status'}>
-        <span>Status...</span>
+      <div class="menu-item has-submenu" class:open={activeSubmenu === 'rotate'}>
+        <span>Rotate...</span>
         <span class="arrow">▶</span>
       </div>
 
-      {#if activeSubmenu === 'status'}
+      {#if activeSubmenu === 'rotate'}
         <div class="submenu gbc-panel">
-          <button class="menu-item" onclick={() => handleAction(() => onSetStatus('paralyzed'))}>Paralyzed</button>
-          <button class="menu-item" onclick={() => handleAction(() => onSetStatus('asleep'))}>Asleep</button>
-          <button class="menu-item" onclick={() => handleAction(() => onSetStatus('confused'))}>Confused</button>
+          <button class="menu-item" onclick={() => handleAction(() => onSetOrientation('90'))}>90°</button>
+          <button class="menu-item" onclick={() => handleAction(() => onSetOrientation('180'))}>180°</button>
+          <button class="menu-item" onclick={() => handleAction(() => onSetOrientation('-90'))}>270°</button>
           <div class="submenu-divider"></div>
-          <button class="menu-item" onclick={() => handleAction(() => onSetStatus('normal'))}>Clear Status</button>
+          <button class="menu-item" onclick={() => handleAction(() => onSetOrientation('0'))}>Reset (0°)</button>
         </div>
       {/if}
     </div>

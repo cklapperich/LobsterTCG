@@ -27,12 +27,15 @@ export type {
   EndTurnAction,
   ConcedeAction,
   DeclareVictoryAction,
+  CreateDecisionAction,
+  ResolveDecisionAction,
   RevealAction,
   PeekAction,
 } from './action';
 
 // Game types
 export type {
+  Decision,
   PlayerInfo,
   Turn,
   GameConfig,
@@ -54,4 +57,7 @@ export type { GamePlugin } from './game-plugin';
 
 // Counter types
 export type { CounterDefinition } from './counter';
+
+// Action panel types
+export type { ActionPanel, ActionPanelButton } from './action-panel';
 

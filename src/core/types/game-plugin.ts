@@ -1,8 +1,9 @@
 import type { Playmat } from './playmat';
 import type { GameState } from './game';
-import type { CardTemplate } from './card';
+import type { CardTemplate, PlayerIndex } from './card';
 import type { CounterDefinition } from './counter';
 import type { RunnableTool, ToolContext } from '../ai-tools';
+import type { ActionPanel } from './action-panel';
 
 /**
  * Interface for game plugins (Pokemon, Solitaire, etc.)
@@ -33,4 +34,10 @@ export interface GamePlugin<T extends CardTemplate = CardTemplate> {
 
   /** Return Anthropic SDK-compatible tools for AI agents. */
   listTools?(ctx: ToolContext): RunnableTool[];
+
+  /** Return action panels for the sidebar UI. */
+  getActionPanels?(state: GameState<T>, player: PlayerIndex): ActionPanel[];
+
+  /** Handle a button click from an action panel. Mutates state directly. */
+  onActionPanelClick?(state: GameState<T>, player: PlayerIndex, panelId: string, buttonId: string): void;
 }

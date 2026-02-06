@@ -72,4 +72,6 @@ export {
   declareVictory,
   reveal,
   peek,
+  createDecision,
+  resolveDecision,
 } from './action';

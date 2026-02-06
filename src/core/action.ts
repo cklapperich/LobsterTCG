@@ -17,6 +17,8 @@ import type {
   EndTurnAction,
   ConcedeAction,
   DeclareVictoryAction,
+  CreateDecisionAction,
+  ResolveDecisionAction,
   RevealAction,
   PeekAction,
 } from './types';
@@ -191,4 +193,16 @@ export function peek(
   fromPosition: 'top' | 'bottom' = 'top'
 ): PeekAction {
   return { type: 'peek', player, zoneId: zoneKey, count, fromPosition };
+}
+
+export function createDecision(
+  player: PlayerIndex,
+  targetPlayer: PlayerIndex,
+  message?: string
+): CreateDecisionAction {
+  return { type: 'create_decision', player, targetPlayer, message };
+}
+
+export function resolveDecision(player: PlayerIndex): ResolveDecisionAction {
+  return { type: 'resolve_decision', player };
 }

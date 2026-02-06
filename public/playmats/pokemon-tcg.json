@@ -18,19 +18,19 @@
       { "id": "p2_discard", "zoneId": "discard", "position": { "row": 0, "col": 8 }, "label": "Discard", "stackDirection": "none" },
 
       { "id": "p2_lost_zone", "zoneId": "lost_zone", "position": { "row": 1, "col": 0 }, "label": "Lost Zone", "stackDirection": "none" },
-      { "id": "p1_active", "zoneId": "active", "position": { "row": 1, "col": 3 }, "label": "Active", "stackDirection": "up" },
+      { "id": "p1_active", "zoneId": "active", "position": { "row": 1, "col": 3 }, "label": "Active", "stackDirection": "down" },
       { "id": "stadium", "zoneId": "stadium", "position": { "row": 1, "col": 4 }, "label": "Stadium", "stackDirection": "none" },
       { "id": "p2_active", "zoneId": "active", "position": { "row": 1, "col": 5 }, "label": "Active", "stackDirection": "down" },
       { "id": "p1_lost_zone", "zoneId": "lost_zone", "position": { "row": 1, "col": 8 }, "label": "Lost Zone", "stackDirection": "none" },
 
       { "id": "p1_discard", "zoneId": "discard", "position": { "row": 2, "col": 0 }, "label": "Discard", "stackDirection": "none" },
       { "id": "p1_deck", "zoneId": "deck", "position": { "row": 2, "col": 1 }, "label": "Deck", "stackDirection": "none" },
-      { "id": "p1_bench_1", "zoneId": "bench_1", "position": { "row": 2, "col": 2 }, "label": "Bench", "stackDirection": "up" },
-      { "id": "p1_bench_2", "zoneId": "bench_2", "position": { "row": 2, "col": 3 }, "label": "Bench", "stackDirection": "up" },
-      { "id": "p1_bench_3", "zoneId": "bench_3", "position": { "row": 2, "col": 4 }, "label": "Bench", "stackDirection": "up" },
-      { "id": "p1_bench_4", "zoneId": "bench_4", "position": { "row": 2, "col": 5 }, "label": "Bench", "stackDirection": "up" },
-      { "id": "p1_bench_5", "zoneId": "bench_5", "position": { "row": 2, "col": 6 }, "label": "Bench", "stackDirection": "up" },
-      { "id": "p1_prizes", "zoneId": "prizes", "position": { "row": 2, "col": 7 }, "label": "Prizes", "stackDirection": "up" },
+      { "id": "p1_bench_1", "zoneId": "bench_1", "position": { "row": 2, "col": 2 }, "label": "Bench", "stackDirection": "down" },
+      { "id": "p1_bench_2", "zoneId": "bench_2", "position": { "row": 2, "col": 3 }, "label": "Bench", "stackDirection": "down" },
+      { "id": "p1_bench_3", "zoneId": "bench_3", "position": { "row": 2, "col": 4 }, "label": "Bench", "stackDirection": "down" },
+      { "id": "p1_bench_4", "zoneId": "bench_4", "position": { "row": 2, "col": 5 }, "label": "Bench", "stackDirection": "down" },
+      { "id": "p1_bench_5", "zoneId": "bench_5", "position": { "row": 2, "col": 6 }, "label": "Bench", "stackDirection": "down" },
+      { "id": "p1_prizes", "zoneId": "prizes", "position": { "row": 2, "col": 7 }, "label": "Prizes", "stackDirection": "down" },
 
       { "id": "p1_hand", "zoneId": "hand", "position": { "row": 3, "col": 0, "colSpan": 8 }, "label": "Hand", "stackDirection": "fan" }
     ],

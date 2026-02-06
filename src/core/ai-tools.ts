@@ -20,6 +20,8 @@ import {
   searchZone,
   moveCardStack,
   declareVictory,
+  createDecision,
+  resolveDecision,
 } from './action';
 import type { Visibility } from './types';
 
@@ -36,6 +38,8 @@ export interface ToolContext {
   getState: () => GameState<CardTemplate>;
   /** Get the readable state JSON for this player. */
   getReadableState: () => string;
+  /** True when this context is for a decision mini-turn response. */
+  isDecisionResponse?: boolean;
 }
 
 /**
@@ -85,6 +89,28 @@ function resolveCard(
 }
 
 /**
+ * Helper: resolve a card by position in a zone (for face-down cards the AI can't name).
+ * Index 0 = top of zone (consistent with draw/peek).
+ */
+function resolveCardByPosition(
+  state: GameState<CardTemplate>,
+  zoneKey: string,
+  fromPosition?: string
+): string {
+  const zone = state.zones[zoneKey];
+  if (!zone) throw new Error(`Zone not found: ${zoneKey}`);
+  if (zone.cards.length === 0) throw new Error(`Zone "${zoneKey}" is empty`);
+
+  if (!fromPosition || fromPosition === 'top') return zone.cards[0].instanceId;
+  if (fromPosition === 'bottom') return zone.cards[zone.cards.length - 1].instanceId;
+
+  const index = parseInt(fromPosition, 10);
+  if (isNaN(index) || index < 0 || index >= zone.cards.length)
+    throw new Error(`Invalid position "${fromPosition}" for zone with ${zone.cards.length} cards`);
+  return zone.cards[index].instanceId;
+}
+
+/**
  * Create default tools for all built-in action types.
  * Each tool calls ctx.execute() which is provided by the caller.
  *
@@ -119,19 +145,22 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
     // ── Move Card ──────────────────────────────────────────────────
     tool({
       name: 'move_card',
-      description: 'Move a card from one zone to another.',
+      description: 'Move a card from one zone to another. Use cardName for visible cards. Omit cardName to take from top of zone (e.g. prize cards).',
       inputSchema: {
         type: 'object' as const,
         properties: {
-          cardName: { type: 'string', description: 'Name of the card to move' },
+          cardName: { type: 'string', description: 'Name of the card to move (optional — omit for face-down cards)' },
           fromZone: { type: 'string', description: 'Zone key (e.g. "player1_hand")' },
           toZone: { type: 'string', description: 'Zone key to move the card to (e.g. "player1_active")' },
           position: { type: 'number', description: 'Optional position in the target zone (0 = top)' },
+          fromPosition: { type: 'string', description: 'Position to pick from when cardName is omitted: "top" (default), "bottom", or numeric index' },
         },
-        required: ['cardName', 'fromZone', 'toZone'],
+        required: ['fromZone', 'toZone'],
       },
       async run(input) {
-        const cardId = resolveCard(ctx.getState(), input.cardName, input.fromZone);
+        const cardId = input.cardName
+          ? resolveCard(ctx.getState(), input.cardName, input.fromZone)
+          : resolveCardByPosition(ctx.getState(), input.fromZone, input.fromPosition);
         return ctx.execute(
           moveCard(p, cardId, input.fromZone, input.toZone, input.position),
         );
@@ -273,13 +302,13 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
     // ── Set Orientation ────────────────────────────────────────────
     tool({
       name: 'set_orientation',
-      description: 'Set a Pokemon\'s status condition via card orientation. Only active Pokemon can have status.',
+      description: 'Set card rotation/orientation by degrees.',
       inputSchema: {
         type: 'object' as const,
         properties: {
           cardName: { type: 'string', description: 'Name of the card' },
           zone: { type: 'string', description: 'Zone key the card is in' },
-          orientation: { type: 'string', enum: ['normal', 'paralyzed', 'asleep', 'confused'], description: 'Status: "paralyzed" (90° CW), "asleep" (90° CCW), "confused" (180°), "normal" (clear status)' },
+          orientation: { type: 'string', enum: ['0', '90', '-90', '180'], description: '"0" = upright, "90" = 90° clockwise, "-90" = 90° counter-clockwise, "180" = upside-down' },
         },
         required: ['cardName', 'zone', 'orientation'],
       },
@@ -474,6 +503,37 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
       },
       async run(input) {
         return ctx.execute(declareVictory(p, input.reason));
+      },
+    }),
+
+    // ── Create Decision ───────────────────────────────────────────
+    tool({
+      name: 'create_decision',
+      description: 'Request the opponent to make a decision (mini-turn). The opponent gets control to take actions, then resolves the decision back to you.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          message: { type: 'string', description: 'Optional message describing what the opponent needs to do' },
+        },
+        required: [],
+      },
+      async run(input) {
+        const opponent = (p === 0 ? 1 : 0) as PlayerIndex;
+        return ctx.execute(createDecision(p, opponent, input.message));
+      },
+    }),
+
+    // ── Resolve Decision ──────────────────────────────────────────
+    tool({
+      name: 'resolve_decision',
+      description: 'Resolve a pending decision, returning control to the player who created it.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {},
+        required: [],
+      },
+      async run() {
+        return ctx.execute(resolveDecision(p));
       },
     }),
   ];
