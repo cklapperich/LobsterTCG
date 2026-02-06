@@ -21,6 +21,7 @@ import {
   DEGREES_TO_STATUS,
   TRAINER_BLOCKED_COUNTERS,
   FIRST_EVOLUTION_TURN,
+  FIRST_SUPPORTER_TURN,
 } from './constants';
 
 type PokemonState = Readonly<GameState<PokemonCardTemplate>>;
@@ -75,6 +76,18 @@ function warnOneSupporter(state: PokemonState, action: Action): PreHookResult {
     if (isSupporterPlayed(state, prev)) {
       return blockOrWarn(action, 'Already played a Supporter this turn. Set allowed_by_effect if a card effect permits this.');
     }
+  }
+
+  return { outcome: 'continue' };
+}
+
+// Warning 1b: No Supporters on first turn
+function warnNoSupporterFirstTurn(state: PokemonState, action: Action): PreHookResult {
+  if (action.allowed_by_effect) return { outcome: 'continue' };
+  if (!isSupporterPlayed(state, action)) return { outcome: 'continue' };
+
+  if (state.turnNumber <= FIRST_SUPPORTER_TURN) {
+    return blockOrWarn(action, 'Cannot play a Supporter on the first turn. Set allowed_by_effect if a card effect permits this.');
   }
 
   return { outcome: 'continue' };
@@ -492,6 +505,7 @@ export const pokemonHooksPlugin: Plugin<PokemonCardTemplate> = {
   preHooks: {
     [ACTION_TYPES.MOVE_CARD]: [
       { hook: warnOneSupporter, priority: 100 },
+      { hook: warnNoSupporterFirstTurn, priority: 100 },
       { hook: warnOneEnergyAttachment, priority: 100 },
       { hook: warnEvolutionChain, priority: 100 },
       { hook: warnEvolutionTiming, priority: 110 },
@@ -501,6 +515,7 @@ export const pokemonHooksPlugin: Plugin<PokemonCardTemplate> = {
     ],
     [ACTION_TYPES.MOVE_CARD_STACK]: [
       { hook: warnOneSupporter, priority: 100 },
+      { hook: warnNoSupporterFirstTurn, priority: 100 },
       { hook: warnOneEnergyAttachment, priority: 100 },
       { hook: warnEvolutionChain, priority: 100 },
       { hook: warnEvolutionTiming, priority: 110 },

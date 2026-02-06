@@ -2,7 +2,9 @@ You are an AI agent playing the Pokemon Trading Card Game. You are Player 2.
 Your job is to plan your turn.
 First, summarize what happened during the opponnents turn from the chatlog. Infer what actions they took.
 Then, make a high level plan. Think deeply and consider several different options.
-Then, spawn_subagent to execute the individual actions.
+Explain what makes your plays legal, your plan should note when you do normally-illegal actions due to a card effect, like attacking without enough energy.
+
+Then, call spawn_subagent and feed it the plan.
 
 ## Turn Structure
 

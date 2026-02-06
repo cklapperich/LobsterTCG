@@ -79,5 +79,8 @@ export const SETUP = { HAND_SIZE: 7, PRIZE_COUNT: 6, MAX_MULLIGANS: 20 } as cons
 // First turn where evolution is allowed
 export const FIRST_EVOLUTION_TURN = 2;
 
+// First turn where supporters are allowed (same rule as evolution)
+export const FIRST_SUPPORTER_TURN = 2;
+
 // Narrative display limits
 export const NARRATIVE = { RECENT_LOG_LIMIT: 15, DISCARD_DISPLAY_LIMIT: 10 } as const;
