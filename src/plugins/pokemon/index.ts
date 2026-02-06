@@ -122,7 +122,7 @@ export function loadPlayerDeck(
   getTemplate: (id: string) => CardTemplate | undefined,
   shuffleDeck: boolean = true
 ): void {
-  const deckKey = `player${playerIndex}_${ZONE_IDS.DECK}`;
+  const deckKey = `player${playerIndex + 1}_${ZONE_IDS.DECK}`;
   loadDeck(state, playerIndex, deckKey, deckList, getTemplate, shuffleDeck);
 }
 
@@ -131,8 +131,8 @@ export function loadPlayerDeck(
  * Shuffles the deck, draws 7 cards, and sets 6 prizes.
  */
 export function executeSetup(state: GameState<CardTemplate>, playerIndex: PlayerIndex): void {
-  const deckKey = `player${playerIndex}_${ZONE_IDS.DECK}`;
-  const prizesKey = `player${playerIndex}_${ZONE_IDS.PRIZES}`;
+  const deckKey = `player${playerIndex + 1}_${ZONE_IDS.DECK}`;
+  const prizesKey = `player${playerIndex + 1}_${ZONE_IDS.PRIZES}`;
 
   // Shuffle the deck
   executeAction(state, shuffleAction(playerIndex, deckKey));
@@ -186,8 +186,8 @@ export function getCardInfo(template: CardTemplate): string {
  */
 export function autoMulligan(state: GameState<CardTemplate>, playerIndex: PlayerIndex): number {
   let count = 0;
-  const handKey = `player${playerIndex}_hand`;
-  const deckKey = `player${playerIndex}_deck`;
+  const handKey = `player${playerIndex + 1}_hand`;
+  const deckKey = `player${playerIndex + 1}_deck`;
 
   while (count < 20) {
     const hand = state.zones[handKey];
@@ -321,8 +321,8 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
         type: 'object' as const,
         properties: {
           cardName: { type: 'string', description: 'Name of the card to move (optional — omit for face-down cards)' },
-          fromZone: { type: 'string', description: 'Zone key (e.g. "player1_hand")' },
-          toZone: { type: 'string', description: 'Zone key to move the card to (e.g. "player1_active")' },
+          fromZone: { type: 'string', description: 'Zone key (e.g. "player2_hand")' },
+          toZone: { type: 'string', description: 'Zone key to move the card to (e.g. "player2_active")' },
           fromPosition: { type: 'string', description: 'Position to pick from when cardName is omitted: "top" (default), "bottom", or numeric index' },
         },
         required: ['fromZone', 'toZone'],
@@ -388,7 +388,7 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
     },
     async run(input) {
       const state = ctx.getState();
-      const activeKey = `player${p}_${ZONE_IDS.ACTIVE}`;
+      const activeKey = `player${p + 1}_${ZONE_IDS.ACTIVE}`;
       const activeZone = state.zones[activeKey];
       const topCard = activeZone?.cards.at(-1);
       const activeName = topCard?.template?.name ?? 'Active Pokemon';
@@ -514,7 +514,7 @@ function getActionPanels(state: GameState<PokemonCardTemplate>, player: PlayerIn
   const panels: ActionPanel[] = [];
 
   // ATTACKS panel — shows attacks from the active Pokemon
-  const activeKey = `player${player}_${ZONE_IDS.ACTIVE}`;
+  const activeKey = `player${player + 1}_${ZONE_IDS.ACTIVE}`;
   const activeZone = state.zones[activeKey];
   const activeCard = activeZone?.cards.at(-1);
   const template = activeCard ? getCardTemplate(activeCard.template.id) : undefined;
@@ -554,13 +554,13 @@ function getActionPanels(state: GameState<PokemonCardTemplate>, player: PlayerIn
 
 function onActionPanelClick(state: GameState<PokemonCardTemplate>, player: PlayerIndex, panelId: string, buttonId: string): void {
   if (panelId === 'attacks') {
-    const activeKey = `player${player}_${ZONE_IDS.ACTIVE}`;
+    const activeKey = `player${player + 1}_${ZONE_IDS.ACTIVE}`;
     const activeZone = state.zones[activeKey];
     const activeName = activeZone?.cards.at(-1)?.template?.name ?? 'Active Pokemon';
     state.log.push(`${activeName} used ${buttonId}!`);
   } else if (panelId === 'mulligan') {
-    const handKey = `player${player}_${ZONE_IDS.HAND}`;
-    const deckKey = `player${player}_${ZONE_IDS.DECK}`;
+    const handKey = `player${player + 1}_${ZONE_IDS.HAND}`;
+    const deckKey = `player${player + 1}_${ZONE_IDS.DECK}`;
     const handZone = state.zones[handKey];
 
     // Move all hand cards to deck

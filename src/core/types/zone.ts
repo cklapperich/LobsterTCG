@@ -12,7 +12,7 @@ export interface ZoneConfig {
 }
 
 export interface Zone<T extends CardTemplate = CardTemplate> {
-  key: string; // unique zone key: "player0_deck", "player1_hand", etc.
+  key: string; // unique zone key: "player1_deck", "player2_hand", etc.
   config: ZoneConfig;
   owner: PlayerIndex;
   cards: CardInstance<T>[]; // index 0 = visual bottom, end of array = visual top

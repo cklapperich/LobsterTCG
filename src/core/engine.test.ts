@@ -48,7 +48,7 @@ function setupGame() {
 
 function placeCard(state: GameState<CardTemplate>, playerIndex: 0 | 1, zoneId: string): string {
   const instanceId = generateInstanceId();
-  const zone = state.zones[`player${playerIndex}_${zoneId}`];
+  const zone = state.zones[`player${playerIndex + 1}_${zoneId}`];
   const card = createCardInstance(DUMMY_TEMPLATE, instanceId, zone.config.defaultVisibility);
   zone.cards.push(card);
   return instanceId;
@@ -62,7 +62,7 @@ describe('checkOpponentZone', () => {
   it('blocks AI move_card to opponent zone', () => {
     const { state, gameLoop, blocked } = setupGame();
     const card = placeCard(state, 0, 'hand');
-    gameLoop.submit({ ...moveCard(1, card, 'player1_hand', 'player1_field'), source: 'ai' });
+    gameLoop.submit({ ...moveCard(1, card, 'player2_hand', 'player2_field'), source: 'ai' });
     gameLoop.processNext();
     expect(blocked).toHaveLength(1);
     expect(blocked[0].reason).toContain("opponent's Field");
@@ -71,7 +71,7 @@ describe('checkOpponentZone', () => {
   it('warns UI move_card to opponent zone', () => {
     const { state, gameLoop, blocked } = setupGame();
     const card = placeCard(state, 0, 'hand');
-    gameLoop.submit(moveCard(1, card, 'player1_hand', 'player1_field'));
+    gameLoop.submit(moveCard(1, card, 'player2_hand', 'player2_field'));
     gameLoop.processNext();
     expect(blocked).toHaveLength(0);
     expect(state.log.some(l => l.includes("opponent's Field"))).toBe(true);
@@ -80,7 +80,7 @@ describe('checkOpponentZone', () => {
   it('allows move_card to own zone', () => {
     const { state, gameLoop, blocked } = setupGame();
     const card = placeCard(state, 0, 'hand');
-    gameLoop.submit({ ...moveCard(0, card, 'player0_hand', 'player0_field'), source: 'ai' });
+    gameLoop.submit({ ...moveCard(0, card, 'player1_hand', 'player1_field'), source: 'ai' });
     gameLoop.processNext();
     expect(blocked).toHaveLength(0);
   });
@@ -90,7 +90,7 @@ describe('checkOpponentZone', () => {
     state.activePlayer = 1;
     const card = placeCard(state, 1, 'hand');
     // shared_zone defaults to player0 ownership, but shared=true
-    gameLoop.submit(moveCard(0, card, 'player0_hand', 'player0_shared_zone'));
+    gameLoop.submit(moveCard(0, card, 'player1_hand', 'player1_shared_zone'));
     gameLoop.processNext();
     expect(blocked).toHaveLength(0);
   });
@@ -98,7 +98,7 @@ describe('checkOpponentZone', () => {
   it('allows opponent zone move with allowed_by_effect', () => {
     const { state, gameLoop, blocked } = setupGame();
     const card = placeCard(state, 0, 'hand');
-    gameLoop.submit({ ...moveCard(1, card, 'player1_hand', 'player1_field'), source: 'ai', allowed_by_effect: true });
+    gameLoop.submit({ ...moveCard(1, card, 'player2_hand', 'player2_field'), source: 'ai', allowed_by_effect: true });
     gameLoop.processNext();
     expect(blocked).toHaveLength(0);
   });
@@ -106,7 +106,7 @@ describe('checkOpponentZone', () => {
   it('blocks AI move_card_stack to opponent zone', () => {
     const { state, gameLoop, blocked } = setupGame();
     const card = placeCard(state, 0, 'hand');
-    gameLoop.submit({ ...moveCardStack(1, [card], 'player1_hand', 'player1_field'), source: 'ai' });
+    gameLoop.submit({ ...moveCardStack(1, [card], 'player2_hand', 'player2_field'), source: 'ai' });
     gameLoop.processNext();
     expect(blocked).toHaveLength(1);
     expect(blocked[0].reason).toContain("opponent's Field");

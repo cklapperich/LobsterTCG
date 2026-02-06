@@ -118,12 +118,12 @@ export function createGameState<T extends CardTemplate>(
   const zones: Record<string, Zone<T>> = {};
   for (let playerIndex = 0; playerIndex < config.playerCount; playerIndex++) {
     for (const [zoneId, zoneConfig] of Object.entries(config.zones)) {
-      const key = `player${playerIndex}_${zoneId}`;
+      const key = `player${playerIndex + 1}_${zoneId}`;
       zones[key] = createZone(zoneConfig, playerIndex as PlayerIndex, key);
     }
 
     // Inject staging zone for each player
-    const stagingKey = `player${playerIndex}_staging`;
+    const stagingKey = `player${playerIndex + 1}_staging`;
     zones[stagingKey] = createZone(STAGING_ZONE_CONFIG, playerIndex as PlayerIndex, stagingKey);
   }
 
@@ -322,7 +322,7 @@ export function zoneVisibility(zoneKey: string, config: ZoneConfig): Visibility 
     return VISIBILITY.PUBLIC;
   }
   if (config.ownerCanSeeContents) {
-    const ownerIndex = zoneKey.startsWith('player0_') ? 0 : 1;
+    const ownerIndex = zoneKey.startsWith('player1_') ? 0 : 1;
     return ownerIndex === 0 ? VISIBILITY.PLAYER_A_ONLY : VISIBILITY.PLAYER_B_ONLY;
   }
   return VISIBILITY.HIDDEN;
@@ -336,8 +336,8 @@ function executeDraw<T extends CardTemplate>(
   state: GameState<T>,
   action: DrawAction
 ): void {
-  const deckKey = `player${action.player}_deck`;
-  const handKey = `player${action.player}_hand`;
+  const deckKey = `player${action.player + 1}_deck`;
+  const handKey = `player${action.player + 1}_hand`;
   const deck = getZone(state, deckKey);
   const hand = getZone(state, handKey);
 
