@@ -6,7 +6,7 @@ export interface CardModalState {
   zoneKey: string;
   zoneName: string;
   position: 'top' | 'bottom' | 'all';
-  mode: 'peek' | 'arrange';
+  mode: 'peek' | 'arrange' | 'browse';
 }
 
 export const cardModalStore = $state<{ current: CardModalState | null }>({ current: null });

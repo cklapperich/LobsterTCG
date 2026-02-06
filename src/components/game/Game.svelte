@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { Playmat, CardInstance, CardTemplate, GameState, CounterDefinition, DeckList, ZoneConfig, Action } from '../../core';
-  import { executeAction, shuffle, VISIBILITY, flipCard, endTurn, loadDeck, getCardName, findCardInZones, toReadableState, PluginManager, setOrientation, createDecision, resolveDecision } from '../../core';
+  import { executeAction, shuffle, VISIBILITY, flipCard, endTurn, loadDeck, getCardName, findCardInZones, toReadableState, PluginManager, setOrientation, createDecision, resolveDecision, revealHand } from '../../core';
   import type { ToolContext } from '../../core/ai-tools';
   import { plugin, executeSetup, ZONE_IDS, pokemonHooksPlugin } from '../../plugins/pokemon';
   import { getTemplate } from '../../plugins/pokemon/cards';
@@ -13,7 +13,7 @@
   import CounterDragOverlay from './CounterDragOverlay.svelte';
   import CoinFlip from './CoinFlip.svelte';
   import ActionPanelView from './ActionPanelView.svelte';
-  import { dragStore, executeDrop } from './dragState.svelte';
+  import { dragStore, startDrag, updateDragPosition, endDrag, executeDrop } from './dragState.svelte';
   import {
     counterDragStore,
     executeCounterDrop,
@@ -88,6 +88,19 @@
   $effect(() => {
     if (gameLog.length > 0 && logContainer) {
       logContainer.scrollTop = logContainer.scrollHeight;
+    }
+  });
+
+  // Auto-open browse modal when a reveal decision targets the human player
+  $effect(() => {
+    const decision = gameState?.pendingDecision;
+    if (decision?.targetPlayer === 0 && decision.revealedZone && gameState) {
+      const zoneKey = decision.revealedZone;
+      const zone = gameState.zones[zoneKey];
+      if (zone && zone.cards.length > 0) {
+        const zoneName = zone.config.name ?? zoneKey;
+        openCardModal({ cards: [...zone.cards], zoneKey, zoneName, position: 'all', mode: 'browse' });
+      }
     }
   });
 
@@ -179,6 +192,8 @@
         return `[AI] Revealed ${action.cardInstanceIds.map(id => cardName(id)).join(', ')}`;
       case 'peek':
         return `[AI] Peeked at ${action.count} cards from ${action.fromPosition} of ${zoneId(action.zoneId)}`;
+      case 'reveal_hand':
+        return `[AI] Revealed ${zoneId(action.zoneKey)}`;
       case 'create_decision':
         return `[AI] Requested decision: ${action.message ?? 'Action needed'}`;
       case 'resolve_decision':
@@ -303,6 +318,39 @@
     openCardModal({ cards: [...zoneCards], zoneKey: contextMenu.zoneKey, zoneName: contextMenu.zoneName, position: 'all', mode: 'arrange' });
   }
 
+  function handleBrowseZone(zoneKey: string, zoneName: string) {
+    if (!gameState) return;
+    const zoneCards = gameState.zones[zoneKey]?.cards ?? [];
+    if (zoneCards.length === 0) return;
+    openCardModal({ cards: [...zoneCards], zoneKey, zoneName, position: 'all', mode: 'browse' });
+  }
+
+  function handleModalDragOut(card: CardInstance<CardTemplate>, fromZoneKey: string, mouseX: number, mouseY: number) {
+    closeCardModalStore();
+    startDrag(card, fromZoneKey, mouseX, mouseY);
+
+    // Mouse-based drag: temporary listeners drive the same drag system
+    function onMouseMove(e: MouseEvent) {
+      updateDragPosition(e.clientX, e.clientY);
+    }
+    function onMouseUp(e: MouseEvent) {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+
+      // Find zone under cursor via data-zone-key attribute
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const zoneEl = el?.closest('[data-zone-key]') as HTMLElement | null;
+      if (zoneEl && gameState) {
+        const toZoneKey = zoneEl.dataset.zoneKey!;
+        const isHandZone = toZoneKey.includes('hand');
+        handleDrop(card.instanceId, toZoneKey, isHandZone ? undefined : 0);
+      }
+      endDrag();
+    }
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  }
+
   function handleCardModalConfirm(reorderedCards: CardInstance<CardTemplate>[]) {
     if (!gameState || !cardModal) return;
 
@@ -421,7 +469,7 @@
           if (sfx) playSfx(sfx);
 
           // If AI created a decision targeting human (player 0), block until human resolves
-          if (action.type === 'create_decision' && gameState?.pendingDecision?.targetPlayer === 0) {
+          if ((action.type === 'create_decision' || action.type === 'reveal_hand') && gameState?.pendingDecision?.targetPlayer === 0) {
             await new Promise<void>(resolve => {
               pendingDecisionResolve = resolve;
             });
@@ -583,6 +631,19 @@
     gameState = { ...gameState };
     playSfx('confirm');
   }
+
+  function handleRevealToOpponent() {
+    if (!gameState || !contextMenu || gameState.pendingDecision) return;
+    const zoneKey = contextMenu.zoneKey;
+    executeAction(gameState, revealHand(0, zoneKey));
+    gameState = { ...gameState };
+    playSfx('confirm');
+
+    // If AI is the target, trigger a decision mini-turn
+    if (gameState.pendingDecision?.targetPlayer === 1) {
+      triggerAIDecisionTurn();
+    }
+  }
 </script>
 
 <div class="game-container font-retro bg-gbc-bg min-h-screen w-screen p-4 box-border relative overflow-auto">
@@ -682,6 +743,7 @@
           onToggleVisibility={handleToggleVisibility}
           onZoneContextMenu={handleZoneContextMenu}
           onCounterDrop={handleCounterDrop}
+          onBrowse={handleBrowseZone}
         />
       </div>
 
@@ -760,6 +822,7 @@
       onArrangeAll={handleArrangeAll}
       onClearCounters={handleClearCounters}
       onSetOrientation={handleSetOrientation}
+      onRevealToOpponent={contextMenu.zoneKey.startsWith('player0_') && !gameState?.pendingDecision ? handleRevealToOpponent : undefined}
       onClose={handleCloseContextMenu}
     />
   {/if}
@@ -771,8 +834,10 @@
       zoneName={cardModal.zoneName}
       position={cardModal.position}
       mode={cardModal.mode}
+      zoneKey={cardModal.zoneKey}
       {cardBack}
       onConfirm={handleCardModalConfirm}
+      onDragOut={cardModal.mode === 'browse' ? handleModalDragOut : undefined}
       onClose={handleCloseCardModal}
     />
   {/if}

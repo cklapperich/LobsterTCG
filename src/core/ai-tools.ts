@@ -22,6 +22,7 @@ import {
   declareVictory,
   createDecision,
   resolveDecision,
+  revealHand,
 } from './action';
 import type { Visibility } from './types';
 
@@ -503,6 +504,22 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
       },
       async run(input) {
         return ctx.execute(declareVictory(p, input.reason));
+      },
+    }),
+
+    // ── Reveal Hand ─────────────────────────────────────────────────
+    tool({
+      name: 'reveal_hand',
+      description: 'Reveal all cards in a zone (typically your hand) to the opponent. Logs the card names and creates a decision for the opponent to acknowledge. Cards are automatically hidden again when the decision resolves.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          zone: { type: 'string', description: 'Zone key to reveal (e.g. "player1_hand")' },
+        },
+        required: ['zone'],
+      },
+      async run(input) {
+        return ctx.execute(revealHand(p, input.zone));
       },
     }),
 
