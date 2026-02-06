@@ -1,8 +1,10 @@
-import Anthropic from '@anthropic-ai/sdk';
+import { generateText, jsonSchema } from 'ai';
+import type { ToolSet } from 'ai';
+import { createFireworks } from '@ai-sdk/fireworks';
 import type { GamePlugin } from '../core';
-import type { ToolContext } from '../core/ai-tools';
+import type { ToolContext, RunnableTool } from '../core/ai-tools';
 import { createSpawnSubagentTool } from './tools/spawn-subagent';
-import { logMessage } from './logging';
+import { logStepFinish } from './logging';
 
 export interface AITurnConfig {
   context: ToolContext;
@@ -14,17 +16,34 @@ export interface AITurnConfig {
   decisionMode?: boolean;
 }
 
+/**
+ * Convert our RunnableTool[] array into the Record<string, CoreTool>
+ * map that the Vercel AI SDK's generateText expects.
+ */
+export function toAISDKTools(tools: RunnableTool[]): ToolSet {
+  const result: ToolSet = {};
+  for (const t of tools) {
+    result[t.name] = {
+      description: t.description,
+      parameters: jsonSchema(t.parameters as any),
+      execute: async (args: Record<string, any>) => t.execute(args),
+    };
+  }
+  return result;
+}
+
 export async function runAITurn(config: AITurnConfig): Promise<void> {
   const { context, plugin, heuristics, apiKey } = config;
-  const model = config.model ?? 'claude-haiku-4-5-20251001';
+  const modelId = config.model ?? 'accounts/fireworks/models/kimi-k2p5';
 
-  const anthropic = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+  const fireworks = createFireworks({ apiKey });
+  const model = fireworks(modelId);
 
   // Get tools from plugin (respects plugin architecture)
   const gameTools = plugin.listTools!(context);
 
   // Add spawn_subagent tool
-  const subagentTool = createSpawnSubagentTool(anthropic, gameTools, heuristics);
+  const subagentTool = createSpawnSubagentTool(model, gameTools, heuristics);
   const allTools = [...gameTools, subagentTool];
 
   // Initial readable state
@@ -40,18 +59,18 @@ export async function runAITurn(config: AITurnConfig): Promise<void> {
     console.log('%c[system]', 'color: #88f', heuristics.slice(0, 200) + '...');
   }
 
-  // Run the tool loop — SDK handles the agentic loop automatically
-  const runner = anthropic.beta.messages.toolRunner({
+  // Run the tool loop — AI SDK handles the agentic loop via maxSteps
+  await generateText({
     model,
-    max_tokens: 4096,
+    maxTokens: 4096,
     system: heuristics,
-    tools: allTools as any,
+    tools: toAISDKTools(allTools),
+    maxSteps: 30,
     messages: [{ role: 'user', content: userMessage }],
+    onStepFinish: (step) => {
+      if (config.logging) logStepFinish(step);
+    },
   });
-
-  for await (const message of runner) {
-    if (config.logging) logMessage(message);
-  }
 
   if (config.logging) console.groupEnd();
 }
