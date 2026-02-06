@@ -254,8 +254,10 @@
     const updatedState = executeDrop(cardInstanceId, toZoneKey, gameState, position, pluginManager);
     if (updatedState) {
       gameState = updatedState;
-      const toZoneName = gameState.zones[toZoneKey]?.config.name ?? toZoneKey;
-      gameState.log.push(`[Player ${gameState.activePlayer + 1}] Moved ${cardName} from ${fromZoneName} to ${toZoneName}`);
+      if (fromZoneKey !== toZoneKey) {
+        const toZoneName = gameState.zones[toZoneKey]?.config.name ?? toZoneKey;
+        gameState.log.push(`[Player ${gameState.activePlayer + 1}] Moved ${cardName} from ${fromZoneName} to ${toZoneName}`);
+      }
       gameState = { ...gameState };
     }
   }
@@ -431,9 +433,12 @@
 
   function handleDebug() {
     if (!gameState) return;
-    const readable = pluginManager.applyReadableStateModifier(toReadableState(gameState, gameState.activePlayer));
-    debugJson = JSON.stringify(readable, null, 2);
-    debugNarrative = pluginManager.formatReadableState(readable);
+    // Narrative: always show AI (Player 1) perspective to match hardcoded labels
+    const aiReadable = pluginManager.applyReadableStateModifier(toReadableState(gameState, 1));
+    debugNarrative = pluginManager.formatReadableState(aiReadable);
+    // JSON: show active player's perspective
+    const jsonReadable = pluginManager.applyReadableStateModifier(toReadableState(gameState, gameState.activePlayer));
+    debugJson = JSON.stringify(jsonReadable, null, 2);
     showDebugModal = true;
   }
 

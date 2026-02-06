@@ -12,6 +12,7 @@ export {
   findCardInZones,
   getCardName,
   checkOpponentZone,
+  zoneVisibility,
   STAGING_ZONE_CONFIG,
 } from './engine';
 

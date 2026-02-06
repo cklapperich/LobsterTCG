@@ -3,11 +3,25 @@ import { isFieldZone } from './helpers';
 
 /**
  * Convert a ReadableGameState into a compact narrative text format for AI consumption.
- * Reduces token usage ~60% vs JSON.stringify while preserving all information
- * the AI needs to make decisions and call tools.
+ *
+ * Structure:
+ * 1. CARD REFERENCE — full details for every visible unique card, printed once
+ * 2. GAME STATE header — turn, phase, pending decision
+ * 3. YOUR BOARD / OPPONENT BOARD — compact layout (names + instance state only)
+ * 4. STADIUM, ACTIONS, LOG
  */
 export function formatNarrativeState(readable: ReadableGameState): string {
   const lines: string[] = [];
+
+  // Card reference (deduplicated, full details)
+  const refCards = collectUniqueCards(readable);
+  if (refCards.length > 0) {
+    lines.push('=== CARD REFERENCE ===');
+    for (const card of refCards) {
+      lines.push(...formatCardReference(card));
+      lines.push('');
+    }
+  }
 
   // Header
   lines.push('=== GAME STATE ===');
@@ -26,13 +40,13 @@ export function formatNarrativeState(readable: ReadableGameState): string {
   lines.push('');
   lines.push('--- YOUR BOARD (Player 1) ---');
   lines.push('');
-  lines.push(...formatBoard(readable, 'player1', true));
+  lines.push(...formatBoard(readable, 'player1'));
 
   // Player 0 board (opponent)
   lines.push('');
   lines.push('--- OPPONENT BOARD (Player 0) ---');
   lines.push('');
-  lines.push(...formatBoard(readable, 'player0', false));
+  lines.push(...formatBoard(readable, 'player0'));
 
   // Stadium
   const stadiumLines = formatStadium(readable.zones);
@@ -62,195 +76,131 @@ export function formatNarrativeState(readable: ReadableGameState): string {
   return lines.join('\n');
 }
 
-// ── Board formatting ─────────────────────────────────────────────
+// ── Card Reference ───────────────────────────────────────────────
 
-function formatBoard(readable: ReadableGameState, playerPrefix: string, isViewer: boolean): string[] {
+/**
+ * Collect all visible unique cards for the reference section.
+ * - Field zones: include top card (Pokemon) + non-Pokemon underneath (energy/tools).
+ *   Skip Pokemon buried under a stack (evolved-from — their attacks are irrelevant).
+ * - All other zones: include every visible card.
+ * - Deduplicate by card name (already disambiguated in ReadableCard).
+ */
+function collectUniqueCards(readable: ReadableGameState): ReadableCard[] {
+  const seen = new Map<string, ReadableCard>();
+
+  for (const [zoneKey, zone] of Object.entries(readable.zones)) {
+    const field = isFieldZone(zoneKey);
+
+    for (let i = 0; i < zone.cards.length; i++) {
+      const card = zone.cards[i];
+      const isTop = field && i === zone.cards.length - 1;
+      const isPokemon = card.supertype === 'Pokemon';
+
+      // Skip non-top Pokemon in field zones (evolved-from cards under the stack)
+      if (field && !isTop && isPokemon) continue;
+
+      if (!seen.has(card.name)) {
+        seen.set(card.name, card);
+      }
+    }
+  }
+
+  return Array.from(seen.values());
+}
+
+/**
+ * Format a single card's full reference entry.
+ */
+function formatCardReference(card: ReadableCard): string[] {
   const lines: string[] = [];
-  const zones = readable.zones;
+  const supertype = card.supertype as string | undefined;
 
-  // Field zones: active, bench_1..5
-  const fieldZoneIds = ['active', 'bench_1', 'bench_2', 'bench_3', 'bench_4', 'bench_5'];
+  if (supertype === 'Pokemon') {
+    lines.push(formatPokemonReference(card));
 
-  for (const zoneId of fieldZoneIds) {
-    const zoneKey = `${playerPrefix}_${zoneId}`;
-    const zone = zones[zoneKey];
-    if (!zone) continue;
-
-    const label = zoneId === 'active' ? 'Active' : zoneId.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase());
-
-    if (zone.count === 0) continue; // Skip empty field zones
-
-    if (zone.cards.length === 0 && zone.count > 0) {
-      // Cards exist but are hidden (setup phase)
-      lines.push(`[${label}] (${zone.count} face-down card${zone.count > 1 ? 's' : ''})`);
-    } else {
-      lines.push(...formatFieldZone(label, zone));
+    const attacks = card.attacks as Array<{ name: string; cost: string[]; damage: string; effect?: string }> | undefined;
+    if (attacks && attacks.length > 0) {
+      lines.push('  Attacks:');
+      for (const atk of attacks) {
+        lines.push(`    ${formatAttack(atk)}`);
+      }
     }
-  }
 
-  // Hand
-  const handKey = `${playerPrefix}_hand`;
-  const hand = zones[handKey];
-  if (hand) {
-    lines.push(formatHandInline(hand, isViewer));
-  }
-
-  // Count line: Deck | Discard | Prizes
-  lines.push(formatCountLine(zones, playerPrefix));
-
-  // Discard contents (if non-empty and viewer or visible)
-  const discardKey = `${playerPrefix}_discard`;
-  const discard = zones[discardKey];
-  if (discard && discard.cards.length > 0) {
-    if (discard.cards.length <= 10) {
-      const cardList = condenseInline(discard.cards);
-      lines.push(`  Discard: ${cardList}`);
+    const abilities = card.abilities as Array<{ name: string; type: string; effect: string }> | undefined;
+    if (abilities && abilities.length > 0) {
+      for (const ab of abilities) {
+        lines.push(`  ${formatAbility(ab)}`);
+      }
     }
-  }
+  } else if (supertype === 'Trainer') {
+    const subtypes = card.subtypes as string[] | undefined;
+    const sub = subtypes && subtypes.length > 0 ? `, ${subtypes.join('/')}` : '';
+    lines.push(`${card.name} \u2014 Trainer${sub}`);
 
-  // Lost zone (only if non-empty)
-  const lostKey = `${playerPrefix}_lost_zone`;
-  const lost = zones[lostKey];
-  if (lost && lost.count > 0) {
-    if (lost.cards.length > 0) {
-      const cardList = condenseInline(lost.cards);
-      lines.push(`Lost Zone (${lost.count}): ${cardList}`);
-    } else {
-      lines.push(`Lost Zone: ${lost.count}`);
+    const rules = card.rules as string[] | undefined;
+    if (rules && rules.length > 0) {
+      for (const rule of rules) {
+        lines.push(`  ${rule}`);
+      }
     }
-  }
+  } else if (supertype === 'Energy') {
+    const subtypes = card.subtypes as string[] | undefined;
+    const sub = subtypes && subtypes.length > 0 ? `, ${subtypes.join('/')}` : '';
+    lines.push(`${card.name} \u2014 Energy${sub}`);
 
-  // Staging (only if non-empty)
-  const stagingKey = `${playerPrefix}_staging`;
-  const staging = zones[stagingKey];
-  if (staging && staging.count > 0) {
-    if (staging.cards.length > 0) {
-      const cardList = condenseInline(staging.cards);
-      lines.push(`Staging: ${cardList}`);
-    } else {
-      lines.push(`Staging: ${staging.count}`);
+    const rules = card.rules as string[] | undefined;
+    if (rules && rules.length > 0) {
+      for (const rule of rules) {
+        lines.push(`  ${rule}`);
+      }
     }
+  } else {
+    lines.push(card.name);
   }
 
   return lines;
 }
 
-// ── Field zone formatting ────────────────────────────────────────
-
-function formatFieldZone(label: string, zone: ReadableZone): string[] {
-  const lines: string[] = [];
-  const cards = zone.cards;
-  if (cards.length === 0) return lines;
-
-  // Top card is the Pokemon (last in array = visual top)
-  const pokemon = cards[cards.length - 1];
-  const attached = cards.slice(0, -1);
-
-  lines.push(`[${label}] ${formatPokemonStats(pokemon)}`);
-
-  // Attached cards
-  if (attached.length > 0) {
-    const condensed = condenseInline(attached);
-    lines.push(`  Attached: ${condensed}`);
-  }
-
-  // Attacks
-  const attacks = pokemon.attacks as Array<{ name: string; cost: string[]; damage: string; effect?: string }> | undefined;
-  if (attacks && attacks.length > 0) {
-    lines.push('  Attacks:');
-    for (const atk of attacks) {
-      lines.push(`    ${formatAttack(atk)}`);
-    }
-  }
-
-  // Abilities
-  const abilities = pokemon.abilities as Array<{ name: string; type: string; effect: string }> | undefined;
-  if (abilities && abilities.length > 0) {
-    for (const ab of abilities) {
-      lines.push(`  ${formatAbility(ab)}`);
-    }
-  }
-
-  // Rules text (for trainers in stadium, etc.)
-  const rules = pokemon.rules as string[] | undefined;
-  if (rules && rules.length > 0) {
-    for (const rule of rules) {
-      lines.push(`  ${rule}`);
-    }
-  }
-
-  // Flags
-  const flags = pokemon.flags as string[] | undefined;
-  if (flags && flags.length > 0) {
-    lines.push(`  [${flags.join(', ')}]`);
-  }
-
-  return lines;
-}
-
-function formatPokemonStats(card: ReadableCard): string {
+function formatPokemonReference(card: ReadableCard): string {
   const parts: string[] = [card.name];
 
-  // Subtypes for evolutions
-  const subtypes = card.subtypes as string[] | undefined;
   const evolveFrom = card.evolveFrom as string | undefined;
   if (evolveFrom) {
     parts.push(`evolves from ${evolveFrom}`);
   }
 
-  // Type
   const types = card.types as string[] | undefined;
   if (types && types.length > 0) {
     parts.push(types.join('/'));
   }
 
-  // HP
+  const subtypes = card.subtypes as string[] | undefined;
+  if (subtypes && subtypes.length > 0) {
+    parts.push(subtypes.join('/'));
+  }
+
   const hp = card.hp as number | undefined;
   if (hp) {
     parts.push(`${hp} HP`);
   }
 
-  // Damage
-  const totalDamage = card.totalDamage as number | undefined;
-  if (totalDamage && hp) {
-    parts.push(`${totalDamage}/${hp} damage`);
-  }
-
-  // Status
-  const status = card.status as string | undefined;
-  if (status) {
-    parts.push(status.toUpperCase());
-  }
-
-  // Burn/Poison counters
-  const counters = card.counters as Record<string, number> | undefined;
-  if (counters) {
-    if (counters['burn']) parts.push('BURNED');
-    if (counters['poison']) parts.push('POISONED');
-  }
-
-  // Retreat cost
   const retreatCost = card.retreatCost;
   if (retreatCost !== undefined && retreatCost !== null) {
     const cost = typeof retreatCost === 'number' ? retreatCost : (retreatCost as string[]).length;
     parts.push(`retreat ${cost}`);
   }
 
-  // Weaknesses
   const weaknesses = card.weaknesses as Array<{ type: string; value: string }> | undefined;
   if (weaknesses && weaknesses.length > 0) {
-    const wk = weaknesses.map(w => `weak ${w.type} ${w.value}`).join(', ');
-    parts.push(wk);
+    parts.push(weaknesses.map(w => `weak ${w.type} ${w.value}`).join(', '));
   }
 
-  // Resistances
   const resistances = card.resistances as Array<{ type: string; value: string }> | undefined;
   if (resistances && resistances.length > 0) {
-    const rs = resistances.map(r => `resist ${r.type} ${r.value}`).join(', ');
-    parts.push(rs);
+    parts.push(resistances.map(r => `resist ${r.type} ${r.value}`).join(', '));
   }
 
-  return parts.join(' \u2014 ').replace(/ \u2014 /, ' \u2014 ');
+  return parts.join(' \u2014 ');
 }
 
 function formatAttack(attack: { name: string; cost: string[]; damage: string; effect?: string }): string {
@@ -264,18 +214,140 @@ function formatAbility(ability: { name: string; type: string; effect: string }):
   return `${ability.name} (${ability.type}) \u2014 ${ability.effect}`;
 }
 
+// ── Board formatting ─────────────────────────────────────────────
+
+function formatBoard(readable: ReadableGameState, playerPrefix: string): string[] {
+  const lines: string[] = [];
+  const zones = readable.zones;
+
+  // Field zones: active, bench_1..5
+  const fieldZoneIds = ['active', 'bench_1', 'bench_2', 'bench_3', 'bench_4', 'bench_5'];
+
+  for (const zoneId of fieldZoneIds) {
+    const zoneKey = `${playerPrefix}_${zoneId}`;
+    const zone = zones[zoneKey];
+    if (!zone) continue;
+
+    const label = zoneId === 'active' ? 'Active' : zoneId.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+    if (zone.count === 0) continue;
+
+    if (zone.cards.length === 0 && zone.count > 0) {
+      lines.push(`[${label}] (${zone.count} face-down card${zone.count > 1 ? 's' : ''})`);
+    } else {
+      lines.push(...formatFieldZoneCompact(label, zone));
+    }
+  }
+
+  // Hand
+  const handKey = `${playerPrefix}_hand`;
+  const hand = zones[handKey];
+  if (hand) {
+    lines.push(formatHandLine(hand));
+  }
+
+  // Count line: Deck | Discard | Prizes
+  lines.push(formatCountLine(zones, playerPrefix));
+
+  // Discard contents (if non-empty and visible)
+  const discardKey = `${playerPrefix}_discard`;
+  const discard = zones[discardKey];
+  if (discard && discard.cards.length > 0) {
+    if (discard.cards.length <= 10) {
+      lines.push(`  Discard: ${condenseNames(discard.cards)}`);
+    }
+  }
+
+  // Lost zone (only if non-empty)
+  const lostKey = `${playerPrefix}_lost_zone`;
+  const lost = zones[lostKey];
+  if (lost && lost.count > 0) {
+    if (lost.cards.length > 0) {
+      lines.push(`Lost Zone (${lost.count}): ${condenseNames(lost.cards)}`);
+    } else {
+      lines.push(`Lost Zone: ${lost.count}`);
+    }
+  }
+
+  // Staging (only if non-empty)
+  const stagingKey = `${playerPrefix}_staging`;
+  const staging = zones[stagingKey];
+  if (staging && staging.count > 0) {
+    if (staging.cards.length > 0) {
+      lines.push(`Staging: ${condenseNames(staging.cards)}`);
+    } else {
+      lines.push(`Staging: ${staging.count}`);
+    }
+  }
+
+  return lines;
+}
+
+// ── Compact field zone (instance state only, no attacks/abilities) ──
+
+function formatFieldZoneCompact(label: string, zone: ReadableZone): string[] {
+  const lines: string[] = [];
+  const cards = zone.cards;
+  if (cards.length === 0) return lines;
+
+  // Top card is the Pokemon
+  const pokemon = cards[cards.length - 1];
+  const attached = cards.slice(0, -1);
+
+  lines.push(`[${label}] ${formatInstanceStats(pokemon)}`);
+
+  if (attached.length > 0) {
+    lines.push(`  Attached: ${condenseNames(attached)}`);
+  }
+
+  const flags = pokemon.flags as string[] | undefined;
+  if (flags && flags.length > 0) {
+    lines.push(`  [${flags.join(', ')}]`);
+  }
+
+  return lines;
+}
+
+/**
+ * Instance-specific stats line for a Pokemon on the board.
+ * Only damage, status, burn/poison — card-level details are in the reference.
+ */
+function formatInstanceStats(card: ReadableCard): string {
+  const parts: string[] = [card.name];
+
+  const hp = card.hp as number | undefined;
+  const totalDamage = card.totalDamage as number | undefined;
+  if (totalDamage && hp) {
+    parts.push(`${totalDamage}/${hp} HP`);
+  }
+
+  const status = card.status as string | undefined;
+  if (status) {
+    parts.push(status.toUpperCase());
+  }
+
+  const counters = card.counters as Record<string, number> | undefined;
+  if (counters) {
+    if (counters['burn']) parts.push('BURNED');
+    if (counters['poison']) parts.push('POISONED');
+  }
+
+  return parts.join(' \u2014 ');
+}
+
 // ── Hand formatting ──────────────────────────────────────────────
 
-function formatHandInline(zone: ReadableZone, isViewer: boolean): string {
+function formatHandLine(zone: ReadableZone): string {
   if (zone.count === 0) return 'Hand: 0';
 
   if (zone.cards.length === 0) {
-    // All hidden
     return `Hand: ${zone.count} (hidden)`;
   }
 
-  const hiddenCount = zone.count - zone.cards.length;
-  const cardList = condenseInline(zone.cards);
+  // Sum actual visible card count from condensed entries (each may have count > 1)
+  const visibleCount = zone.cards.reduce((sum, c) => sum + ((c.count as number) ?? 1), 0);
+  const hiddenCount = zone.count - visibleCount;
+  const cardList = condenseNames(zone.cards);
 
   if (hiddenCount > 0) {
     return `Hand (${zone.count}): ${cardList}, [${hiddenCount} hidden]`;
@@ -283,35 +355,22 @@ function formatHandInline(zone: ReadableZone, isViewer: boolean): string {
   return `Hand (${zone.count}): ${cardList}`;
 }
 
-// ── Inline card formatting ───────────────────────────────────────
+// ── Shared helpers ───────────────────────────────────────────────
 
-function formatCardInline(card: ReadableCard): string {
-  const supertype = card.supertype as string | undefined;
-  if (supertype && supertype !== 'Pokemon') {
-    return `${card.name} (${supertype})`;
-  }
-  return card.name;
-}
-
-function condenseInline(cards: ReadableCard[]): string {
-  // Group cards by display string
-  const groups: { display: string; count: number }[] = [];
+/** Condense card names for inline display. Groups duplicates: "Fire Energy x2" */
+function condenseNames(cards: ReadableCard[]): string {
+  const groups: { name: string; count: number }[] = [];
   for (const card of cards) {
-    const display = formatCardInline(card);
-    const existing = groups.find(g => g.display === display);
+    const cardCount = (card.count as number | undefined) ?? 1;
+    const existing = groups.find(g => g.name === card.name);
     if (existing) {
-      // Also account for ReadableCard.count from condenseCards()
-      const cardCount = (card.count as number | undefined) ?? 1;
       existing.count += cardCount;
     } else {
-      const cardCount = (card.count as number | undefined) ?? 1;
-      groups.push({ display, count: cardCount });
+      groups.push({ name: card.name, count: cardCount });
     }
   }
-  return groups.map(g => g.count > 1 ? `${g.display} x${g.count}` : g.display).join(', ');
+  return groups.map(g => g.count > 1 ? `${g.name} x${g.count}` : g.name).join(', ');
 }
-
-// ── Count line ───────────────────────────────────────────────────
 
 function formatCountLine(zones: Record<string, ReadableZone>, prefix: string): string {
   const deckCount = zones[`${prefix}_deck`]?.count ?? 0;
@@ -374,13 +433,7 @@ function formatStadium(zones: Record<string, ReadableZone>): string[] {
     if (zone.count === 0) continue;
 
     for (const card of zone.cards) {
-      lines.push(`${card.name}`);
-      const rules = card.rules as string[] | undefined;
-      if (rules) {
-        for (const rule of rules) {
-          lines.push(`  ${rule}`);
-        }
-      }
+      lines.push(card.name);
     }
   }
   return lines;
