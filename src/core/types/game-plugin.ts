@@ -1,9 +1,8 @@
 import type { Playmat } from './playmat';
 import type { GameState } from './game';
-import type { CardTemplate, PlayerIndex } from './card';
+import type { CardTemplate } from './card';
 import type { CounterDefinition } from './counter';
-import type { Tool } from './tool';
-import type { GameLoop } from '../game-loop';
+import type { RunnableTool, ToolContext } from '../ai-tools';
 
 /**
  * Interface for game plugins (Pokemon, Solitaire, etc.)
@@ -33,5 +32,5 @@ export interface GamePlugin<T extends CardTemplate = CardTemplate> {
   getCoinBack?(): string;
 
   /** Return Anthropic SDK-compatible tools for AI agents. */
-  listTools?(gameLoop: GameLoop<T>, playerIndex: PlayerIndex): Tool[];
+  listTools?(ctx: ToolContext): RunnableTool[];
 }

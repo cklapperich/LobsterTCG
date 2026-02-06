@@ -1,7 +1,7 @@
-import type { CardTemplate, PlayerIndex, Tool } from './types';
-import type { GameLoop } from './game-loop';
+import type { CardTemplate, PlayerIndex, Action } from './types';
+import type { GameState } from './types';
 import { resolveCardName } from './readable';
-import { makeZoneKey } from './engine';
+import { parseZoneKey } from './engine';
 import {
   draw,
   moveCard,
@@ -25,50 +25,88 @@ import {
 import type { Visibility } from './types';
 
 /**
- * Helper: submit an action to the game loop, process it, and return
- * the resulting readable state as a JSON string.
+ * Execution context provided to AI tools.
+ * The caller decides how actions are executed — Game.svelte provides
+ * a real-time context that operates on reactive state with delays.
  */
-function submitAndReturn<T extends CardTemplate>(
-  gameLoop: GameLoop<T>,
-  playerIndex: PlayerIndex,
-  action: Parameters<GameLoop<T>['submit']>[0],
-): string {
-  action.source = 'ai';
-  gameLoop.submit(action);
-  gameLoop.processAll();
-  return JSON.stringify(gameLoop.getReadableState(playerIndex));
+export interface ToolContext {
+  playerIndex: PlayerIndex;
+  /** Execute an action and return the resulting readable state as JSON. */
+  execute: (action: Action) => Promise<string>;
+  /** Get the current game state (for card name resolution, etc). */
+  getState: () => GameState<CardTemplate>;
+  /** Get the readable state JSON for this player. */
+  getReadableState: () => string;
+}
+
+/**
+ * A runnable tool compatible with the Anthropic SDK toolRunner.
+ * Mirrors BetaRunnableTool shape without importing the SDK.
+ */
+export interface RunnableTool {
+  type: 'custom';
+  name: string;
+  description: string;
+  input_schema: Record<string, unknown>;
+  run: (input: Record<string, any>) => Promise<string> | string;
+  parse: (content: unknown) => any;
+}
+
+/**
+ * Create a runnable tool from a schema definition.
+ * Equivalent to the SDK's betaTool() but avoids the deep import.
+ */
+function tool(options: {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown> & { type: 'object' };
+  run: (input: any) => Promise<string> | string;
+}): RunnableTool {
+  return {
+    type: 'custom',
+    name: options.name,
+    description: options.description,
+    input_schema: options.inputSchema,
+    run: options.run,
+    parse: (content: unknown) => content,
+  };
 }
 
 /**
  * Helper: resolve a card name to instanceId. If the input already looks
  * like an instanceId (starts with "card_"), return it directly.
  */
-function resolveCard<T extends CardTemplate>(
-  gameLoop: GameLoop<T>,
+function resolveCard(
+  state: GameState<CardTemplate>,
   cardName: string,
   zoneKey: string
 ): string {
   if (cardName.startsWith('card_')) return cardName;
-  return resolveCardName(gameLoop.getState(), cardName, zoneKey);
+  return resolveCardName(state, cardName, zoneKey);
+}
+
+/** Extract zone ID from a zone key. */
+function zoneId(zoneKey: string): string {
+  return parseZoneKey(zoneKey).zoneId;
 }
 
 /**
  * Create default tools for all built-in action types.
- * Each tool submits an action to the game loop and returns the resulting
- * readable game state as JSON.
+ * Each tool calls ctx.execute() which is provided by the caller.
+ *
+ * All zone parameters accept zone keys (e.g. "player1_hand") — the same
+ * format returned by readable state. Tools parse them internally to get
+ * zone IDs for action factories.
  *
  * Plugins can call this, filter out tools they don't want, and append
  * custom tools before returning from listTools().
  */
-export function createDefaultTools<T extends CardTemplate>(
-  gameLoop: GameLoop<T>,
-  playerIndex: PlayerIndex,
-): Tool[] {
-  const p = playerIndex;
+export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
+  const p = ctx.playerIndex;
 
   return [
     // ── Card Drawing ──────────────────────────────────────────────
-    {
+    tool({
       name: 'draw',
       description: 'Draw cards from the top of your deck into your hand.',
       inputSchema: {
@@ -79,37 +117,35 @@ export function createDefaultTools<T extends CardTemplate>(
         required: [],
       },
       async run(input) {
-        const count = (input.count as number) ?? 1;
-        return submitAndReturn(gameLoop, p, draw(p, count));
+        const count = input.count ?? 1;
+        return ctx.execute(draw(p, count));
       },
-    },
+    }),
 
     // ── Move Card ──────────────────────────────────────────────────
-    {
+    tool({
       name: 'move_card',
       description: 'Move a card from one zone to another.',
       inputSchema: {
         type: 'object' as const,
         properties: {
           cardName: { type: 'string', description: 'Name of the card to move' },
-          fromZone: { type: 'string', description: 'Zone ID the card is currently in' },
-          toZone: { type: 'string', description: 'Zone ID to move the card to' },
+          fromZone: { type: 'string', description: 'Zone key (e.g. "player1_hand")' },
+          toZone: { type: 'string', description: 'Zone key to move the card to (e.g. "player1_active")' },
           position: { type: 'number', description: 'Optional position in the target zone (0 = top)' },
         },
         required: ['cardName', 'fromZone', 'toZone'],
       },
       async run(input) {
-        const fromKey = makeZoneKey(p, input.fromZone as string);
-        const cardId = resolveCard(gameLoop, input.cardName as string, fromKey);
-        return submitAndReturn(
-          gameLoop, p,
-          moveCard(p, cardId, input.fromZone as string, input.toZone as string, input.position as number | undefined),
+        const cardId = resolveCard(ctx.getState(), input.cardName, input.fromZone);
+        return ctx.execute(
+          moveCard(p, cardId, zoneId(input.fromZone), zoneId(input.toZone), input.position),
         );
       },
-    },
+    }),
 
     // ── Move Card Stack ────────────────────────────────────────────
-    {
+    tool({
       name: 'move_card_stack',
       description: 'Move multiple cards from one zone to another as a group.',
       inputSchema: {
@@ -120,26 +156,24 @@ export function createDefaultTools<T extends CardTemplate>(
             items: { type: 'string' },
             description: 'Names of the cards to move',
           },
-          fromZone: { type: 'string', description: 'Zone ID the cards are currently in' },
-          toZone: { type: 'string', description: 'Zone ID to move the cards to' },
+          fromZone: { type: 'string', description: 'Zone key (e.g. "player1_hand")' },
+          toZone: { type: 'string', description: 'Zone key to move the cards to' },
           position: { type: 'number', description: 'Optional position in the target zone (0 = top)' },
         },
         required: ['cardNames', 'fromZone', 'toZone'],
       },
       async run(input) {
-        const fromKey = makeZoneKey(p, input.fromZone as string);
-        const cardIds = (input.cardNames as string[]).map(name =>
-          resolveCard(gameLoop, name, fromKey)
+        const cardIds = input.cardNames.map((name: string) =>
+          resolveCard(ctx.getState(), name, input.fromZone)
         );
-        return submitAndReturn(
-          gameLoop, p,
-          moveCardStack(p, cardIds, input.fromZone as string, input.toZone as string, input.position as number | undefined),
+        return ctx.execute(
+          moveCardStack(p, cardIds, zoneId(input.fromZone), zoneId(input.toZone), input.position),
         );
       },
-    },
+    }),
 
     // ── Place on Zone ──────────────────────────────────────────────
-    {
+    tool({
       name: 'place_on_zone',
       description: 'Place cards on the top or bottom of a zone.',
       inputSchema: {
@@ -150,190 +184,181 @@ export function createDefaultTools<T extends CardTemplate>(
             items: { type: 'string' },
             description: 'Names of the cards to place',
           },
-          zoneId: { type: 'string', description: 'Target zone ID' },
+          zone: { type: 'string', description: 'Target zone key (e.g. "player1_deck")' },
           position: { type: 'string', enum: ['top', 'bottom'], description: 'Place on top or bottom of the zone' },
         },
-        required: ['cardNames', 'zoneId', 'position'],
+        required: ['cardNames', 'zone', 'position'],
       },
       async run(input) {
-        // Cards could be in any zone, resolve from full state
-        const state = gameLoop.getState();
-        const cardIds = (input.cardNames as string[]).map(name => {
+        const state = ctx.getState();
+        const cardIds = input.cardNames.map((name: string) => {
           if (name.startsWith('card_')) return name;
-          for (const zoneKey of Object.keys(state.zones)) {
+          for (const zk of Object.keys(state.zones)) {
             try {
-              return resolveCardName(state, name, zoneKey);
+              return resolveCardName(state, name, zk);
             } catch { /* try next zone */ }
           }
           throw new Error(`Card "${name}" not found in any zone`);
         });
-        return submitAndReturn(
-          gameLoop, p,
-          placeOnZone(p, cardIds, input.zoneId as string, input.position as 'top' | 'bottom'),
+        return ctx.execute(
+          placeOnZone(p, cardIds, zoneId(input.zone), input.position),
         );
       },
-    },
+    }),
 
     // ── Shuffle ────────────────────────────────────────────────────
-    {
+    tool({
       name: 'shuffle',
       description: 'Shuffle a zone (typically your deck).',
       inputSchema: {
         type: 'object' as const,
         properties: {
-          zoneId: { type: 'string', description: 'Zone ID to shuffle (default "deck")' },
+          zone: { type: 'string', description: 'Zone key to shuffle (e.g. "player1_deck")' },
         },
-        required: [],
+        required: ['zone'],
       },
       async run(input) {
-        const zoneId = (input.zoneId as string) ?? 'deck';
-        return submitAndReturn(gameLoop, p, shuffle(p, zoneId));
+        return ctx.execute(shuffle(p, zoneId(input.zone)));
       },
-    },
+    }),
 
     // ── Search Zone ────────────────────────────────────────────────
-    {
+    tool({
       name: 'search_zone',
       description: 'Search a zone for cards, optionally filtering by name.',
       inputSchema: {
         type: 'object' as const,
         properties: {
-          zoneId: { type: 'string', description: 'Zone ID to search' },
+          zone: { type: 'string', description: 'Zone key to search (e.g. "player1_deck")' },
           filter: { type: 'string', description: 'Optional filter string to match card names' },
           count: { type: 'number', description: 'Max number of results' },
           fromPosition: { type: 'string', enum: ['top', 'bottom'], description: 'Search from top or bottom' },
         },
-        required: ['zoneId'],
+        required: ['zone'],
       },
       async run(input) {
-        return submitAndReturn(
-          gameLoop, p,
-          searchZone(p, input.zoneId as string, {
-            filter: input.filter as string | undefined,
-            count: input.count as number | undefined,
-            fromPosition: input.fromPosition as 'top' | 'bottom' | undefined,
+        return ctx.execute(
+          searchZone(p, zoneId(input.zone), {
+            filter: input.filter,
+            count: input.count,
+            fromPosition: input.fromPosition,
           }),
         );
       },
-    },
+    }),
 
     // ── Flip Card Visibility ───────────────────────────────────────
-    {
+    tool({
       name: 'flip_card',
       description: 'Change a card\'s visibility (face-up/face-down).',
       inputSchema: {
         type: 'object' as const,
         properties: {
           cardName: { type: 'string', description: 'Name of the card to flip' },
-          zoneId: { type: 'string', description: 'Zone the card is in' },
+          zone: { type: 'string', description: 'Zone key the card is in' },
           visibility: {
             type: 'string',
             enum: ['public', 'hidden', 'owner_only'],
             description: 'New visibility: "public" (both see), "hidden" (neither sees), "owner_only" (only you see)',
           },
         },
-        required: ['cardName', 'zoneId', 'visibility'],
+        required: ['cardName', 'zone', 'visibility'],
       },
       async run(input) {
-        const zoneKey = makeZoneKey(p, input.zoneId as string);
-        const cardId = resolveCard(gameLoop, input.cardName as string, zoneKey);
+        const cardId = resolveCard(ctx.getState(), input.cardName, input.zone);
         const visMap: Record<string, Visibility> = {
           public: [true, true],
           hidden: [false, false],
           owner_only: p === 0 ? [true, false] : [false, true],
         };
-        const vis = visMap[input.visibility as string] ?? [true, true];
-        return submitAndReturn(gameLoop, p, flipCard(p, cardId, vis));
+        const vis = visMap[input.visibility] ?? [true, true];
+        return ctx.execute(flipCard(p, cardId, vis));
       },
-    },
+    }),
 
     // ── Set Orientation ────────────────────────────────────────────
-    {
+    tool({
       name: 'set_orientation',
       description: 'Set a card\'s orientation (e.g. tap/untap).',
       inputSchema: {
         type: 'object' as const,
         properties: {
           cardName: { type: 'string', description: 'Name of the card' },
-          zoneId: { type: 'string', description: 'Zone the card is in' },
+          zone: { type: 'string', description: 'Zone key the card is in' },
           orientation: { type: 'string', description: 'New orientation (e.g. "normal", "tapped")' },
         },
-        required: ['cardName', 'zoneId', 'orientation'],
+        required: ['cardName', 'zone', 'orientation'],
       },
       async run(input) {
-        const zoneKey = makeZoneKey(p, input.zoneId as string);
-        const cardId = resolveCard(gameLoop, input.cardName as string, zoneKey);
-        return submitAndReturn(gameLoop, p, setOrientation(p, cardId, input.orientation as string));
+        const cardId = resolveCard(ctx.getState(), input.cardName, input.zone);
+        return ctx.execute(setOrientation(p, cardId, input.orientation));
       },
-    },
+    }),
 
     // ── Add Counter ────────────────────────────────────────────────
-    {
+    tool({
       name: 'add_counter',
       description: 'Add counters to a card (e.g. damage counters).',
       inputSchema: {
         type: 'object' as const,
         properties: {
           cardName: { type: 'string', description: 'Name of the card' },
-          zoneId: { type: 'string', description: 'Zone the card is in' },
+          zone: { type: 'string', description: 'Zone key the card is in (e.g. "player0_active")' },
           counterType: { type: 'string', description: 'Counter type (e.g. "10" for 10-damage counter, "poison")' },
           amount: { type: 'number', description: 'Number of counters to add (default 1)' },
         },
-        required: ['cardName', 'zoneId', 'counterType'],
+        required: ['cardName', 'zone', 'counterType'],
       },
       async run(input) {
-        const zoneKey = makeZoneKey(p, input.zoneId as string);
-        const cardId = resolveCard(gameLoop, input.cardName as string, zoneKey);
-        const amount = (input.amount as number) ?? 1;
-        return submitAndReturn(gameLoop, p, addCounter(p, cardId, input.counterType as string, amount));
+        const cardId = resolveCard(ctx.getState(), input.cardName, input.zone);
+        const amount = input.amount ?? 1;
+        return ctx.execute(addCounter(p, cardId, input.counterType, amount));
       },
-    },
+    }),
 
     // ── Remove Counter ─────────────────────────────────────────────
-    {
+    tool({
       name: 'remove_counter',
       description: 'Remove counters from a card.',
       inputSchema: {
         type: 'object' as const,
         properties: {
           cardName: { type: 'string', description: 'Name of the card' },
-          zoneId: { type: 'string', description: 'Zone the card is in' },
+          zone: { type: 'string', description: 'Zone key the card is in' },
           counterType: { type: 'string', description: 'Counter type to remove' },
           amount: { type: 'number', description: 'Number of counters to remove (default 1)' },
         },
-        required: ['cardName', 'zoneId', 'counterType'],
+        required: ['cardName', 'zone', 'counterType'],
       },
       async run(input) {
-        const zoneKey = makeZoneKey(p, input.zoneId as string);
-        const cardId = resolveCard(gameLoop, input.cardName as string, zoneKey);
-        const amount = (input.amount as number) ?? 1;
-        return submitAndReturn(gameLoop, p, removeCounter(p, cardId, input.counterType as string, amount));
+        const cardId = resolveCard(ctx.getState(), input.cardName, input.zone);
+        const amount = input.amount ?? 1;
+        return ctx.execute(removeCounter(p, cardId, input.counterType, amount));
       },
-    },
+    }),
 
     // ── Set Counter ────────────────────────────────────────────────
-    {
+    tool({
       name: 'set_counter',
       description: 'Set a counter on a card to a specific value.',
       inputSchema: {
         type: 'object' as const,
         properties: {
           cardName: { type: 'string', description: 'Name of the card' },
-          zoneId: { type: 'string', description: 'Zone the card is in' },
+          zone: { type: 'string', description: 'Zone key the card is in' },
           counterType: { type: 'string', description: 'Counter type to set' },
           value: { type: 'number', description: 'New counter value (0 removes the counter)' },
         },
-        required: ['cardName', 'zoneId', 'counterType', 'value'],
+        required: ['cardName', 'zone', 'counterType', 'value'],
       },
       async run(input) {
-        const zoneKey = makeZoneKey(p, input.zoneId as string);
-        const cardId = resolveCard(gameLoop, input.cardName as string, zoneKey);
-        return submitAndReturn(gameLoop, p, setCounter(p, cardId, input.counterType as string, input.value as number));
+        const cardId = resolveCard(ctx.getState(), input.cardName, input.zone);
+        return ctx.execute(setCounter(p, cardId, input.counterType, input.value));
       },
-    },
+    }),
 
     // ── Coin Flip ──────────────────────────────────────────────────
-    {
+    tool({
       name: 'coin_flip',
       description: 'Flip one or more coins. Returns heads (true) or tails (false) for each.',
       inputSchema: {
@@ -344,13 +369,13 @@ export function createDefaultTools<T extends CardTemplate>(
         required: [],
       },
       async run(input) {
-        const count = (input.num_coins as number) ?? 1;
-        return submitAndReturn(gameLoop, p, coinFlip(p, count));
+        const count = input.num_coins ?? 1;
+        return ctx.execute(coinFlip(p, count));
       },
-    },
+    }),
 
     // ── Dice Roll ──────────────────────────────────────────────────
-    {
+    tool({
       name: 'dice_roll',
       description: 'Roll one or more dice.',
       inputSchema: {
@@ -362,35 +387,34 @@ export function createDefaultTools<T extends CardTemplate>(
         required: [],
       },
       async run(input) {
-        const sides = (input.sides as number) ?? 6;
-        const count = (input.count as number) ?? 1;
-        return submitAndReturn(gameLoop, p, diceRoll(p, sides, count));
+        const sides = input.sides ?? 6;
+        const count = input.count ?? 1;
+        return ctx.execute(diceRoll(p, sides, count));
       },
-    },
+    }),
 
     // ── Peek ───────────────────────────────────────────────────────
-    {
+    tool({
       name: 'peek',
       description: 'Look at the top or bottom cards of a zone without changing visibility.',
       inputSchema: {
         type: 'object' as const,
         properties: {
-          zoneId: { type: 'string', description: 'Zone ID to peek at (default "deck")' },
+          zone: { type: 'string', description: 'Zone key to peek at (e.g. "player1_deck")' },
           count: { type: 'number', description: 'Number of cards to peek at (default 1)' },
           fromPosition: { type: 'string', enum: ['top', 'bottom'], description: 'Peek from top or bottom (default "top")' },
         },
-        required: [],
+        required: ['zone'],
       },
       async run(input) {
-        const zoneId = (input.zoneId as string) ?? 'deck';
-        const count = (input.count as number) ?? 1;
-        const from = (input.fromPosition as 'top' | 'bottom') ?? 'top';
-        return submitAndReturn(gameLoop, p, peek(p, zoneId, count, from));
+        const count = input.count ?? 1;
+        const from = input.fromPosition ?? 'top';
+        return ctx.execute(peek(p, zoneId(input.zone), count, from));
       },
-    },
+    }),
 
     // ── Reveal ─────────────────────────────────────────────────────
-    {
+    tool({
       name: 'reveal',
       description: 'Reveal cards to your opponent or both players.',
       inputSchema: {
@@ -401,23 +425,22 @@ export function createDefaultTools<T extends CardTemplate>(
             items: { type: 'string' },
             description: 'Names of cards to reveal',
           },
-          zoneId: { type: 'string', description: 'Zone the cards are in' },
+          zone: { type: 'string', description: 'Zone key the cards are in' },
           to: { type: 'string', enum: ['opponent', 'both'], description: 'Who to reveal to (default "both")' },
         },
-        required: ['cardNames', 'zoneId'],
+        required: ['cardNames', 'zone'],
       },
       async run(input) {
-        const zoneKey = makeZoneKey(p, input.zoneId as string);
-        const cardIds = (input.cardNames as string[]).map(name =>
-          resolveCard(gameLoop, name, zoneKey)
+        const cardIds = input.cardNames.map((name: string) =>
+          resolveCard(ctx.getState(), name, input.zone)
         );
-        const to = (input.to as 'opponent' | 'both') ?? 'both';
-        return submitAndReturn(gameLoop, p, reveal(p, cardIds, to));
+        const to = input.to ?? 'both';
+        return ctx.execute(reveal(p, cardIds, to));
       },
-    },
+    }),
 
     // ── End Turn ───────────────────────────────────────────────────
-    {
+    tool({
       name: 'end_turn',
       description: 'End your turn and pass to the opponent.',
       inputSchema: {
@@ -426,12 +449,12 @@ export function createDefaultTools<T extends CardTemplate>(
         required: [],
       },
       async run() {
-        return submitAndReturn(gameLoop, p, endTurn(p));
+        return ctx.execute(endTurn(p));
       },
-    },
+    }),
 
     // ── Concede ────────────────────────────────────────────────────
-    {
+    tool({
       name: 'concede',
       description: 'Concede the game. Your opponent wins.',
       inputSchema: {
@@ -440,12 +463,12 @@ export function createDefaultTools<T extends CardTemplate>(
         required: [],
       },
       async run() {
-        return submitAndReturn(gameLoop, p, concede(p));
+        return ctx.execute(concede(p));
       },
-    },
+    }),
 
     // ── Declare Victory ────────────────────────────────────────────
-    {
+    tool({
       name: 'declare_victory',
       description: 'Declare victory with a reason (e.g. when win conditions are met).',
       inputSchema: {
@@ -456,8 +479,8 @@ export function createDefaultTools<T extends CardTemplate>(
         required: [],
       },
       async run(input) {
-        return submitAndReturn(gameLoop, p, declareVictory(p, input.reason as string | undefined));
+        return ctx.execute(declareVictory(p, input.reason));
       },
-    },
+    }),
   ];
 }

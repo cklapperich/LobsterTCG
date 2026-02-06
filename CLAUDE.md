@@ -27,7 +27,7 @@ Pre-hooks can block, warn, or replace actions. Post-hooks emit follow-up actions
 Actions carry an optional `source?: 'ui' | 'ai'` field. `PreHookResult` supports `warn` in addition to `block`/`replace`/`continue`. Warnings log to `state.log` but never prevent the action. The `blockOrWarn()` helper in `warnings.ts` returns `block` for AI actions and `warn` for UI actions — human players are never blocked by warnings. AI tools in `ai-tools.ts` automatically tag actions with `source: 'ai'`.
 
 ### Zone Keys
-Format: `player{0|1}_{zoneId}` (e.g., "player0_hand"). Parsed/created via `makeZoneKey()` and `parseZoneKey()`.
+Format: `player{0|1}_{zoneId}` (e.g., "player0_hand"). Parsed/created via `makeZoneKey()` and `parseZoneKey()`. Zone keys are the canonical identifier visible to AI agents — readable state exposes zone keys as object keys, never zone IDs or zone names. AI tools accept zone keys directly.
 
 ### Card Array Order
 `zone.cards` array: **index 0 = visual bottom, end of array = visual top.** The last element is the card rendered on top with the highest z-index. `position: 0` inserts underneath all existing cards. `push()` / no position appends to the visual top. This convention is consistent across Zone.svelte drops, CardStack rendering, and warning hooks.
@@ -41,8 +41,10 @@ Playmats define visual grid layout separately from game logic. Zones are decoupl
 ### Readable State
 `toReadableState()` converts internal state (instanceIds, visibility tuples) into human-readable format with card names, suitable for AI agents or logging. Only shows cards visible to the specified player.
 
-### AI Tools (`listTools`)
-`GamePlugin.listTools(gameLoop, playerIndex)` returns Anthropic SDK-compatible `Tool[]` for AI agents. `createDefaultTools()` in `ai-tools.ts` generates one tool per built-in action type. Plugins call it, filter irrelevant tools, and append game-specific tools. Each tool's `run()` submits to the game loop and returns readable state as JSON. Uses `resolveCardName()` so AI works with card names, not instance IDs.
+### ToolContext & AI Tools
+`ToolContext` is the interface between AI tools and the game. It provides `execute(action)`, `getState()`, and `getReadableState()`. The caller (Game.svelte) builds the context — its `execute` callback runs actions on the real reactive state with SFX and 500ms delays for visual feedback. Tools are serialized via a promise queue so parallel SDK `Promise.all` calls execute one at a time.
+
+`GamePlugin.listTools(ctx: ToolContext)` returns Anthropic SDK-compatible `RunnableTool[]`. `createDefaultTools(ctx)` in `ai-tools.ts` generates one tool per built-in action type. All zone parameters accept zone keys (e.g. `"player1_hand"`) — the same format returned by readable state. Tools parse zone keys internally via `parseZoneKey()` to extract zone IDs for action factories. Uses `resolveCardName()` so AI works with card names, not instance IDs.
 
 ### SFX Extraction
 Tools extract SFX from Pokemon TCG GB ROM using PyBoy emulator. Memory addresses from poketcg disassembly. See `tools/extract_sfx.py`.
@@ -74,7 +76,7 @@ Tools extract SFX from Pokemon TCG GB ROM using PyBoy emulator. Memory addresses
 | `game-loop.ts` | Turn sequencing with plugin integration. Manages action queues, validation, pre/post hooks, event emission, history tracking. |
 | `action.ts` | Factory functions for all action types: `draw()`, `moveCard()`, `playCard()`, `shuffle()`, `addCounter()`, `coinFlip()`, `endTurn()`, `peek()`, `reveal()`, etc. |
 | `readable.ts` | Converts internal state to human-readable format. `toReadableState()`, `resolveCardName()`. Types: `ReadableCard`, `ReadableZone`, `ReadableGameState`, `ReadableAction`, `ReadableTurn`. |
-| `ai-tools.ts` | AI agent tool factory. `createDefaultTools(gameLoop, playerIndex)` returns Anthropic SDK-compatible tools for all built-in action types. Tags all actions with `source: 'ai'`. |
+| `ai-tools.ts` | `ToolContext` interface and AI tool factory. `createDefaultTools(ctx)` returns Anthropic SDK-compatible tools. Tools accept zone keys, parse internally. Actions tagged with `source: 'ai'` by the context's execute callback. |
 | `playmat-loader.ts` | Fetches and parses playmat JSON files. `loadPlaymat()`, `parsePlaymat()`. |
 | `index.ts` | Barrel re-export of all core modules. |
 
@@ -88,8 +90,7 @@ Tools extract SFX from Pokemon TCG GB ROM using PyBoy emulator. Memory addresses
 | `game.ts` | `GameState`, `GameConfig`, `PlayerInfo`, `Turn`, `GameResult`. |
 | `playmat.ts` | `Playmat`, `PlaymatSlot`, `PlaymatZoneGroup`, `PlaymatLayout`, `PlaymatPosition`. |
 | `counter.ts` | `CounterDefinition` for counter metadata. |
-| `game-plugin.ts` | `GamePlugin` interface with optional `listTools()` for AI agent integration. |
-| `tool.ts` | `Tool` interface matching Anthropic SDK `betaTool` shape (`name`, `description`, `inputSchema`, `run`). |
+| `game-plugin.ts` | `GamePlugin` interface with optional `listTools(ctx: ToolContext)` for AI agent integration. |
 | `deck.ts` | `DeckEntry`, `DeckList` types. |
 | `index.ts` | Barrel re-export of all types. |
 
@@ -124,11 +125,20 @@ Tools extract SFX from Pokemon TCG GB ROM using PyBoy emulator. Memory addresses
 | `cardModal.svelte.ts` | Svelte 5 rune store for peek/arrange modal state. `openCardModal()`, `closeCardModal()`. |
 | `contextMenu.svelte.ts` | Svelte 5 rune store for zone context menu state. `openContextMenu()`, `closeContextMenu()`. |
 
+### /src/ai/ - AI Agent
+
+| File | Purpose |
+|------|---------|
+| `run-turn.ts` | `runAITurn(config)` — runs one AI turn via Anthropic SDK `toolRunner`. Accepts `ToolContext` (no GameLoop cloning). Returns `void` — state mutated in real-time via context. Logs system prompt, iterates messages for structured logging. |
+| `logging.ts` | `logMessage()` — color-coded console output for AI messages. `[thinking]` gray, `[AI]` green, `[tool]` orange (name + input only, no full state). |
+| `tools/spawn-subagent.ts` | `createSpawnSubagentTool()` — tool that spawns a sub-agent (haiku or sonnet) sharing the same game tools and system prompt. |
+| `index.ts` | Barrel re-export of `runAITurn` and `AITurnConfig`. |
+
 ### /src/plugins/pokemon/ - Pokemon TCG Plugin
 
 | File | Purpose |
 |------|---------|
-| `index.ts` | Main plugin: `startPokemonGame()`, `startPokemonGameWithPlaymat()`, `executeSetup()`, `initializeGame()`, `loadPlayerDeck()`, `getCounterDefinitions()`, `getCoinFront()`, `getCoinBack()`, `getCardInfo()`. Exports `plugin` object implementing `GamePlugin`. `listTools()` filters defaults and adds Pokemon-specific tools: `attack`, `retreat`, `attach_energy`, `use_ability`. |
+| `index.ts` | Main plugin: `startPokemonGame()`, `executeSetup()`, `initializeGame()`, `loadPlayerDeck()`, `getCounterDefinitions()`, `getCoinFront()`, `getCoinBack()`, `getCardInfo()`. Exports `plugin` object implementing `GamePlugin`. `listTools(ctx)` filters defaults and adds Pokemon-specific tools: `declare_attack`, `declare_retreat`, `declare_ability`. |
 | `helpers.ts` | Pokemon card type helpers: `isBasicPokemon()`, `isEvolution()`, `isSupporter()`, `isStadium()`, `isEnergy()`, `isFieldZone()`. |
 | `cards.ts` | Card database backed by `cards-western.json`. `PokemonCardTemplate`, `PokemonAttack`, `PokemonAbility`, `POKEMON_TEMPLATE_MAP`, `getTemplate()`, `getCardBack()`, `parsePTCGODeck()`. |
 | `cards-western.json` | Western card database (all sets). Card data including names, images, attacks, abilities, HP, types. |
@@ -140,6 +150,7 @@ Tools extract SFX from Pokemon TCG GB ROM using PyBoy emulator. Memory addresses
 | `counters/*.png` | Counter images: burn, poison, damage-10/50/100. |
 | `cardback.png` | Pokemon card back image. |
 | `coinfront.png`, `coinback.png` | Coin flip images. |
+| `agents.md` | System prompt for AI agent (Pokemon TCG heuristics, turn structure, rules). Loaded as raw text via Vite `?raw` import. |
 
 ### /src/lib/
 
@@ -172,3 +183,4 @@ Tools extract SFX from Pokemon TCG GB ROM using PyBoy emulator. Memory addresses
 | `AI_AGENT_PLAN.md` | AI agent integration planning. |
 | `plugin_todolist.md` | Plugin system TODO/planning notes. |
 | `sharpen.md` | Project sharpening/improvement notes. |
+| `ZONE_KEY_REFACTOR.md` | Plan for eliminating zone ID / zone key split — making zone keys the single identifier everywhere. |
