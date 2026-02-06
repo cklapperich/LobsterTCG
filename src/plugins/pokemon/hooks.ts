@@ -13,6 +13,8 @@ import {
   isFieldZone,
   isStadiumZone,
 } from './helpers';
+import { getTemplate as getCardTemplate } from './cards';
+import { ZONE_IDS } from './zones';
 import type { ReadableGameState } from '../../core/readable';
 import { formatNarrativeState } from './narrative';
 import {
@@ -22,6 +24,7 @@ import {
   TRAINER_BLOCKED_COUNTERS,
   FIRST_EVOLUTION_TURN,
   FIRST_SUPPORTER_TURN,
+  POKEMON_ACTION_TYPES,
 } from './constants';
 
 type PokemonState = Readonly<GameState<PokemonCardTemplate>>;
@@ -447,6 +450,75 @@ function warnStadiumOnly(state: PokemonState, action: Action): PreHookResult {
   return blockOrWarn(action, `Cannot place ${template.name} (${template.supertype}) in stadium zone. Only Stadium cards can be placed there. Set allowed_by_effect if a card effect permits this.`);
 }
 
+// ── Declare Attack: Custom Action ────────────────────────────────
+
+/** Action shape for declare_attack (Pokemon plugin custom action, not in core Action union). */
+export interface DeclareAttackAction {
+  type: typeof POKEMON_ACTION_TYPES.DECLARE_ATTACK;
+  player: 0 | 1;
+  attackName: string;
+  targetCardName?: string;
+  source?: 'ui' | 'ai';
+  allowed_by_effect?: boolean;
+}
+
+/** Custom executor: logs attack declaration to state.log and records in currentTurn.actions. */
+function executeDeclareAttack(state: GameState<PokemonCardTemplate>, action: DeclareAttackAction): void {
+  state.currentTurn.actions.push(action as unknown as Action);
+  const activeKey = `player${action.player + 1}_${ZONE_IDS.ACTIVE}`;
+  const activeName = state.zones[activeKey]?.cards.at(-1)?.template?.name ?? 'Active Pokemon';
+  const target = action.targetCardName ? ` targeting ${action.targetCardName}` : '';
+  state.log.push(`${activeName} used ${action.attackName}!${target}`);
+}
+
+/** Pre-hook: the player who goes first (turnNumber <= 1) cannot attack. */
+function warnAttackFirstTurn(state: PokemonState, action: Action): PreHookResult {
+  // Custom action type — cast to string for comparison since it's not in the core Action union
+  if ((action.type as string) !== POKEMON_ACTION_TYPES.DECLARE_ATTACK) return { outcome: 'continue' };
+  if (action.allowed_by_effect) return { outcome: 'continue' };
+  if (state.turnNumber <= 1) {
+    return blockOrWarn(action, 'Cannot attack on the first turn of the game.');
+  }
+  return { outcome: 'continue' };
+}
+
+/** Pre-hook: validate energy cost — count attached energy vs attack cost. */
+function warnAttackEnergyCost(state: PokemonState, action: Action): PreHookResult {
+  if ((action.type as string) !== POKEMON_ACTION_TYPES.DECLARE_ATTACK) return { outcome: 'continue' };
+  if (action.allowed_by_effect) return { outcome: 'continue' };
+
+  const atkAction = action as unknown as DeclareAttackAction;
+  const activeKey = `player${atkAction.player + 1}_${ZONE_IDS.ACTIVE}`;
+  const activeZone = state.zones[activeKey];
+  const topCard = activeZone?.cards.at(-1);
+  if (!topCard || !activeZone) return { outcome: 'continue' };
+
+  const template = getCardTemplate((topCard.template as PokemonCardTemplate).id);
+  if (!template?.attacks) return { outcome: 'continue' };
+
+  const attack = template.attacks.find(
+    a => a.name.toLowerCase() === atkAction.attackName.toLowerCase(),
+  );
+  if (!attack || attack.cost.length === 0) return { outcome: 'continue' };
+
+  let totalAttached = 0;
+  for (const card of activeZone.cards) {
+    const t = card.template as PokemonCardTemplate;
+    if (isEnergy(t)) totalAttached++;
+  }
+
+  if (totalAttached < attack.cost.length) {
+    const costStr = attack.cost.join('/');
+    const activeName = topCard.template.name ?? 'Active Pokemon';
+    return blockOrWarn(
+      action,
+      `${activeName} needs ${attack.cost.length} energy for ${attack.name} (cost: ${costStr}, attached: ${totalAttached}). Check for card effects that provide extra energy.`,
+    );
+  }
+
+  return { outcome: 'continue' };
+}
+
 // ── Readable State Modifier ──────────────────────────────────────
 
 /**
@@ -492,6 +564,9 @@ export const pokemonHooksPlugin: Plugin<PokemonCardTemplate> = {
   version: '1.0.0',
   readableStateModifier: modifyReadableState,
   readableStateFormatter: formatNarrativeState,
+  customActions: [
+    { type: POKEMON_ACTION_TYPES.DECLARE_ATTACK, executor: executeDeclareAttack as any },
+  ],
   postHooks: {
     [ACTION_TYPES.MOVE_CARD]: [
       { hook: setupFaceDown, priority: 50 },
@@ -525,6 +600,10 @@ export const pokemonHooksPlugin: Plugin<PokemonCardTemplate> = {
     ],
     [ACTION_TYPES.ADD_COUNTER]: [
       { hook: warnCountersOnTrainers, priority: 100 },
+    ],
+    [POKEMON_ACTION_TYPES.DECLARE_ATTACK]: [
+      { hook: warnAttackFirstTurn, priority: 90 },
+      { hook: warnAttackEnergyCost, priority: 100 },
     ],
   },
 };

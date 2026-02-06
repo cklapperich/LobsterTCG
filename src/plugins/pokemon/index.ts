@@ -21,7 +21,7 @@ import {
   getCardBack,
   getTemplate as getCardTemplate,
 } from './cards';
-import { isBasicPokemon, isEnergy, isFieldZone } from './helpers';
+import { isBasicPokemon, isFieldZone } from './helpers';
 import {
   SUPERTYPES,
   STATUS_TO_DEGREES,
@@ -29,6 +29,7 @@ import {
   COUNTER_IDS,
   COUNTER_CATEGORIES,
   SETUP,
+  POKEMON_ACTION_TYPES,
 } from './constants';
 
 // Import counter images
@@ -388,7 +389,7 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
 
   tools.push(tool({
     name: 'declare_attack',
-    description: 'Declare that your active Pokemon is using an attack. Logs the declaration to the game log.',
+    description: 'Declare that your active Pokemon is using an attack. Validates energy cost and first-turn restrictions.',
     inputSchema: {
       type: 'object' as const,
       properties: {
@@ -398,37 +399,12 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
       required: ['attackName'],
     },
     async run(input) {
-      const state = ctx.getState();
-      const activeKey = `player${p + 1}_${ZONE_IDS.ACTIVE}`;
-      const activeZone = state.zones[activeKey];
-      const topCard = activeZone?.cards.at(-1);
-      const activeName = topCard?.template?.name ?? 'Active Pokemon';
-      const target = input.targetCardName ? ` targeting ${input.targetCardName}` : '';
-
-      // Basic energy cost validation (count only — type matching unreliable in card DB)
-      if (topCard && activeZone) {
-        const template = getCardTemplate((topCard.template as PokemonCardTemplate).id);
-        const attack = template?.attacks?.find(
-          a => a.name.toLowerCase() === input.attackName.toLowerCase(),
-        );
-        if (attack && attack.cost.length > 0) {
-          let totalAttached = 0;
-          for (const card of activeZone.cards) {
-            const t = card.template as PokemonCardTemplate;
-            if (isEnergy(t)) totalAttached++;
-          }
-          if (totalAttached < attack.cost.length) {
-            const costStr = attack.cost.join('/');
-            const reason = `${activeName} may not have enough energy for ${attack.name} (cost: ${costStr}, attached: ${totalAttached} energy). Double check there are card effects that give you enough extra energy.`;
-            state.log.push(`⚠ ${reason}`);
-            ctx.batchAbortReason = reason;
-            return `⚠ WARNING — attack aborted: ${reason}`;
-          }
-        }
-      }
-
-      state.log.push(`${activeName} used ${input.attackName}!${target}`);
-      return ctx.getReadableState();
+      return ctx.execute({
+        type: POKEMON_ACTION_TYPES.DECLARE_ATTACK,
+        player: p,
+        attackName: input.attackName,
+        targetCardName: input.targetCardName,
+      } as any);
     },
   }));
 
@@ -533,12 +509,13 @@ function getActionPanels(state: GameState<PokemonCardTemplate>, player: PlayerIn
   return panels;
 }
 
-function onActionPanelClick(state: GameState<PokemonCardTemplate>, player: PlayerIndex, panelId: string, buttonId: string): void {
+function onActionPanelClick(state: GameState<PokemonCardTemplate>, player: PlayerIndex, panelId: string, buttonId: string): any {
   if (panelId === 'attacks') {
-    const activeKey = `player${player + 1}_${ZONE_IDS.ACTIVE}`;
-    const activeZone = state.zones[activeKey];
-    const activeName = activeZone?.cards.at(-1)?.template?.name ?? 'Active Pokemon';
-    state.log.push(`${activeName} used ${buttonId}!`);
+    return {
+      type: POKEMON_ACTION_TYPES.DECLARE_ATTACK,
+      player,
+      attackName: buttonId,
+    };
   } else if (panelId === 'mulligan') {
     const handKey = `player${player + 1}_${ZONE_IDS.HAND}`;
     const deckKey = `player${player + 1}_${ZONE_IDS.DECK}`;

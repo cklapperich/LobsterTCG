@@ -37,6 +37,7 @@ Each turn follows this order:
 - Evolution cannot happen on the first turn of the game or the turn a Pokemon was played
 - When your Active Pokemon is knocked out, promote a Benched Pokemon to Active
 - Retreat costs energy: discard the required number of attached Energy cards
+- **Weakness & Resistance**: Check the card's weakness/resistance in the CARD REFERENCE section. Use ×2 for weakness (double the damage) and -20 or -30 for resistance. Apply weakness/resistance AFTER calculating base damage. Effects, abilities, or trainer cards may nullify weakness/resistance — always check the board state. The COMBAT NOTES section highlights active matchups each turn.
 
 ## Status Conditions
 
