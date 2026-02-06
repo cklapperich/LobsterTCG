@@ -13,6 +13,7 @@ interface ZoneConfigJson {
   ownerCanSeeContents: boolean;
   opponentCanSeeCount: boolean;
   shared?: boolean;
+  canHaveCounters?: boolean;
 }
 
 interface PlaymatJson extends Omit<Playmat, 'zones'> {

@@ -14,6 +14,7 @@ import {
   isStadiumZone,
 } from './helpers';
 import type { ReadableGameState } from '../../core/readable';
+import { formatNarrativeState } from './narrative';
 
 type PokemonState = Readonly<GameState<PokemonCardTemplate>>;
 
@@ -475,6 +476,7 @@ export const pokemonHooksPlugin: Plugin<PokemonCardTemplate> = {
   name: 'Pokemon TCG Hooks',
   version: '1.0.0',
   readableStateModifier: modifyReadableState,
+  readableStateFormatter: formatNarrativeState,
   postHooks: {
     'move_card': [
       { hook: setupFaceDown, priority: 50 },

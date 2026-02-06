@@ -1,13 +1,16 @@
 <script lang="ts">
-  import type { Playmat, CardInstance, GameState, CardTemplate, CounterDefinition, ZoneConfig } from '../../core';
+  import type { Playmat, CardInstance, GameState, CardTemplate, CounterDefinition, ZoneConfig, ActionPanel } from '../../core';
   import { VISIBILITY } from '../../core';
   import Zone from './Zone.svelte';
+  import ActionPanelView from './ActionPanelView.svelte';
 
   interface Props {
     playmat: Playmat;
     gameState: GameState<CardTemplate>;
     cardBack?: string;
     counterDefinitions?: CounterDefinition[];
+    attacksPanel?: ActionPanel;
+    onAttackClick?: (panelId: string, buttonId: string) => void;
     renderFace?: (template: CardTemplate) => { rank?: string; suit?: string; color?: string };
     onDrop?: (cardInstanceId: string, toZoneKey: string, position?: number) => void;
     onPreview?: (card: CardInstance<CardTemplate>) => void;
@@ -22,6 +25,8 @@
     gameState,
     cardBack,
     counterDefinitions = [],
+    attacksPanel,
+    onAttackClick,
     renderFace,
     onDrop,
     onPreview,
@@ -106,6 +111,19 @@
     {/if}
   {/each}
 
+  <!-- Attacks panel - left of p1_active (row 1, col 2) -->
+  {#if attacksPanel && onAttackClick}
+    <div
+      class="grid-slot attacks-slot"
+      style="grid-column: 3; grid-row: 2;"
+    >
+      <ActionPanelView
+        panels={[attacksPanel]}
+        onButtonClick={onAttackClick}
+      />
+    </div>
+  {/if}
+
   <!-- Staging zone - always present, in extra row below playmat (columns 7-9) -->
   {#if stagingZone}
     <div
@@ -164,6 +182,15 @@
 
   .grid-slot.hand-zone :global(.empty-zone) {
     @apply border-0;
+  }
+
+  .attacks-slot {
+    @apply self-center;
+    overflow: hidden;
+  }
+
+  .attacks-slot :global(.action-panel) {
+    @apply w-full;
   }
 
   .staging-slot.has-cards :global(.zone) {

@@ -8,6 +8,7 @@ export interface ZoneConfig {
   ownerCanSeeContents: boolean;
   opponentCanSeeCount: boolean;
   shared?: boolean; // Both players can interact (e.g., stadium)
+  canHaveCounters?: boolean; // Whether cards in this zone can hold counters (default: true)
 }
 
 export interface Zone<T extends CardTemplate = CardTemplate> {

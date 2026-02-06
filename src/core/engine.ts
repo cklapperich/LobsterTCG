@@ -279,6 +279,14 @@ function transferCountersOnRemoval<T extends CardTemplate>(
 }
 
 /**
+ * Clear all counters from a card. Called when a card enters a zone
+ * where canHaveCounters is false.
+ */
+function clearCounters<T extends CardTemplate>(card: CardInstance<T>): void {
+  card.counters = {};
+}
+
+/**
  * Ensure all counters in a zone are on the top card.
  * Called after adding a card or reordering to keep counters locked on top.
  */
@@ -340,6 +348,7 @@ function executeDraw<T extends CardTemplate>(
     if (card) {
       card.visibility = zoneVisibility(handKey, hand.config);
       card.orientation = undefined;
+      if (hand.config.canHaveCounters === false) clearCounters(card);
       hand.cards.push(card);
     }
   }
@@ -361,6 +370,7 @@ function executeMoveCard<T extends CardTemplate>(
 
   card.visibility = zoneVisibility(action.toZone, toZone.config);
   card.orientation = undefined;
+  if (toZone.config.canHaveCounters === false) clearCounters(card);
 
   if (action.position !== undefined && action.position >= 0) {
     toZone.cards.splice(action.position, 0, card);
@@ -387,6 +397,7 @@ function executeMoveCardStack<T extends CardTemplate>(
       transferCountersOnRemoval(fromZone, card);
       card.visibility = zoneVisibility(action.toZone, toZone.config);
       card.orientation = undefined;
+      if (toZone.config.canHaveCounters === false) clearCounters(card);
       cards.push(card);
     }
   }
@@ -417,6 +428,7 @@ function executePlaceOnZone<T extends CardTemplate>(
         transferCountersOnRemoval(result.zone, removed);
         removed.visibility = zoneVisibility(action.zoneId, zone.config);
         removed.orientation = undefined;
+        if (zone.config.canHaveCounters === false) clearCounters(removed);
         cardsToPlace.push(removed);
       }
     }
@@ -468,6 +480,7 @@ function executeAddCounter<T extends CardTemplate>(
 ): void {
   const result = findCardInZones(state, action.cardInstanceId);
   if (!result) return;
+  if (result.zone.config.canHaveCounters === false) return;
 
   const current = result.card.counters[action.counterType] ?? 0;
   result.card.counters[action.counterType] = current + action.amount;
@@ -496,6 +509,7 @@ function executeSetCounter<T extends CardTemplate>(
 ): void {
   const result = findCardInZones(state, action.cardInstanceId);
   if (!result) return;
+  if (result.zone.config.canHaveCounters === false) return;
 
   if (action.value <= 0) {
     delete result.card.counters[action.counterType];

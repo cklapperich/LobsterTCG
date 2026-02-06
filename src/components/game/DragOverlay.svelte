@@ -6,9 +6,10 @@
     x: number;
     y: number;
     cardBack?: string;
+    pileCount?: number;
   }
 
-  let { card, x, y, cardBack }: Props = $props();
+  let { card, x, y, cardBack, pileCount }: Props = $props();
 
   const isFaceUp = $derived(card.visibility[0]);
   const template = $derived(card.template);
@@ -39,6 +40,9 @@
       </div>
     {/if}
   </div>
+  {#if pileCount && pileCount > 1}
+    <div class="pile-badge">x{pileCount}</div>
+  {/if}
 </div>
 
 <style>
@@ -102,5 +106,11 @@
       var(--color-gbc-blue) 0.25rem,
       var(--color-gbc-blue) 0.5rem
     );
+  }
+
+  .pile-badge {
+    @apply absolute -top-2 -right-2 bg-gbc-red text-gbc-cream font-retro text-[0.5rem] px-1.5 py-0.5 rounded-full;
+    @apply border-2 border-gbc-border;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.4);
   }
 </style>

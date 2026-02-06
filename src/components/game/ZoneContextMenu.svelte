@@ -18,6 +18,7 @@
     onClearCounters?: () => void;
     onSetOrientation?: (degrees: string) => void;
     onRevealToOpponent?: () => void;
+    onMovePile?: () => void;
     onClose: () => void;
   }
 
@@ -37,6 +38,7 @@
     onClearCounters,
     onSetOrientation,
     onRevealToOpponent,
+    onMovePile,
     onClose,
   }: Props = $props();
 
@@ -93,6 +95,12 @@
   <button class="menu-item" onclick={() => handleAction(onShuffle)} disabled={cardCount < 2}>
     Shuffle
   </button>
+
+  {#if onMovePile}
+    <button class="menu-item" onclick={() => handleAction(onMovePile)} disabled={cardCount < 1}>
+      Move Pile
+    </button>
+  {/if}
 
   {#if onClearCounters}
     <button class="menu-item" onclick={() => handleAction(onClearCounters)} disabled={cardCount < 1}>

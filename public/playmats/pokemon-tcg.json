@@ -41,18 +41,18 @@
     ]
   },
   "zones": [
-    { "id": "deck", "name": "Deck", "ordered": true, "defaultVisibility": "hidden", "maxCards": 60, "ownerCanSeeContents": false, "opponentCanSeeCount": true },
-    { "id": "hand", "name": "Hand", "ordered": false, "defaultVisibility": "hidden", "maxCards": -1, "ownerCanSeeContents": true, "opponentCanSeeCount": true },
-    { "id": "active", "name": "Active Pokemon", "ordered": true, "defaultVisibility": "public", "maxCards": -1, "ownerCanSeeContents": true, "opponentCanSeeCount": true },
-    { "id": "bench_1", "name": "Bench 1", "ordered": true, "defaultVisibility": "public", "maxCards": -1, "ownerCanSeeContents": true, "opponentCanSeeCount": true },
-    { "id": "bench_2", "name": "Bench 2", "ordered": true, "defaultVisibility": "public", "maxCards": -1, "ownerCanSeeContents": true, "opponentCanSeeCount": true },
-    { "id": "bench_3", "name": "Bench 3", "ordered": true, "defaultVisibility": "public", "maxCards": -1, "ownerCanSeeContents": true, "opponentCanSeeCount": true },
-    { "id": "bench_4", "name": "Bench 4", "ordered": true, "defaultVisibility": "public", "maxCards": -1, "ownerCanSeeContents": true, "opponentCanSeeCount": true },
-    { "id": "bench_5", "name": "Bench 5", "ordered": true, "defaultVisibility": "public", "maxCards": -1, "ownerCanSeeContents": true, "opponentCanSeeCount": true },
-    { "id": "discard", "name": "Discard Pile", "ordered": true, "defaultVisibility": "public", "maxCards": -1, "ownerCanSeeContents": true, "opponentCanSeeCount": true },
-    { "id": "prizes", "name": "Prize Cards", "ordered": true, "defaultVisibility": "hidden", "maxCards": 6, "ownerCanSeeContents": false, "opponentCanSeeCount": true },
-    { "id": "lost_zone", "name": "Lost Zone", "ordered": true, "defaultVisibility": "public", "maxCards": -1, "ownerCanSeeContents": true, "opponentCanSeeCount": true },
-    { "id": "stadium", "name": "Stadium", "ordered": true, "defaultVisibility": "public", "maxCards": 1, "ownerCanSeeContents": true, "opponentCanSeeCount": true, "shared": true }
+    { "id": "deck", "name": "Deck", "ordered": true, "defaultVisibility": "hidden", "maxCards": 60, "ownerCanSeeContents": false, "opponentCanSeeCount": true, "canHaveCounters": false },
+    { "id": "hand", "name": "Hand", "ordered": false, "defaultVisibility": "hidden", "maxCards": -1, "ownerCanSeeContents": true, "opponentCanSeeCount": true, "canHaveCounters": false },
+    { "id": "active", "name": "Active Pokemon", "ordered": true, "defaultVisibility": "public", "maxCards": -1, "ownerCanSeeContents": true, "opponentCanSeeCount": true, "canHaveCounters": true },
+    { "id": "bench_1", "name": "Bench 1", "ordered": true, "defaultVisibility": "public", "maxCards": -1, "ownerCanSeeContents": true, "opponentCanSeeCount": true, "canHaveCounters": true },
+    { "id": "bench_2", "name": "Bench 2", "ordered": true, "defaultVisibility": "public", "maxCards": -1, "ownerCanSeeContents": true, "opponentCanSeeCount": true, "canHaveCounters": true },
+    { "id": "bench_3", "name": "Bench 3", "ordered": true, "defaultVisibility": "public", "maxCards": -1, "ownerCanSeeContents": true, "opponentCanSeeCount": true, "canHaveCounters": true },
+    { "id": "bench_4", "name": "Bench 4", "ordered": true, "defaultVisibility": "public", "maxCards": -1, "ownerCanSeeContents": true, "opponentCanSeeCount": true, "canHaveCounters": true },
+    { "id": "bench_5", "name": "Bench 5", "ordered": true, "defaultVisibility": "public", "maxCards": -1, "ownerCanSeeContents": true, "opponentCanSeeCount": true, "canHaveCounters": true },
+    { "id": "discard", "name": "Discard Pile", "ordered": true, "defaultVisibility": "public", "maxCards": -1, "ownerCanSeeContents": true, "opponentCanSeeCount": true, "canHaveCounters": false },
+    { "id": "prizes", "name": "Prize Cards", "ordered": true, "defaultVisibility": "hidden", "maxCards": 6, "ownerCanSeeContents": false, "opponentCanSeeCount": true, "canHaveCounters": false },
+    { "id": "lost_zone", "name": "Lost Zone", "ordered": true, "defaultVisibility": "public", "maxCards": -1, "ownerCanSeeContents": true, "opponentCanSeeCount": true, "canHaveCounters": false },
+    { "id": "stadium", "name": "Stadium", "ordered": true, "defaultVisibility": "public", "maxCards": 1, "ownerCanSeeContents": true, "opponentCanSeeCount": true, "shared": true, "canHaveCounters": false }
   ],
   "playerSlots": {
     "0": ["p1_deck", "p1_active", "p1_bench_1", "p1_bench_2", "p1_bench_3", "p1_bench_4", "p1_bench_5", "p1_discard", "p1_prizes", "p1_lost_zone", "p1_hand"],
