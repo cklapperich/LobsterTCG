@@ -73,8 +73,13 @@
 
   function handleActionPanelClick(panelId: string, buttonId: string) {
     if (!gameState || !plugin.onActionPanelClick) return;
-    plugin.onActionPanelClick(gameState, 0, panelId, buttonId);
-    gameState = { ...gameState };
+    const action = plugin.onActionPanelClick(gameState, 0, panelId, buttonId);
+    if (action) {
+      tryAction(action);
+    } else {
+      // Direct mutation path (mulligan etc.)
+      gameState = { ...gameState };
+    }
   }
 
   // Get counter definition by ID
@@ -147,15 +152,23 @@
       gameState.log.push(`Warning: ${preResult.reason}`);
     }
 
-    const blocked = executeAction(gameState, action);
-
-    // Run post-hooks (e.g., setup face-down, trainer text logging)
-    if (!blocked) {
-      pluginManager.runPostHooks(gameState, action, gameState);
+    // Check for custom executor (plugin actions like declare_attack) before built-in
+    const customExecutor = pluginManager.getCustomExecutor(action.type);
+    if (customExecutor) {
+      customExecutor(gameState, action);
+    } else {
+      const blocked = executeAction(gameState, action);
+      if (blocked) {
+        gameState = { ...gameState };
+        return blocked;
+      }
     }
 
+    // Run post-hooks (e.g., setup face-down, trainer text logging)
+    pluginManager.runPostHooks(gameState, action, gameState);
+
     gameState = { ...gameState };
-    return blocked;
+    return null;
   }
 
   function handleCoinResult(result: 'heads' | 'tails') {
@@ -213,6 +226,8 @@
       case ACTION_TYPES.COIN_FLIP:
       case ACTION_TYPES.SEARCH_ZONE:
         return null;
+      case 'declare_attack':
+        return `[AI] ${(action as any).attackName} declared`;
       default:
         return null;
     }
@@ -933,7 +948,7 @@
           <div class="text-gbc-yellow text-[0.5rem] text-center mb-2 py-1 px-2 bg-gbc-border">LOG</div>
           <div class="log-content" bind:this={logContainer}>
             {#each gameLog as entry}
-              <div class="log-entry text-[0.45rem] text-gbc-light">{entry}</div>
+              <div class="log-entry text-[0.45rem]" class:text-gbc-yellow={entry.startsWith('Warning:')} class:text-gbc-light={!entry.startsWith('Warning:')}>{entry}</div>
             {/each}
           </div>
           <form class="log-input-bar" onsubmit={(e) => {

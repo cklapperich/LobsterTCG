@@ -82,5 +82,10 @@ export const FIRST_EVOLUTION_TURN = 2;
 // First turn where supporters are allowed (same rule as evolution)
 export const FIRST_SUPPORTER_TURN = 2;
 
+// Pokemon-specific action types (custom actions, not in core Action union)
+export const POKEMON_ACTION_TYPES = {
+  DECLARE_ATTACK: 'declare_attack',
+} as const;
+
 // Narrative display limits
 export const NARRATIVE = { RECENT_LOG_LIMIT: 15, DISCARD_DISPLAY_LIMIT: 10 } as const;

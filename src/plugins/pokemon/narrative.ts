@@ -51,6 +51,14 @@ export function formatNarrativeState(readable: ReadableGameState): string {
   lines.push('');
   lines.push(...formatBoard(readable, 'player1'));
 
+  // Combat notes (weakness/resistance matchup between actives)
+  const combatLines = formatCombatNotes(readable);
+  if (combatLines.length > 0) {
+    lines.push('');
+    lines.push('--- COMBAT NOTES ---');
+    lines.push(...combatLines);
+  }
+
   // Stadium
   const stadiumLines = formatStadium(readable.zones);
   if (stadiumLines.length > 0) {
@@ -426,6 +434,67 @@ function formatAction(a: Record<string, unknown>): string {
     default:
       return `${type}${nameStr ? ' ' + nameStr : ''}`;
   }
+}
+
+// ── Combat notes (weakness/resistance between actives) ──────────
+
+function formatCombatNotes(readable: ReadableGameState): string[] {
+  const lines: string[] = [];
+
+  // AI is player2, opponent is player1
+  const myActive = getTopCard(readable.zones['player2_active']);
+  const oppActive = getTopCard(readable.zones['player1_active']);
+
+  if (!myActive || !oppActive) return lines;
+
+  const myTypes = (myActive.types as string[] | undefined) ?? [];
+  const oppTypes = (oppActive.types as string[] | undefined) ?? [];
+
+  const myWeaknesses = (myActive.weaknesses as Array<{ type: string; value: string }> | undefined) ?? [];
+  const myResistances = (myActive.resistances as Array<{ type: string; value: string }> | undefined) ?? [];
+  const oppWeaknesses = (oppActive.weaknesses as Array<{ type: string; value: string }> | undefined) ?? [];
+  const oppResistances = (oppActive.resistances as Array<{ type: string; value: string }> | undefined) ?? [];
+
+  // Your attacks vs opponent's active
+  const oppWeakMatch = oppWeaknesses.filter(w => myTypes.includes(w.type));
+  const oppResistMatch = oppResistances.filter(r => myTypes.includes(r.type));
+
+  if (oppWeakMatch.length > 0) {
+    for (const w of oppWeakMatch) {
+      lines.push(`Your ${myActive.name} (${myTypes.join('/')}) vs ${oppActive.name}: WEAKNESS applies (${w.type} ${w.value}) — damage is doubled (unless an effect nullifies it)`);
+    }
+  }
+  if (oppResistMatch.length > 0) {
+    for (const r of oppResistMatch) {
+      lines.push(`Your ${myActive.name} (${myTypes.join('/')}) vs ${oppActive.name}: RESISTANCE applies (${r.type} ${r.value}) — damage is reduced (unless an effect nullifies it)`);
+    }
+  }
+
+  // Opponent's attacks vs your active
+  const myWeakMatch = myWeaknesses.filter(w => oppTypes.includes(w.type));
+  const myResistMatch = myResistances.filter(r => oppTypes.includes(r.type));
+
+  if (myWeakMatch.length > 0) {
+    for (const w of myWeakMatch) {
+      lines.push(`Opponent's ${oppActive.name} (${oppTypes.join('/')}) vs your ${myActive.name}: WEAKNESS applies (${w.type} ${w.value}) — you take double damage (unless an effect nullifies it)`);
+    }
+  }
+  if (myResistMatch.length > 0) {
+    for (const r of myResistMatch) {
+      lines.push(`Opponent's ${oppActive.name} (${oppTypes.join('/')}) vs your ${myActive.name}: RESISTANCE applies (${r.type} ${r.value}) — you take reduced damage (unless an effect nullifies it)`);
+    }
+  }
+
+  if (lines.length === 0) {
+    lines.push(`No weakness or resistance between ${myActive.name} (${myTypes.join('/')}) and ${oppActive.name} (${oppTypes.join('/')})`);
+  }
+
+  return lines;
+}
+
+function getTopCard(zone: ReadableZone | undefined): ReadableCard | undefined {
+  if (!zone || zone.cards.length === 0) return undefined;
+  return zone.cards[zone.cards.length - 1];
 }
 
 // ── Stadium formatting ───────────────────────────────────────────

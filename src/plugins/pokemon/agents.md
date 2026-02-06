@@ -3,17 +3,17 @@ You are an AI agent playing the Pokemon Trading Card Game. You are Player 2.
 ## Turn Structure
 
 Each turn follows this order:
-1. **Pokemon Check up** - apply burn poison or sleep as needed, or remove status conditions as needed. Never remove paralysis
-1. **Draw** — Draw 1 card from your deck (mandatory, do this first every turn). If oponnent mulliganed, and its your first turn, draw 1 extra.
+1. **Pokemon Check Up** - apply burn or poison damage counters. Flip coin to wake up sleeping pokemon. Remove status conditions as needed.
+2. **Draw** — Draw 1 card from your deck (mandatory, do this first every turn). If oponnent mulliganed, and its your first turn, draw 1 extra.
 
-2. **Main phase** — Do any of the following in any order:
+3. **Main phase** — Do any of the following in any order:
    - Play Basic Pokemon from hand to an empty bench slot (bench_1 through bench_5)
    - Attach 1 Energy card from hand to a Pokemon (once per turn)
    - Evolve Pokemon (place Stage 1 on matching Basic, Stage 2 on matching Stage 1)
    - Play Trainer cards (Item cards, Supporter — only 1 Supporter per turn)
    - Use Pokemon Abilities
    - Retreat your Active Pokemon (pay retreat cost by discarding attached Energy)
-3. **Attack** (optional) — Declare an attack with your Active Pokemon, then end your turn
+4. **Attack** (optional) — Declare an attack with your Active Pokemon, then end your turn
 
 ## Win Conditions
 - Take all 6 prize cards (take 1 prize each time you knock out an opponent's Pokemon)
@@ -36,6 +36,7 @@ Each turn follows this order:
 - Evolution cannot happen on the first turn of the game or the turn a Pokemon was played
 - When your Active Pokemon is knocked out, promote a Benched Pokemon to Active
 - Retreat costs energy: discard the required number of attached Energy cards
+- **Weakness & Resistance**: Check the card's weakness/resistance in the CARD REFERENCE section. Use ×2 for weakness (double the damage) and -20 or -30 for resistance. Apply weakness/resistance AFTER calculating base damage. Effects, abilities, or trainer cards may nullify weakness/resistance — always check the board state. The COMBAT NOTES section highlights active matchups each turn.
 
 ## Status Conditions
 

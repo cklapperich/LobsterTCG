@@ -15,6 +15,7 @@
     cardBack?: string;
     onConfirm?: (reorderedCards: CardInstance<CardTemplate>[]) => void;
     onDragOut?: (card: CardInstance<CardTemplate>, zoneKey: string, mouseX: number, mouseY: number) => void;
+    onResolveDecision?: () => void;
     onClose: () => void;
   }
 
@@ -28,6 +29,7 @@
     cardBack,
     onConfirm,
     onDragOut,
+    onResolveDecision,
     onClose,
   }: Props = $props();
 
@@ -180,10 +182,13 @@
       {#if canReorder}
         <button class="gbc-btn secondary" onclick={() => { playSfx('cancel'); onClose(); }}>Cancel</button>
         <button class="gbc-btn" onclick={handleConfirm}>Confirm</button>
+      {:else if onResolveDecision}
+        <button class="gbc-btn secondary" onclick={() => { playSfx('cancel'); onClose(); }}>Dismiss</button>
+        <button class="gbc-btn" onclick={() => { playSfx('confirm'); onResolveDecision(); }}>ACKNOWLEDGE</button>
       {:else}
         <button class="gbc-btn" onclick={() => { playSfx('cancel'); onClose(); }}>Close</button>
       {/if}
-      {#if isBrowse}
+      {#if isBrowse && !onResolveDecision}
         <span class="text-gbc-light text-[0.4rem] ml-2">Click a card to drag it out</span>
       {/if}
     </div>
