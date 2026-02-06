@@ -1,6 +1,8 @@
 import type { GameState, Playmat, DeckList, PlayerIndex, CardTemplate, GameConfig, GamePlugin, CounterDefinition, ActionPanel } from '../../core';
 import {
   createGameState,
+  createCardInstance,
+  generateInstanceId,
   loadDeck,
   loadPlaymat,
   shuffle as shuffleAction,
@@ -10,6 +12,7 @@ import {
   resolveCardName,
   findCardInZones,
   VISIBILITY,
+  zoneVisibility,
   ACTION_TYPES,
   PHASES,
   INSTANCE_ID_PREFIX,
@@ -220,6 +223,24 @@ export function autoMulligan(state: GameState<CardTemplate>, playerIndex: Player
   return count;
 }
 
+
+/**
+ * Conjure a card into a player's hand (debug/test helper).
+ * Creates a fresh card instance with correct hand visibility and pushes it in.
+ * @param templateId - Card template ID (e.g. "base1-75" for Lass)
+ */
+export function ensureCardInHand(state: GameState<CardTemplate>, playerIndex: PlayerIndex, templateId: string): void {
+  const handKey = `player${playerIndex + 1}_${ZONE_IDS.HAND}`;
+  const hand = state.zones[handKey];
+  const template = getCardTemplate(templateId);
+  if (!template) {
+    console.warn(`ensureCardInHand: template "${templateId}" not found`);
+    return;
+  }
+  const visibility = zoneVisibility(handKey, hand.config);
+  const card = createCardInstance(template, generateInstanceId(), visibility);
+  hand.cards.push(card);
+}
 
 /**
  * Flip all field Pokemon face-up (PUBLIC visibility).

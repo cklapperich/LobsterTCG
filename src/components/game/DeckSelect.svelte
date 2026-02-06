@@ -12,7 +12,7 @@
   }
 
   interface Props {
-    onStartGame: (player1Deck: DeckList, player2Deck: DeckList) => void;
+    onStartGame: (player1Deck: DeckList, player2Deck: DeckList, options: { lassTest: boolean }) => void;
   }
 
   let { onStartGame }: Props = $props();
@@ -21,6 +21,7 @@
   let deckOptions = $state<DeckOption[]>([]);
   let player1Deck = $state<string>('');
   let player2Deck = $state<string>('');
+  let lassTest = $state(false);
 
   onMount(async () => {
     // Load deck files using Vite's glob import
@@ -68,7 +69,7 @@
 
     if (deck1 && deck2) {
       playSfx('confirm');
-      onStartGame(deck1.deckList, deck2.deckList);
+      onStartGame(deck1.deckList, deck2.deckList, { lassTest });
     }
   }
 
@@ -134,6 +135,13 @@
             <div class="select-arrow"></div>
           </div>
         </div>
+      </div>
+
+      <div class="test-options flex justify-center mb-4">
+        <label class="gbc-checkbox flex items-center gap-2 cursor-pointer text-gbc-green text-[0.5rem]">
+          <input type="checkbox" bind:checked={lassTest} onchange={handleSelectChange} />
+          <span>LASS TEST</span>
+        </label>
       </div>
 
       <div class="flex justify-center">
@@ -205,6 +213,15 @@
     border-left: 0.4rem solid transparent;
     border-right: 0.4rem solid transparent;
     border-top: 0.5rem solid var(--color-gbc-border);
+  }
+
+  .gbc-checkbox input[type="checkbox"] {
+    @apply appearance-none w-4 h-4 border-2 border-gbc-border bg-gbc-cream cursor-pointer;
+  }
+
+  .gbc-checkbox input[type="checkbox"]:checked {
+    @apply bg-gbc-green;
+    box-shadow: inset 0.125rem 0.125rem 0 rgba(0, 0, 0, 0.2);
   }
 
   .start-btn {

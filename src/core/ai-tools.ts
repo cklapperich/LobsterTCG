@@ -168,25 +168,21 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
     // ── Move Card Stack ────────────────────────────────────────────
     tool({
       name: 'move_card_stack',
-      description: 'Move multiple cards from one zone to another as a group.',
+      description: 'Move ALL cards from one zone to another as a group (e.g. moving a Pokemon and all its attachments).',
       inputSchema: {
         type: 'object' as const,
         properties: {
-          cardNames: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'Names of the cards to move',
-          },
-          fromZone: { type: 'string', description: 'Zone key (e.g. "player2_hand")' },
-          toZone: { type: 'string', description: 'Zone key to move the cards to' },
+          fromZone: { type: 'string', description: 'Zone key to move all cards from (e.g. "player2_active")' },
+          toZone: { type: 'string', description: 'Zone key to move the cards to (e.g. "player2_discard")' },
           position: { type: 'number', description: 'Optional position in the target zone (0 = top)' },
         },
-        required: ['cardNames', 'fromZone', 'toZone'],
+        required: ['fromZone', 'toZone'],
       },
       async run(input) {
-        const cardIds = input.cardNames.map((name: string) =>
-          resolveCard(ctx.getState(), name, input.fromZone)
-        );
+        const zone = ctx.getState().zones[input.fromZone];
+        if (!zone) return `Error: zone "${input.fromZone}" not found`;
+        if (zone.cards.length === 0) return `Error: zone "${input.fromZone}" is empty`;
+        const cardIds = zone.cards.map(c => c.instanceId);
         return ctx.execute(
           moveCardStack(p, cardIds, input.fromZone, input.toZone, input.position),
         );
@@ -507,16 +503,18 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
     // ── Reveal Hand ─────────────────────────────────────────────────
     tool({
       name: 'reveal_hand',
-      description: 'Reveal all cards in a zone (typically your hand) to the opponent. Logs the card names and creates a decision for the opponent to acknowledge. Cards are automatically hidden again when the decision resolves.',
+      description: 'Reveal all cards in a zone to the opponent. Logs card names and creates a decision for acknowledgment. If mutual is true, reveals both your zone and the opponent\'s equivalent zone simultaneously (e.g. for Lass-type effects).',
       inputSchema: {
         type: 'object' as const,
         properties: {
           zone: { type: 'string', description: 'Zone key to reveal (e.g. "player2_hand")' },
+          mutual: { type: 'boolean', description: 'If true, reveals both your zone and the opponent\'s equivalent zone' },
+          message: { type: 'string', description: 'Custom decision message describing what the opponent should do' },
         },
         required: ['zone'],
       },
       async run(input) {
-        return ctx.execute(revealHand(p, input.zone));
+        return ctx.execute(revealHand(p, input.zone, input.mutual, input.message));
       },
     }),
 

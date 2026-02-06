@@ -130,6 +130,8 @@ export interface ResolveDecisionAction extends BaseAction {
 export interface RevealHandAction extends BaseAction {
   type: typeof ACTION_TYPES.REVEAL_HAND;
   zoneKey: string;
+  mutual?: boolean;  // When true, reveals both this zone and the opponent's equivalent zone
+  message?: string;  // Custom decision message (overrides default)
 }
 
 // Reveal Action

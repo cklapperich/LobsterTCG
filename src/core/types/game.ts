@@ -7,7 +7,7 @@ export interface Decision {
   createdBy: PlayerIndex;
   targetPlayer: PlayerIndex;
   message?: string;
-  revealedZone?: string;  // Zone key of cards revealed with this decision (auto-hidden on resolve)
+  revealedZones: string[];  // Zone keys of cards revealed with this decision (auto-hidden on resolve)
 }
 
 // Minimal player info (zones are now top-level)
