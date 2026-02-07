@@ -301,7 +301,7 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
   // Setup phase: only allow move_card, move_card_stack, end_turn
   if (ctx.getState().phase === PHASES.SETUP) {
     let setupTools = tools.filter(t => ([ACTION_TYPES.MOVE_CARD, ACTION_TYPES.MOVE_CARD_STACK, ACTION_TYPES.SWAP_CARD_STACKS, ACTION_TYPES.END_TURN, ACTION_TYPES.MULLIGAN] as string[]).includes(t.name));
-    // Add end_phase alias (agent0.md references it)
+    // Add end_phase alias (prompt-sections.md references it)
     const endTurnTool = setupTools.find(t => t.name === ACTION_TYPES.END_TURN);
     if (endTurnTool) {
       setupTools.push({ ...endTurnTool, name: 'end_phase', description: 'End the setup phase' });
