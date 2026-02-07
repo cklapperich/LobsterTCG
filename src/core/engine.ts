@@ -360,14 +360,15 @@ function executeDraw<T extends CardTemplate>(
 function executeMoveCard<T extends CardTemplate>(
   state: GameState<T>,
   action: MoveCardAction
-): void {
+): string | null {
   const fromZone = getZone(state, action.fromZone);
   const toZone = getZone(state, action.toZone);
 
-  if (!fromZone || !toZone) return;
+  if (!fromZone) return `Zone not found: ${action.fromZone}`;
+  if (!toZone) return `Zone not found: ${action.toZone}`;
 
   const card = removeCardFromZone(fromZone, action.cardInstanceId);
-  if (!card) return;
+  if (!card) return `Card ${action.cardInstanceId} not found in ${action.fromZone}`;
 
   transferCountersOnRemoval(fromZone, card);
 
@@ -382,6 +383,7 @@ function executeMoveCard<T extends CardTemplate>(
   }
 
   consolidateCountersToTop(toZone);
+  return null;
 }
 
 function executeMoveCardStack<T extends CardTemplate>(
@@ -935,9 +937,14 @@ export function executeAction<T extends CardTemplate>(
     case ACTION_TYPES.DRAW:
       executeDraw(state, action);
       break;
-    case ACTION_TYPES.MOVE_CARD:
-      executeMoveCard(state, action);
+    case ACTION_TYPES.MOVE_CARD: {
+      const moveErr = executeMoveCard(state, action);
+      if (moveErr) {
+        state.log.push(moveErr);
+        return moveErr;
+      }
       break;
+    }
     case ACTION_TYPES.MOVE_CARD_STACK:
       executeMoveCardStack(state, action);
       break;

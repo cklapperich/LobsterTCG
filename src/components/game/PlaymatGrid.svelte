@@ -18,6 +18,7 @@
     onZoneContextMenu?: (zoneKey: string, zoneName: string, cardCount: number, zoneConfig: ZoneConfig, x: number, y: number) => void;
     onCounterDrop?: (counterId: string, cardInstanceId: string) => void;
     onBrowse?: (zoneKey: string, zoneName: string) => void;
+    playmatImage?: string;
   }
 
   let {
@@ -34,6 +35,7 @@
     onZoneContextMenu,
     onCounterDrop,
     onBrowse,
+    playmatImage,
   }: Props = $props();
 
   // Track Zone refs by zoneKey for shuffle access
@@ -103,6 +105,20 @@
     return { grouped, standalone };
   });
 
+  // Compute field row range (non-hand slots) for playmat background overlay
+  const fieldRowRange = $derived.by(() => {
+    let min = Infinity, max = -Infinity;
+    for (const slot of layout.slots) {
+      if (slot.zoneId !== 'hand') {
+        min = Math.min(min, slot.position.row);
+        const slotEnd = slot.position.row + (slot.position.rowSpan ?? 1) - 1;
+        max = Math.max(max, slotEnd);
+      }
+    }
+    // Convert to 1-indexed CSS grid-row (start inclusive, end exclusive)
+    return { start: min + 1, end: max + 2 };
+  });
+
   // Get zone by slot - shared zones use bare key, per-player zones use player{N}_ prefix
   function getZone(slot: { id: string; zoneId: string }) {
     const sharedZone = gameState.zones[slot.zoneId];
@@ -116,11 +132,24 @@
 
 <div
   class="playmat-grid"
+  class:has-playmat-image={!!playmatImage}
   style="
     grid-template-columns: {gridTemplateColumns};
     grid-template-rows: {gridTemplateRows};
   "
 >
+  <!-- Playmat background overlay — covers only field rows, not hands -->
+  {#if playmatImage}
+    <div
+      class="playmat-bg"
+      style="
+        grid-row: {fieldRowRange.start} / {fieldRowRange.end};
+        grid-column: 1 / -1;
+        background-image: url({playmatImage});
+      "
+    ></div>
+  {/if}
+
   <!-- Standalone slots (no group) -->
   {#each processedSlots.standalone as slot (slot.id)}
     {@const zone = getZone(slot)}
@@ -238,6 +267,8 @@
 
   .grid-slot {
     @apply flex justify-center items-start;
+    position: relative;
+    z-index: 1;
   }
 
   .grid-slot.stack-up {
@@ -297,6 +328,25 @@
 
   .staging-slot.has-cards :global(.zone-label) {
     @apply text-gbc-red bg-gbc-cream;
+  }
+
+  /* Playmat background overlay — sits behind field zones */
+  .playmat-bg {
+    background-size: cover;
+    background-position: center;
+    border-radius: 0.5rem;
+    z-index: 0;
+  }
+
+  /* Playmat image: make non-hand zone backgrounds transparent */
+  .playmat-grid.has-playmat-image .grid-slot:not(.hand-zone) :global(.zone) {
+    background-color: transparent;
+    box-shadow: none;
+  }
+
+  .playmat-grid.has-playmat-image .grid-slot:not(.hand-zone) :global(.zone.drag-over) {
+    background-color: rgba(48, 104, 80, 0.3);
+    box-shadow: 0 0 0.5rem var(--color-gbc-yellow);
   }
 
   @media (max-width: 1024px) {

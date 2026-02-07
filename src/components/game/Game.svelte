@@ -34,10 +34,11 @@
     player1Deck: DeckList;
     player2Deck: DeckList;
     lassTest?: boolean;
+    playmatImage?: string;
     onBackToMenu?: () => void;
   }
 
-  let { player1Deck, player2Deck, lassTest, onBackToMenu }: Props = $props();
+  let { player1Deck, player2Deck, lassTest, playmatImage, onBackToMenu }: Props = $props();
 
   // Plugin manager for warnings/hooks
   const pluginManager = new PluginManager<CardTemplate>();
@@ -1129,6 +1130,7 @@
           {gameState}
           {cardBack}
           {counterDefinitions}
+          {playmatImage}
           actionPanels={gridPanels}
           onActionPanelClick={handleActionPanelClick}
           onDrop={handleDrop}

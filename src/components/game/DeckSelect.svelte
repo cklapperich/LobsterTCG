@@ -11,8 +11,14 @@
     cardCount: number;
   }
 
+  interface PlaymatOption {
+    id: string;
+    name: string;
+    url: string;
+  }
+
   interface Props {
-    onStartGame: (player1Deck: DeckList, player2Deck: DeckList, options: { lassTest: boolean }) => void;
+    onStartGame: (player1Deck: DeckList, player2Deck: DeckList, options: { lassTest: boolean; playmatImage: string }) => void;
   }
 
   let { onStartGame }: Props = $props();
@@ -22,6 +28,15 @@
   let player1Deck = $state<string>('');
   let player2Deck = $state<string>('');
   let lassTest = $state(false);
+  let playmatImage = $state<string>('');
+
+  // Discover playmat images from src/assets/playmat-images/
+  const playmatModules = import.meta.glob('/src/assets/playmat-images/*.png', { eager: true, import: 'default' }) as Record<string, string>;
+  const playmatOptions: PlaymatOption[] = Object.entries(playmatModules).map(([path, url]) => {
+    const filename = path.split('/').pop()?.replace('.png', '') ?? 'Unknown';
+    const name = filename.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    return { id: filename, name, url };
+  });
 
   onMount(async () => {
     // Load deck files using Vite's glob import
@@ -69,7 +84,8 @@
 
     if (deck1 && deck2) {
       playSfx('confirm');
-      onStartGame(deck1.deckList, deck2.deckList, { lassTest });
+      const selectedPlaymat = playmatOptions.find(p => p.id === playmatImage);
+      onStartGame(deck1.deckList, deck2.deckList, { lassTest, playmatImage: selectedPlaymat?.url ?? '' });
     }
   }
 
@@ -136,6 +152,29 @@
           </div>
         </div>
       </div>
+
+      <!-- Playmat Selection -->
+      {#if playmatOptions.length > 0}
+        <div class="playmat-select mb-4">
+          <div class="player-label text-gbc-green text-[0.6rem] mb-3 flex items-center gap-2">
+            <span class="player-badge bg-gbc-green text-gbc-cream px-2 py-1">MAT</span>
+            PLAYMAT
+          </div>
+          <div class="select-wrapper">
+            <select
+              bind:value={playmatImage}
+              onchange={handleSelectChange}
+              class="deck-dropdown"
+            >
+              <option value="">None</option>
+              {#each playmatOptions as mat}
+                <option value={mat.id}>{mat.name}</option>
+              {/each}
+            </select>
+            <div class="select-arrow"></div>
+          </div>
+        </div>
+      {/if}
 
       <div class="test-options flex justify-center mb-4">
         <label class="gbc-checkbox flex items-center gap-2 cursor-pointer text-gbc-green text-[0.5rem]">
