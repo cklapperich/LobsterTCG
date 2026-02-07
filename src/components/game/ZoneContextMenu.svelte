@@ -11,11 +11,6 @@
     zoneConfig: ZoneConfig;
     onShuffle: () => void;
     onPeekTop: (count: number) => void;
-    onPeekBottom: (count: number) => void;
-    onArrangeTop: (count: number) => void;
-    onArrangeBottom: (count: number) => void;
-    onViewAll?: () => void;
-    onArrangeAll?: () => void;
     onClearCounters?: () => void;
     onSetOrientation?: (degrees: string) => void;
     onRevealToOpponent?: () => void;
@@ -33,11 +28,6 @@
     zoneConfig,
     onShuffle,
     onPeekTop,
-    onPeekBottom,
-    onArrangeTop,
-    onArrangeBottom,
-    onViewAll,
-    onArrangeAll,
     onClearCounters,
     onSetOrientation,
     onRevealToOpponent,
@@ -48,16 +38,15 @@
   }: Props = $props();
 
   let menuRef: HTMLDivElement;
-  let activeSubmenu = $state<'peek' | 'arrange' | 'rotate' | null>(null);
+  let activeSubmenu = $state<'rotate' | null>(null);
+  let peekCount = $state(1);
+  let peekInputRef = $state<HTMLInputElement | null>(null);
 
-  const PEEK_COUNTS = [1, 3, 5, 7];
-
-  // Counts available for peek/arrange
-  const availableCounts = $derived(PEEK_COUNTS.filter(n => n <= cardCount));
-
-  // Zone visibility/ordered state for View All / Arrange All
-  const isPublic = $derived(zoneConfig.defaultVisibility === 'public');
-  const isOrdered = $derived(zoneConfig.ordered);
+  function handlePeekSubmit() {
+    const clamped = Math.max(1, Math.min(peekCount, cardCount));
+    onPeekTop(clamped);
+    onClose();
+  }
 
   function handleClickOutside(event: MouseEvent) {
     if (menuRef && !menuRef.contains(event.target as Node)) {
@@ -87,16 +76,22 @@
 >
   <div class="menu-header">{zoneName}</div>
 
-  {#if isPublic && onViewAll && cardCount > 0}
-    <button class="menu-item" onclick={() => handleAction(onViewAll)}>
-      View All ({cardCount})
-    </button>
-  {/if}
-
-  {#if isPublic && isOrdered && onArrangeAll && cardCount > 1}
-    <button class="menu-item" onclick={() => handleAction(onArrangeAll)}>
-      Arrange All ({cardCount})
-    </button>
+  {#if cardCount > 0}
+    <div class="peek-row">
+      <span class="peek-label">Peek</span>
+      <input
+        bind:this={peekInputRef}
+        type="number"
+        class="peek-input"
+        min="1"
+        max={cardCount}
+        bind:value={peekCount}
+        onkeydown={(e) => { if (e.key === 'Enter') handlePeekSubmit(); }}
+        onclick={(e) => e.stopPropagation()}
+        onwheel={(e) => { e.preventDefault(); peekCount = Math.max(1, Math.min(peekCount + (e.deltaY < 0 ? 1 : -1), cardCount)); }}
+      />
+      <button class="peek-go" onclick={handlePeekSubmit}>Go</button>
+    </div>
   {/if}
 
   {#if zoneConfig.shuffleable}
@@ -158,67 +153,6 @@
     </div>
   {/if}
 
-  <!-- Peek submenu wrapper -->
-  <div
-    class="submenu-wrapper"
-    onmouseenter={() => { activeSubmenu = 'peek'; }}
-  >
-    <div class="menu-item has-submenu" class:open={activeSubmenu === 'peek'}>
-      <span>Peek...</span>
-      <span class="arrow">▶</span>
-    </div>
-
-    {#if activeSubmenu === 'peek' && availableCounts.length > 0}
-      <div class="submenu gbc-panel">
-        <div class="submenu-section">Top</div>
-        {#each availableCounts as count}
-          <button class="menu-item" onclick={() => handleAction(() => onPeekTop(count))}>
-            {count} card{count > 1 ? 's' : ''}
-          </button>
-        {/each}
-
-        <div class="submenu-divider"></div>
-
-        <div class="submenu-section">Bottom</div>
-        {#each availableCounts as count}
-          <button class="menu-item" onclick={() => handleAction(() => onPeekBottom(count))}>
-            {count} card{count > 1 ? 's' : ''}
-          </button>
-        {/each}
-      </div>
-    {/if}
-  </div>
-
-  <!-- Arrange submenu wrapper -->
-  <div
-    class="submenu-wrapper"
-    onmouseenter={() => { activeSubmenu = 'arrange'; }}
-  >
-    <div class="menu-item has-submenu" class:open={activeSubmenu === 'arrange'}>
-      <span>Arrange...</span>
-      <span class="arrow">▶</span>
-    </div>
-
-    {#if activeSubmenu === 'arrange' && availableCounts.length > 0}
-      <div class="submenu gbc-panel">
-        <div class="submenu-section">Top</div>
-        {#each availableCounts as count}
-          <button class="menu-item" onclick={() => handleAction(() => onArrangeTop(count))}>
-            {count} card{count > 1 ? 's' : ''}
-          </button>
-        {/each}
-
-        <div class="submenu-divider"></div>
-
-        <div class="submenu-section">Bottom</div>
-        {#each availableCounts as count}
-          <button class="menu-item" onclick={() => handleAction(() => onArrangeBottom(count))}>
-            {count} card{count > 1 ? 's' : ''}
-          </button>
-        {/each}
-      </div>
-    {/if}
-  </div>
 </div>
 
 <style>
@@ -266,11 +200,33 @@
     z-index: 10000;
   }
 
-  .submenu-section {
-    @apply text-gbc-yellow text-[0.525rem] py-0.5 px-2 uppercase tracking-wider;
+  .peek-row {
+    @apply flex items-center gap-1.5 px-3 py-2;
   }
 
-  .submenu-divider {
-    @apply h-px bg-gbc-border my-1;
+  .peek-label {
+    @apply text-gbc-cream text-[0.75rem] whitespace-nowrap;
+  }
+
+  .peek-input {
+    @apply w-10 bg-gbc-dark-green text-gbc-light text-[0.7rem] text-center px-1 py-0.5 border border-gbc-border rounded-sm font-retro;
+    @apply outline-none;
+    -moz-appearance: textfield;
+  }
+
+  .peek-input::-webkit-inner-spin-button,
+  .peek-input::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  .peek-input:focus {
+    @apply border-gbc-green;
+  }
+
+  .peek-go {
+    @apply text-[0.65rem] py-0.5 px-2 text-gbc-cream bg-gbc-border border-none cursor-pointer rounded-sm;
+    @apply hover:bg-gbc-green hover:text-gbc-dark-green;
+    transition: background 0.1s, color 0.1s;
   }
 </style>

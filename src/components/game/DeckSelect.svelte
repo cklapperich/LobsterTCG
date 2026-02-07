@@ -3,6 +3,7 @@
   import type { DeckList } from '../../core';
   import { parsePTCGODeck } from '../../plugins/pokemon/cards';
   import { playSfx } from '../../lib/audio.svelte';
+  import { MODEL_OPTIONS } from '../../ai';
 
   interface DeckOption {
     id: string;
@@ -18,7 +19,7 @@
   }
 
   interface Props {
-    onStartGame: (player1Deck: DeckList, player2Deck: DeckList, options: { lassTest: boolean; playmatImage: string }) => void;
+    onStartGame: (player1Deck: DeckList, player2Deck: DeckList, options: { lassTest: boolean; playmatImage: string; aiModel: string }) => void;
   }
 
   let { onStartGame }: Props = $props();
@@ -29,6 +30,7 @@
   let player2Deck = $state<string>('');
   let lassTest = $state(false);
   let playmatImage = $state<string>('');
+  let aiModel = $state<string>(MODEL_OPTIONS[0]?.id ?? '');
 
   // Discover playmat images from src/assets/playmat-images/
   const playmatModules = import.meta.glob('/src/assets/playmat-images/*.png', { eager: true, import: 'default' }) as Record<string, string>;
@@ -85,7 +87,7 @@
     if (deck1 && deck2) {
       playSfx('confirm');
       const selectedPlaymat = playmatOptions.find(p => p.id === playmatImage);
-      onStartGame(deck1.deckList, deck2.deckList, { lassTest, playmatImage: selectedPlaymat?.url ?? '' });
+      onStartGame(deck1.deckList, deck2.deckList, { lassTest, playmatImage: selectedPlaymat?.url ?? '', aiModel });
     }
   }
 
@@ -175,6 +177,26 @@
           </div>
         </div>
       {/if}
+
+      <!-- AI Model Selection -->
+      <div class="model-select mb-4">
+        <div class="player-label text-gbc-green text-[0.6rem] mb-3 flex items-center gap-2">
+          <span class="player-badge bg-gbc-yellow text-gbc-border px-2 py-1">AI</span>
+          AI MODEL
+        </div>
+        <div class="select-wrapper">
+          <select
+            bind:value={aiModel}
+            onchange={handleSelectChange}
+            class="deck-dropdown"
+          >
+            {#each MODEL_OPTIONS as option}
+              <option value={option.id}>{option.label}</option>
+            {/each}
+          </select>
+          <div class="select-arrow"></div>
+        </div>
+      </div>
 
       <div class="test-options flex justify-center mb-4">
         <label class="gbc-checkbox flex items-center gap-2 cursor-pointer text-gbc-green text-[0.5rem]">

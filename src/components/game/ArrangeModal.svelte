@@ -4,18 +4,18 @@
   import { VISIBILITY } from '../../core';
   import Card from './Card.svelte';
   import { playSfx } from '../../lib/audio.svelte';
+  import { startDrag, updateDragPosition, endDrag } from './dragState.svelte';
 
   interface Props {
     cards: CardInstance<CardTemplate>[];
     zoneName: string;
-    position: 'top' | 'bottom' | 'all';
-    mode: 'peek' | 'arrange' | 'browse' | 'search';
+    allowReorder: boolean;
+    isDecision?: boolean;
     zoneKey?: string;
     renderFace?: (template: CardTemplate) => { rank?: string; suit?: string; color?: string };
     cardBack?: string;
-    onConfirm?: (reorderedCards: CardInstance<CardTemplate>[]) => void;
-    onSearchConfirm?: (selectedCards: CardInstance<CardTemplate>[]) => void;
-    onDragOut?: (card: CardInstance<CardTemplate>, zoneKey: string, mouseX: number, mouseY: number) => void;
+    onConfirm?: (selectedCards: CardInstance<CardTemplate>[]) => void;
+    onReorder?: (cards: CardInstance<CardTemplate>[]) => void;
     onResolveDecision?: () => void;
     onClose: () => void;
   }
@@ -23,35 +23,47 @@
   let {
     cards,
     zoneName,
-    position,
-    mode,
+    allowReorder,
+    isDecision = false,
     zoneKey,
     renderFace,
     cardBack,
     onConfirm,
-    onSearchConfirm,
-    onDragOut,
+    onReorder,
     onResolveDecision,
     onClose,
   }: Props = $props();
 
-  const canReorder = $derived(mode === 'arrange');
-  const isBrowse = $derived(mode === 'browse');
-  const isSearch = $derived(mode === 'search');
+  const isSelectable = $derived(!isDecision && !!onConfirm);
+
   const title = $derived.by(() => {
-    if (mode === 'search') return `Search ${zoneName} (${selectedIds.size} selected)`;
-    if (mode === 'browse') return `Browse ${zoneName}`;
-    if (position === 'all') {
-      return mode === 'peek' ? `Viewing ${zoneName}` : `Arrange ${zoneName}`;
-    }
-    return mode === 'peek' ? `Peeking at ${position} of ${zoneName}` : `Arrange ${position} of ${zoneName}`;
+    const sel = selectedIds.size > 0 ? ` (${selectedIds.size} selected)` : '';
+    if (isDecision) return `Revealed: ${zoneName}`;
+    if (allowReorder) return `Browse ${zoneName}${sel}`;
+    return `Peek ${zoneName}${sel}`;
   });
 
-  // Search mode selection state
+  // Selection state
   let selectedIds = $state<Set<string>>(new Set());
 
+  // Mousedown-based reorder state
+  let dragIndex = $state<number | null>(null);
+  let dragOverIndex = $state<number | null>(null);
+  let orderChanged = $state(false);
+  let mouseDownPos = $state<{ x: number; y: number } | null>(null);
+  let isDragging = $state(false);
+  const DRAG_THRESHOLD = 8;
+
+  // Wrapper that applies reorder before closing
+  function doClose() {
+    if (orderChanged && onReorder) {
+      onReorder([...orderedCards]);
+    }
+    onClose();
+  }
+
   function toggleSelection(instanceId: string) {
-    if (!isSearch) return;
+    if (!isSelectable) return;
     const next = new Set(selectedIds);
     if (next.has(instanceId)) {
       next.delete(instanceId);
@@ -62,14 +74,14 @@
     playSfx('cursor');
   }
 
-  function handleSearchConfirm() {
+  function handleConfirm() {
     const selected = orderedCards.filter(c => selectedIds.has(c.instanceId));
     // Map back to original cards (preserving original visibility)
     const originals = selected.map(visibleCard => {
       const original = originalCards.find(c => c.instanceId === visibleCard.instanceId);
       return original ?? visibleCard;
     });
-    onSearchConfirm?.(originals);
+    onConfirm?.(originals);
   }
 
   // Create visible copies of cards for display (force face-up)
@@ -80,79 +92,118 @@
     };
   }
 
-  // Local state for reordering - use derived initial value
+  // Local state for card display
   let orderedCards = $state<CardInstance<CardTemplate>[]>([]);
-  let dragIndex = $state<number | null>(null);
-  let dragOverIndex = $state<number | null>(null);
 
   // Initialize ordered cards from props (runs once on mount), force visible
+  // Show top-of-zone first (reverse array order)
   $effect(() => {
     if (orderedCards.length === 0 && cards.length > 0) {
-      // Browse and search show top-of-zone first (reverse array order)
-      const source = (mode === 'browse' || mode === 'search') ? [...cards].reverse() : cards;
-      orderedCards = source.map(makeVisible);
+      orderedCards = [...cards].reverse().map(makeVisible);
+    } else if (orderedCards.length > 0) {
+      // Sync removals from parent (e.g. card removed externally)
+      const cardIds = new Set(cards.map(c => c.instanceId));
+      const filtered = orderedCards.filter(c => cardIds.has(c.instanceId));
+      if (filtered.length !== orderedCards.length) {
+        orderedCards = filtered;
+      }
+    }
+  });
+
+  // Auto-close when all cards removed
+  $effect(() => {
+    if (cards.length === 0 && orderedCards.length === 0) {
+      doClose();
     }
   });
 
   // Keep reference to original cards for confirm (to preserve original visibility)
   const originalCards = $derived(cards);
 
-  function handleDragStart(index: number) {
-    if (!canReorder) return;
+  // Find which card-slot index is under a given mouse position
+  function getSlotIndexAtPoint(x: number, y: number): number | null {
+    const el = document.elementFromPoint(x, y);
+    const slot = el?.closest('[data-slot-index]') as HTMLElement | null;
+    if (slot) {
+      return parseInt(slot.dataset.slotIndex!, 10);
+    }
+    return null;
+  }
+
+  // Mousedown on a card slot — start potential drag (reorder) or click (select)
+  function handleSlotMouseDown(event: MouseEvent, index: number) {
+    if (!allowReorder) return;
+    // Only left mouse button
+    if (event.button !== 0) return;
+    mouseDownPos = { x: event.clientX, y: event.clientY };
     dragIndex = index;
-  }
 
-  function handleDragOver(event: DragEvent, index: number) {
-    if (!canReorder) return;
-    event.preventDefault();
-    dragOverIndex = index;
-  }
-
-  function handleDragLeave() {
-    dragOverIndex = null;
-  }
-
-  function handleDrop(targetIndex: number) {
-    if (!canReorder) return;
-    if (dragIndex === null || dragIndex === targetIndex) {
-      dragIndex = null;
-      dragOverIndex = null;
-      return;
+    function onMouseMove(e: MouseEvent) {
+      if (!mouseDownPos) return;
+      const dx = e.clientX - mouseDownPos.x;
+      const dy = e.clientY - mouseDownPos.y;
+      if (!isDragging && (dx * dx + dy * dy) > DRAG_THRESHOLD * DRAG_THRESHOLD) {
+        isDragging = true;
+        // Show DragOverlay via the global drag store
+        const card = orderedCards[index];
+        if (card) {
+          startDrag(card, 'modal', e.clientX, e.clientY);
+        }
+      }
+      if (isDragging) {
+        updateDragPosition(e.clientX, e.clientY);
+        const targetIndex = getSlotIndexAtPoint(e.clientX, e.clientY);
+        dragOverIndex = targetIndex !== dragIndex ? targetIndex : null;
+      }
     }
 
-    const newOrder = [...orderedCards];
-    const [removed] = newOrder.splice(dragIndex, 1);
-    newOrder.splice(targetIndex, 0, removed);
-    orderedCards = newOrder;
+    function onMouseUp(e: MouseEvent) {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
 
-    dragIndex = null;
-    dragOverIndex = null;
+      if (isDragging) {
+        // Clear the DragOverlay
+        endDrag();
+
+        if (dragIndex !== null && dragOverIndex !== null && dragIndex !== dragOverIndex) {
+          // Perform reorder
+          const newOrder = [...orderedCards];
+          const [removed] = newOrder.splice(dragIndex, 1);
+          newOrder.splice(dragOverIndex, 0, removed);
+          orderedCards = newOrder;
+          orderChanged = true;
+          playSfx('cursor');
+        }
+      } else {
+        // Was a click, not a drag — handle selection
+        const card = orderedCards[index];
+        if (card && isSelectable) {
+          toggleSelection(card.instanceId);
+        }
+      }
+
+      dragIndex = null;
+      dragOverIndex = null;
+      mouseDownPos = null;
+      isDragging = false;
+    }
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
   }
 
-  function handleDragEnd() {
-    dragIndex = null;
-    dragOverIndex = null;
-  }
-
-  function handleBrowseDragStart(event: MouseEvent, card: CardInstance<CardTemplate>) {
-    if (!isBrowse || !zoneKey) return;
-    event.preventDefault();
-    onDragOut?.(card, zoneKey, event.clientX, event.clientY);
-  }
-
-  function handleConfirm() {
-    // Map back to original cards with their original visibility
-    const reordered = orderedCards.map(visibleCard => {
-      const original = originalCards.find(c => c.instanceId === visibleCard.instanceId);
-      return original ?? visibleCard;
-    });
-    onConfirm?.(reordered);
+  // For non-reorder modes, simple click handler
+  function handleSlotClick(card: CardInstance<CardTemplate>) {
+    if (allowReorder) return; // handled by mousedown/mouseup above
+    if (isSelectable) {
+      toggleSelection(card.instanceId);
+    }
   }
 
   function handleBackdropClick(event: MouseEvent) {
     if (event.target === event.currentTarget) {
       playSfx('cancel');
-      onClose();
+      doClose();
     }
   }
 
@@ -161,7 +212,7 @@
     const handleKeydown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         playSfx('cancel');
-        onClose();
+        doClose();
       }
     };
     window.addEventListener('keydown', handleKeydown);
@@ -170,33 +221,30 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="modal-backdrop" onclick={handleBackdropClick} onkeydown={(e) => { if (e.key === 'Escape') { playSfx('cancel'); onClose(); } }} role="presentation">
-  <div class="modal gbc-panel" class:modal-search={isSearch}>
+<div class="modal-backdrop" onclick={handleBackdropClick} onkeydown={(e) => { if (e.key === 'Escape') { playSfx('cancel'); doClose(); } }} role="presentation">
+  <div class="modal gbc-panel" class:modal-tall={isSelectable}>
     <div class="modal-header">
       <span class="modal-title">{title}</span>
-      <button class="close-btn" onclick={() => { playSfx('cancel'); onClose(); }}>×</button>
+      <button class="close-btn" onclick={() => { playSfx('cancel'); doClose(); }}>×</button>
     </div>
 
-    <div class="modal-content" class:browse-content={isBrowse || isSearch}>
-      <div class="card-row" class:card-row-browse={isBrowse || isSearch}>
+    <div class="modal-content browse-content">
+      <div class="card-row card-row-wrap">
         {#each orderedCards as card, i (card.instanceId)}
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
             class="card-slot"
-            class:dragging={dragIndex === i}
-            class:drag-over={dragOverIndex === i}
-            class:readonly={!canReorder && !isBrowse && !isSearch}
-            class:browse={isBrowse}
-            class:search={isSearch}
-            class:selected={isSearch && selectedIds.has(card.instanceId)}
-            draggable={canReorder}
-            ondragstart={() => handleDragStart(i)}
-            ondragover={(e) => handleDragOver(e, i)}
-            ondragleave={handleDragLeave}
-            ondrop={() => handleDrop(i)}
-            ondragend={handleDragEnd}
-            onmousedown={isBrowse ? (e: MouseEvent) => handleBrowseDragStart(e, card) : undefined}
-            onclick={isSearch ? () => toggleSelection(card.instanceId) : undefined}
+            class:selectable={isSelectable}
+            class:selected={isSelectable && selectedIds.has(card.instanceId)}
+            class:reorderable={allowReorder}
+            class:dragging={isDragging && dragIndex === i}
+            class:drag-over={isDragging && dragOverIndex === i}
+            data-slot-index={i}
+            ondragstart={(e: DragEvent) => e.preventDefault()}
+            onmousedown={allowReorder ? (e: MouseEvent) => handleSlotMouseDown(e, i) : undefined}
+            onclick={!allowReorder ? () => handleSlotClick(card) : undefined}
+            onkeydown={(e: KeyboardEvent) => { if (!allowReorder && (e.key === 'Enter' || e.key === ' ')) handleSlotClick(card); }}
+            role="button"
+            tabindex="0"
           >
             <Card
               {card}
@@ -213,20 +261,17 @@
     </div>
 
     <div class="modal-footer">
-      {#if isSearch}
-        <button class="gbc-btn secondary" onclick={() => { playSfx('cancel'); onClose(); }}>Cancel</button>
-        <button class="gbc-btn" onclick={handleSearchConfirm} disabled={selectedIds.size === 0}>Confirm ({selectedIds.size})</button>
-      {:else if canReorder}
-        <button class="gbc-btn secondary" onclick={() => { playSfx('cancel'); onClose(); }}>Cancel</button>
-        <button class="gbc-btn" onclick={handleConfirm}>Confirm</button>
-      {:else if onResolveDecision}
-        <button class="gbc-btn secondary" onclick={() => { playSfx('cancel'); onClose(); }}>Dismiss</button>
-        <button class="gbc-btn" onclick={() => { playSfx('confirm'); onResolveDecision(); }}>ACKNOWLEDGE</button>
+      {#if isDecision}
+        <button class="gbc-btn secondary" onclick={() => { playSfx('cancel'); doClose(); }}>Dismiss</button>
+        <button class="gbc-btn" onclick={() => { playSfx('confirm'); onResolveDecision?.(); }}>ACKNOWLEDGE</button>
+      {:else if isSelectable && selectedIds.size > 0}
+        <button class="gbc-btn secondary" onclick={() => { playSfx('cancel'); doClose(); }}>Cancel</button>
+        <button class="gbc-btn" onclick={handleConfirm}>Confirm ({selectedIds.size})</button>
       {:else}
-        <button class="gbc-btn" onclick={() => { playSfx('cancel'); onClose(); }}>Close</button>
+        <button class="gbc-btn" onclick={() => { playSfx('cancel'); doClose(); }}>Close</button>
       {/if}
-      {#if isBrowse && !onResolveDecision}
-        <span class="text-gbc-light text-[0.4rem] ml-2">Click a card to drag it out</span>
+      {#if allowReorder && !isDecision}
+        <span class="text-gbc-light text-[0.4rem] ml-2">Drag to reorder</span>
       {/if}
     </div>
   </div>
@@ -244,7 +289,7 @@
     @apply max-w-[90vw] max-h-[80vh] flex flex-col;
   }
 
-  .modal.modal-search {
+  .modal.modal-tall {
     @apply h-[95vh] max-h-[95vh];
   }
 
@@ -269,7 +314,7 @@
     @apply flex gap-4 justify-center items-start;
   }
 
-  .card-row-browse {
+  .card-row-wrap {
     @apply flex-wrap gap-3;
   }
 
@@ -278,45 +323,49 @@
   }
 
   .card-slot {
-    @apply flex flex-col items-center gap-2 cursor-grab relative;
+    @apply flex flex-col items-center gap-2 relative;
     transition: transform 0.15s, opacity 0.15s;
   }
 
-  .card-slot.readonly {
-    @apply cursor-default;
-  }
-
-  .card-slot.browse {
+  .card-slot.reorderable {
     @apply cursor-grab;
   }
 
-  .card-slot.search {
+  .card-slot.selectable {
     @apply cursor-pointer;
     transform: scale(1.5);
     transform-origin: top center;
     margin: 1.5rem 1.5rem 4rem;
   }
 
-  .card-slot.selected {
-    transform: translateY(-0.5rem);
-    box-shadow: 0 0 0.75rem var(--color-gbc-green);
-    border-radius: 0.5rem;
-  }
-
-  .card-slot.search.selected {
-    transform: scale(1.5) translateY(-0.5rem);
-  }
-
   .card-slot:hover {
     transform: translateY(-0.25rem);
   }
 
-  .card-slot.search:hover {
+  .card-slot.selectable:hover {
     transform: scale(1.5) translateY(-0.25rem);
   }
 
-  .card-slot.readonly:hover {
-    transform: none;
+  .card-slot.selected,
+  .card-slot.selected:hover {
+    transform: translateY(-0.5rem);
+  }
+
+  .card-slot.selectable.selected,
+  .card-slot.selectable.selected:hover {
+    transform: scale(1.5) translateY(-0.5rem);
+  }
+
+  .card-slot.selected::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    aspect-ratio: 5 / 7;
+    border: 3px solid red;
+    border-radius: 0.5rem;
+    pointer-events: none;
   }
 
   .card-slot.dragging {

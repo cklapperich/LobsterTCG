@@ -27,6 +27,7 @@ import type {
   RevealAction,
   PeekAction,
   MulliganAction,
+  SwapCardStacksAction,
   PlayerInfo,
   GameConfig,
   GameState,
@@ -376,7 +377,11 @@ function executeMoveCard<T extends CardTemplate>(
   card.orientation = undefined;
   if (toZone.config.canHaveCounters === false) clearCounters(card);
 
-  if (action.position !== undefined && action.position >= 0) {
+  if (action.position === 'top') {
+    toZone.cards.splice(0, 0, card);
+  } else if (action.position === 'bottom') {
+    toZone.cards.push(card);
+  } else if (typeof action.position === 'number' && action.position >= 0) {
     toZone.cards.splice(action.position, 0, card);
   } else {
     toZone.cards.push(card);
@@ -407,7 +412,11 @@ function executeMoveCardStack<T extends CardTemplate>(
     }
   }
 
-  if (action.position !== undefined && action.position >= 0) {
+  if (action.position === 'top') {
+    toZone.cards.splice(0, 0, ...cards);
+  } else if (action.position === 'bottom') {
+    toZone.cards.push(...cards);
+  } else if (typeof action.position === 'number' && action.position >= 0) {
     toZone.cards.splice(action.position, 0, ...cards);
   } else {
     toZone.cards.push(...cards);
@@ -725,6 +734,42 @@ function executeMulligan<T extends CardTemplate>(
 }
 
 // ============================================================================
+// Swap Card Stacks Executor
+// ============================================================================
+
+function executeSwapCardStacks<T extends CardTemplate>(
+  state: GameState<T>,
+  action: SwapCardStacksAction
+): void {
+  const zone1 = getZone(state, action.zone1);
+  const zone2 = getZone(state, action.zone2);
+
+  if (!zone1 || !zone2) return;
+
+  // Save zone1's cards to temp
+  const zone1Cards = zone1.cards.splice(0, zone1.cards.length);
+  // Move zone2's cards into zone1
+  const zone2Cards = zone2.cards.splice(0, zone2.cards.length);
+
+  for (const card of zone2Cards) {
+    card.visibility = zoneVisibility(action.zone1, zone1.config);
+    card.orientation = undefined;
+    if (zone1.config.canHaveCounters === false) clearCounters(card);
+    zone1.cards.push(card);
+  }
+
+  for (const card of zone1Cards) {
+    card.visibility = zoneVisibility(action.zone2, zone2.config);
+    card.orientation = undefined;
+    if (zone2.config.canHaveCounters === false) clearCounters(card);
+    zone2.cards.push(card);
+  }
+
+  consolidateCountersToTop(zone1);
+  consolidateCountersToTop(zone2);
+}
+
+// ============================================================================
 // Decision Executors
 // ============================================================================
 
@@ -1019,6 +1064,9 @@ export function executeAction<T extends CardTemplate>(
       break;
     case ACTION_TYPES.MULLIGAN:
       executeMulligan(state, action);
+      break;
+    case ACTION_TYPES.SWAP_CARD_STACKS:
+      executeSwapCardStacks(state, action);
       break;
   }
 

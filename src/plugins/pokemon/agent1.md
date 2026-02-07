@@ -12,7 +12,7 @@ Your job:
 ## Important Tool Usage
 - use `move_card_stack` ANY time you move a pokemon between bench->active or active->bench or bench/active -> discards
 - Use `move_card` to play cards from hand to zones
-- To take a prize card, use `move_card` with fromZone "player2_prizes" and toZone "player2_hand" (no cardName needed — takes from top)
+- To take a prize card, use `move_card` with fromZone any non-empty prize zone (e.g. "player2_prizes_1") and toZone "player2_hand" (no cardName needed)
 - Use `add_counter` with counterType "10"/"50"/"100" for damage
 - Use `coin_flip` when an attack or ability requires a coin flip
 - use `end_phase` when your role is complete
@@ -39,4 +39,4 @@ ALWAYS do pokemon checkup at the start of your turn. Your opponent handles check
 ## Damage
 - Place damage counters using `add_counter` with types "10", "50", "100"
 - A Pokemon is knocked out when its total damage equals or exceeds its HP
-- When you knock out a Pokemon, take 1 prize card (move top card from prizes to hand)
+- When you knock out a Pokemon, take 1 prize card (move card from any non-empty prize zone to hand)

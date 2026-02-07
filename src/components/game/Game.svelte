@@ -13,7 +13,7 @@
   import CounterDragOverlay from './CounterDragOverlay.svelte';
   import CoinFlip from './CoinFlip.svelte';
   import ActionPanelView from './ActionPanelView.svelte';
-  import { dragStore, startDrag, startPileDrag, updateDragPosition, endDrag, executeDrop, executeStackDrop } from './dragState.svelte';
+  import { dragStore, startPileDrag, updateDragPosition, endDrag, executeDrop, executeStackDrop } from './dragState.svelte';
   import {
     counterDragStore,
     executeCounterDrop,
@@ -21,7 +21,7 @@
     clearZoneCounters,
   } from './counterDragState.svelte';
   import { playSfx, playBgm, stopBgm, toggleMute, audioSettings } from '../../lib/audio.svelte';
-  import { runAITurn } from '../../ai';
+  import { runAITurn, MODEL_OPTIONS } from '../../ai';
   import agentsMd from '../../plugins/pokemon/agents.md?raw';
   import agent0Md from '../../plugins/pokemon/agent0.md?raw';
   const ACTION_DELAY_MS = 500;
@@ -35,10 +35,14 @@
     player2Deck: DeckList;
     lassTest?: boolean;
     playmatImage?: string;
+    aiModel?: string;
     onBackToMenu?: () => void;
   }
 
-  let { player1Deck, player2Deck, lassTest, playmatImage, onBackToMenu }: Props = $props();
+  let { player1Deck, player2Deck, lassTest, playmatImage, aiModel, onBackToMenu }: Props = $props();
+
+  // Resolve model config from selected model ID
+  const selectedModel = $derived(MODEL_OPTIONS.find(m => m.id === aiModel) ?? MODEL_OPTIONS[0]);
 
   // Plugin manager for warnings/hooks
   const pluginManager = new PluginManager<CardTemplate>();
@@ -114,6 +118,16 @@
     }
   });
 
+  // Play turnStart SFX whenever it becomes the human player's turn (not during decisions)
+  let prevActivePlayer: number | undefined;
+  $effect(() => {
+    const ap = gameState?.activePlayer;
+    if (ap === 0 && prevActivePlayer !== 0 && !gameState?.pendingDecision) {
+      playSfx('turnStart');
+    }
+    prevActivePlayer = ap;
+  });
+
   // Auto-open browse modal when a reveal decision targets the human player
   $effect(() => {
     const decision = gameState?.pendingDecision;
@@ -122,7 +136,7 @@
       const zone = gameState.zones[zoneKey];
       if (zone && zone.cards.length > 0) {
         const zoneName = zone.config.name ?? zoneKey;
-        openCardModal({ cards: [...zone.cards], zoneKey, zoneName, position: 'all', mode: 'browse', isDecision: true });
+        openCardModal({ cards: [...zone.cards], zoneKey, zoneName, allowReorder: false, shuffleOnConfirm: false, isDecision: true });
       }
     }
   });
@@ -349,33 +363,32 @@
     gameState = { ...gameState };
   }
 
-  function handleCardModal(mode: 'peek' | 'arrange', position: 'top' | 'bottom', count: number) {
+  function handlePeekTop(count: number) {
     if (!contextMenu || !gameState) return;
     const zoneCards = gameState.zones[contextMenu.zoneKey]?.cards ?? [];
-    // top = last cards in array (highest z-index), bottom = first cards
-    const cards = position === 'top' ? zoneCards.slice(-count) : zoneCards.slice(0, count);
-    openCardModal({ cards, zoneKey: contextMenu.zoneKey, zoneName: contextMenu.zoneName, position, mode });
+    const cards = zoneCards.slice(-count);
+    openCardModal({ cards, zoneKey: contextMenu.zoneKey, zoneName: contextMenu.zoneName, allowReorder: true, shuffleOnConfirm: false });
   }
 
-  function handleViewAll() {
-    if (!contextMenu || !gameState) return;
-    const zoneCards = gameState.zones[contextMenu.zoneKey]?.cards ?? [];
-    if (zoneCards.length === 0) return;
-    openCardModal({ cards: [...zoneCards], zoneKey: contextMenu.zoneKey, zoneName: contextMenu.zoneName, position: 'all', mode: 'peek' });
-  }
+  function handlePeekReorder(displayOrderCards: CardInstance<CardTemplate>[]) {
+    if (!gameState || !cardModal) return;
+    const zoneKey = cardModal.zoneKey;
+    const zone = gameState.zones[zoneKey];
+    if (!zone) return;
 
-  function handleArrangeAll() {
-    if (!contextMenu || !gameState) return;
-    const zoneCards = gameState.zones[contextMenu.zoneKey]?.cards ?? [];
-    if (zoneCards.length < 2) return;
-    openCardModal({ cards: [...zoneCards], zoneKey: contextMenu.zoneKey, zoneName: contextMenu.zoneName, position: 'all', mode: 'arrange' });
+    // displayOrderCards is top-first; reverse for zone order (bottom-to-top)
+    const modalCardIds = new Set(displayOrderCards.map(c => c.instanceId));
+    zone.cards = zone.cards.filter(c => !modalCardIds.has(c.instanceId));
+    const zoneOrder = [...displayOrderCards].reverse();
+    zone.cards.push(...zoneOrder);
+    gameState = { ...gameState };
   }
 
   function handleBrowseZone(zoneKey: string, zoneName: string) {
     if (!gameState) return;
     const zoneCards = gameState.zones[zoneKey]?.cards ?? [];
     if (zoneCards.length === 0) return;
-    openCardModal({ cards: [...zoneCards], zoneKey, zoneName, position: 'all', mode: 'browse' });
+    openCardModal({ cards: [...zoneCards], zoneKey, zoneName, allowReorder: true, shuffleOnConfirm: false });
   }
 
   function handleSearchZone() {
@@ -384,12 +397,13 @@
     const zone = gameState.zones[zoneKey];
     if (!zone || zone.cards.length === 0) return;
     const zoneName = zone.config.name ?? zoneKey;
-    openCardModal({ cards: [...zone.cards], zoneKey, zoneName, position: 'all', mode: 'search' });
+    openCardModal({ cards: [...zone.cards], zoneKey, zoneName, allowReorder: false, shuffleOnConfirm: true });
   }
 
-  async function handleSearchConfirm(selectedCards: CardInstance<CardTemplate>[]) {
+  async function handleModalConfirm(selectedCards: CardInstance<CardTemplate>[]) {
     if (!gameState || !cardModal) return;
     const fromZone = cardModal.zoneKey;
+    const shouldShuffle = cardModal.shuffleOnConfirm;
     const playerIndex = fromZone.startsWith('player1_') ? 0 : 1;
     const stagingKey = 'staging';
 
@@ -398,65 +412,22 @@
       executeAction(gameState, moveCard(playerIndex as 0 | 1, card.instanceId, fromZone, stagingKey));
     }
 
-    // Shuffle the source zone
-    playSfx('shuffle');
-    if (playmatGridRef) {
-      await playmatGridRef.shuffleZone(fromZone);
+    // Close modal first so shuffle animation is visible on the zone
+    closeCardModalStore();
+
+    // Shuffle the source zone if flagged
+    if (shouldShuffle) {
+      playSfx('shuffle');
+      if (playmatGridRef) {
+        await playmatGridRef.shuffleZone(fromZone);
+      }
+      executeAction(gameState, shuffle(playerIndex as 0 | 1, fromZone));
     }
-    executeAction(gameState, shuffle(playerIndex as 0 | 1, fromZone));
 
     const zoneName = gameState.zones[fromZone]?.config.name ?? fromZone;
     const cardNames = selectedCards.map(c => c.template.name).join(', ');
-    gameState.log.push(`[Player ${playerIndex + 1}] Searched ${zoneName} — took ${cardNames} to staging`);
+    gameState.log.push(`[Player ${playerIndex + 1}] Took ${cardNames} from ${zoneName} to staging`);
     gameState = { ...gameState };
-    closeCardModalStore();
-  }
-
-  function handleModalDragOut(card: CardInstance<CardTemplate>, fromZoneKey: string, mouseX: number, mouseY: number) {
-    closeCardModalStore();
-    startDrag(card, fromZoneKey, mouseX, mouseY);
-
-    // Mouse-based drag: temporary listeners drive the same drag system
-    function onMouseMove(e: MouseEvent) {
-      updateDragPosition(e.clientX, e.clientY);
-    }
-    function onMouseUp(e: MouseEvent) {
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
-
-      // Find zone under cursor via data-zone-key attribute
-      const el = document.elementFromPoint(e.clientX, e.clientY);
-      const zoneEl = el?.closest('[data-zone-key]') as HTMLElement | null;
-      if (zoneEl && gameState) {
-        const toZoneKey = zoneEl.dataset.zoneKey!;
-        const isHandZone = toZoneKey.includes('hand');
-        handleDrop(card.instanceId, toZoneKey, isHandZone ? undefined : 0);
-      }
-      endDrag();
-    }
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
-  }
-
-  function handleCardModalConfirm(reorderedCards: CardInstance<CardTemplate>[]) {
-    if (!gameState || !cardModal) return;
-
-    const zone = gameState.zones[cardModal.zoneKey];
-    if (!zone) return;
-
-    const count = reorderedCards.length;
-
-    if (cardModal.position === 'all') {
-      // Replace entire zone contents
-      zone.cards = reorderedCards;
-    } else if (cardModal.position === 'top') {
-      zone.cards.splice(-count, count, ...reorderedCards);
-    } else {
-      zone.cards.splice(0, count, ...reorderedCards);
-    }
-
-    gameState = { ...gameState };
-    closeCardModalStore();
   }
 
   function handleCloseCardModal() {
@@ -538,8 +509,11 @@
         const modified = pluginManager.applyReadableStateModifier(toReadableState(snapshot, 1));
         return pluginManager.formatReadableState(modified);
       },
-      execute: (action) => {
+      execute: (actionOrFactory) => {
         const result = queue.then(async () => {
+          const action = typeof actionOrFactory === 'function'
+            ? actionOrFactory(gameState!)
+            : actionOrFactory;
           action.source = ACTION_SOURCES.AI;
 
           // Block AI from ending turn with cards in staging
@@ -610,7 +584,7 @@
 
   async function triggerAITurn() {
     if (!gameState || gameState.activePlayer !== 1 || aiThinking) return;
-    const apiKey = import.meta.env.VITE_FIREWORKS_API_KEY;
+    const apiKey = import.meta.env[selectedModel.apiKeyEnv];
     if (!apiKey) return;
     aiThinking = true;
     addLog('[AI] Thinking...');
@@ -623,6 +597,8 @@
         plugin,
         heuristics: agentsMd,
         apiKey,
+        model: selectedModel.modelId,
+        provider: selectedModel.provider,
         logging: true,
       });
     } catch (e) {
@@ -637,7 +613,6 @@
     }
 
     aiThinking = false;
-    if (gameState?.activePlayer === 0) playSfx('turnStart');
   }
 
   /**
@@ -645,7 +620,7 @@
    */
   async function triggerAISetupTurn() {
     if (!gameState || gameState.activePlayer !== 1 || aiThinking) return;
-    const apiKey = import.meta.env.VITE_FIREWORKS_API_KEY;
+    const apiKey = import.meta.env[selectedModel.apiKeyEnv];
     if (!apiKey) return;
     aiThinking = true;
     addLog('[AI] Setting up...');
@@ -658,6 +633,8 @@
         plugin,
         heuristics: agent0Md,
         apiKey,
+        model: selectedModel.modelId,
+        provider: selectedModel.provider,
         logging: true,
         setupMode: true,
       });
@@ -679,7 +656,6 @@
     }
 
     aiThinking = false;
-    if (gameState?.activePlayer === 0) playSfx('turnStart');
   }
 
   /**
@@ -687,7 +663,7 @@
    */
   async function triggerAIDecisionTurn() {
     if (!gameState || aiThinking) return;
-    const apiKey = import.meta.env.VITE_FIREWORKS_API_KEY;
+    const apiKey = import.meta.env[selectedModel.apiKeyEnv];
     if (!apiKey) return;
     aiThinking = true;
     addLog('[AI] Responding to decision...');
@@ -700,6 +676,8 @@
         plugin,
         heuristics: agentsMd,
         apiKey,
+        model: selectedModel.modelId,
+        provider: selectedModel.provider,
         logging: true,
         decisionMode: true,
       });
@@ -909,7 +887,7 @@
     const opponentZone = gameState.zones[opponentZoneKey];
     if (opponentZone && opponentZone.cards.length > 0) {
       const zoneName = opponentZone.config.name ?? opponentZoneKey;
-      openCardModal({ cards: [...opponentZone.cards], zoneKey: opponentZoneKey, zoneName, position: 'all', mode: 'browse' });
+      openCardModal({ cards: [...opponentZone.cards], zoneKey: opponentZoneKey, zoneName, allowReorder: false, shuffleOnConfirm: false });
     }
 
     // If AI is the target, trigger a decision mini-turn
@@ -1154,12 +1132,7 @@
       cardCount={contextMenu.cardCount}
       zoneConfig={contextMenu.zoneConfig}
       onShuffle={handleShuffle}
-      onPeekTop={(count) => handleCardModal('peek', 'top', count)}
-      onPeekBottom={(count) => handleCardModal('peek', 'bottom', count)}
-      onArrangeTop={(count) => handleCardModal('arrange', 'top', count)}
-      onArrangeBottom={(count) => handleCardModal('arrange', 'bottom', count)}
-      onViewAll={handleViewAll}
-      onArrangeAll={handleArrangeAll}
+      onPeekTop={handlePeekTop}
       onClearCounters={handleClearCounters}
       onSetOrientation={handleSetOrientation}
       onRevealToOpponent={contextMenu.zoneKey.startsWith('player1_') && !gameState?.pendingDecision ? handleRevealToOpponent : undefined}
@@ -1170,18 +1143,17 @@
     />
   {/if}
 
-  <!-- Card Modal (Peek/Arrange) -->
+  <!-- Card Modal (Browse/Search) -->
   {#if cardModal}
     <ArrangeModal
       cards={cardModal.cards}
       zoneName={cardModal.zoneName}
-      position={cardModal.position}
-      mode={cardModal.mode}
       zoneKey={cardModal.zoneKey}
+      allowReorder={cardModal.allowReorder}
+      isDecision={cardModal.isDecision}
       {cardBack}
-      onConfirm={handleCardModalConfirm}
-      onSearchConfirm={cardModal.mode === 'search' ? handleSearchConfirm : undefined}
-      onDragOut={cardModal.mode === 'browse' ? handleModalDragOut : undefined}
+      onConfirm={!cardModal.isDecision ? handleModalConfirm : undefined}
+      onReorder={cardModal.allowReorder ? handlePeekReorder : undefined}
       onResolveDecision={cardModal.isDecision ? handleModalResolveDecision : undefined}
       onClose={cardModal.isDecision ? handleModalResolveDecision : handleCloseCardModal}
     />
@@ -1253,8 +1225,9 @@
       <div class="request-modal gbc-panel" onclick={(e) => e.stopPropagation()} onkeydown={() => {}} role="dialog" tabindex="-1">
         <div class="text-gbc-yellow text-[0.5rem] text-center py-1 px-2 bg-gbc-border">REQUEST ACTION</div>
         <form class="px-3 py-3 flex flex-col gap-2" onsubmit={(e) => { e.preventDefault(); handleRequestSubmit(); }}>
-          <label class="text-gbc-light text-[0.45rem]">Describe what the opponent should do (optional):</label>
+          <label for="request-action-input" class="text-gbc-light text-[0.45rem]">Describe what the opponent should do (optional):</label>
           <input
+            id="request-action-input"
             type="text"
             class="request-input"
             placeholder="e.g. Discard a card..."

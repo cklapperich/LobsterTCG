@@ -29,6 +29,7 @@ const audioCache = new Map<SfxKey, HTMLAudioElement>();
 
 // Background music state
 let bgmAudio: HTMLAudioElement | null = null;
+let currentThemeIndex = -1;
 
 // Preload an audio file
 function preload(key: SfxKey): HTMLAudioElement {
@@ -52,13 +53,30 @@ export function playSfx(key: SfxKey): void {
   }
 }
 
-// Start a random battle theme on loop
+// Pick a random theme index different from the current one
+function pickNextTheme(): number {
+  if (BATTLE_THEMES.length <= 1) return 0;
+  let next: number;
+  do {
+    next = Math.floor(Math.random() * BATTLE_THEMES.length);
+  } while (next === currentThemeIndex);
+  return next;
+}
+
+// Start a random battle theme, advances to a different track when done
 export function playBgm(): void {
   stopBgm();
-  const theme = BATTLE_THEMES[Math.floor(Math.random() * BATTLE_THEMES.length)];
-  bgmAudio = new Audio(theme);
-  bgmAudio.loop = true;
+  currentThemeIndex = pickNextTheme();
+  startTheme(currentThemeIndex);
+}
+
+function startTheme(index: number): void {
+  bgmAudio = new Audio(BATTLE_THEMES[index]);
   bgmAudio.volume = audioSettings.volume * 0.4; // BGM quieter than SFX
+  bgmAudio.addEventListener('ended', () => {
+    currentThemeIndex = pickNextTheme();
+    startTheme(currentThemeIndex);
+  });
   if (!audioSettings.bgmMuted) {
     bgmAudio.play().catch(() => {});
   }

@@ -24,6 +24,7 @@ import {
   resolveDecision,
   revealHand,
   mulligan,
+  swapCardStacks,
 } from './action';
 import type { Visibility } from './types';
 
@@ -34,8 +35,11 @@ import type { Visibility } from './types';
  */
 export interface ToolContext {
   playerIndex: PlayerIndex;
-  /** Execute an action and return the resulting readable state as JSON. */
-  execute: (action: Action) => Promise<string>;
+  /** Execute an action and return the resulting readable state as JSON.
+   *  Accepts a lazy factory `(state) => Action` — the factory is called inside
+   *  the serialized execution queue so card-name resolution sees the latest state
+   *  after prior parallel tool calls have completed. */
+  execute: (actionOrFactory: Action | ((state: GameState<CardTemplate>) => Action)) => Promise<string>;
   /** Get the current game state (for card name resolution, etc). */
   getState: () => GameState<CardTemplate>;
   /** Get the readable state JSON for this player. */
@@ -152,19 +156,21 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
           cardName: { type: 'string', description: 'Name of the card to move (optional — omit for face-down cards)' },
           fromZone: { type: 'string', description: 'Zone key (e.g. "player2_hand")' },
           toZone: { type: 'string', description: 'Zone key to move the card to (e.g. "player2_active")' },
-          position: { type: 'number', description: 'Optional position in the target zone (0 = top)' },
+          toPosition: { type: 'string', enum: ['top', 'bottom'], description: '"top" = top of zone (default), "bottom" = bottom of zone' },
           fromPosition: { type: 'string', description: 'Position to pick from when cardName is omitted: "top" (default), "bottom", or numeric index' },
           allowed_by_card_effect: { type: 'boolean', description: 'Set true when a card effect permits bypassing normal rules (e.g. extra energy attachment, evolution on first turn)' },
         },
         required: ['fromZone', 'toZone'],
       },
       async run(input) {
-        const cardId = input.cardName
-          ? resolveCard(ctx.getState(), input.cardName, input.fromZone)
-          : resolveCardByPosition(ctx.getState(), input.fromZone, input.fromPosition);
-        return ctx.execute({
-          ...moveCard(p, cardId, input.fromZone, input.toZone, input.position),
-          ...(input.allowed_by_card_effect && { allowed_by_card_effect: true }),
+        return ctx.execute((state) => {
+          const cardId = input.cardName
+            ? resolveCard(state, input.cardName, input.fromZone)
+            : resolveCardByPosition(state, input.fromZone, input.fromPosition);
+          return {
+            ...moveCard(p, cardId, input.fromZone, input.toZone, input.toPosition ?? 'top'),
+            ...(input.allowed_by_card_effect && { allowed_by_card_effect: true }),
+          };
         });
       },
     }),
@@ -178,7 +184,7 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
         properties: {
           fromZone: { type: 'string', description: 'Zone key to move all cards from (e.g. "player2_active")' },
           toZone: { type: 'string', description: 'Zone key to move the cards to (e.g. "player2_discard")' },
-          position: { type: 'number', description: 'Optional position in the target zone (0 = top)' },
+          toPosition: { type: 'string', enum: ['top', 'bottom'], description: '"top" = top of zone (default), "bottom" = bottom of zone' },
           allowed_by_card_effect: { type: 'boolean', description: 'Set true when a card effect permits bypassing normal rules' },
         },
         required: ['fromZone', 'toZone'],
@@ -189,9 +195,26 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
         if (zone.cards.length === 0) return `Error: zone "${input.fromZone}" is empty`;
         const cardIds = zone.cards.map(c => c.instanceId);
         return ctx.execute({
-          ...moveCardStack(p, cardIds, input.fromZone, input.toZone, input.position),
+          ...moveCardStack(p, cardIds, input.fromZone, input.toZone, input.toPosition ?? 'top'),
           ...(input.allowed_by_card_effect && { allowed_by_card_effect: true }),
         });
+      },
+    }),
+
+    // ── Swap Card Stacks ────────────────────────────────────────────
+    tool({
+      name: 'swap_card_stacks',
+      description: 'Swap all cards between two zones. Both zones exchange their entire contents atomically. Works even if one or both zones are empty.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          zone1: { type: 'string', description: 'First zone key (e.g. "player2_active")' },
+          zone2: { type: 'string', description: 'Second zone key (e.g. "player2_bench_1")' },
+        },
+        required: ['zone1', 'zone2'],
+      },
+      async run(input) {
+        return ctx.execute(swapCardStacks(p, input.zone1, input.zone2));
       },
     }),
 
@@ -214,19 +237,20 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
         required: ['cardNames', 'zone', 'position'],
       },
       async run(input) {
-        const state = ctx.getState();
-        const cardIds = input.cardNames.map((name: string) => {
-          if (name.startsWith(INSTANCE_ID_PREFIX)) return name;
-          for (const zk of Object.keys(state.zones)) {
-            try {
-              return resolveCardName(state, name, zk);
-            } catch { /* try next zone */ }
-          }
-          throw new Error(`Card "${name}" not found in any zone`);
-        });
-        return ctx.execute({
-          ...placeOnZone(p, cardIds, input.zone, input.position),
-          ...(input.allowed_by_card_effect && { allowed_by_card_effect: true }),
+        return ctx.execute((state) => {
+          const cardIds = input.cardNames.map((name: string) => {
+            if (name.startsWith(INSTANCE_ID_PREFIX)) return name;
+            for (const zk of Object.keys(state.zones)) {
+              try {
+                return resolveCardName(state, name, zk);
+              } catch { /* try next zone */ }
+            }
+            throw new Error(`Card "${name}" not found in any zone`);
+          });
+          return {
+            ...placeOnZone(p, cardIds, input.zone, input.position),
+            ...(input.allowed_by_card_effect && { allowed_by_card_effect: true }),
+          };
         });
       },
     }),
@@ -302,14 +326,16 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
         required: ['cardName', 'zone', 'visibility'],
       },
       async run(input) {
-        const cardId = resolveCard(ctx.getState(), input.cardName, input.zone);
-        const visMap: Record<string, Visibility> = {
-          public: [true, true],
-          hidden: [false, false],
-          owner_only: p === 0 ? [true, false] : [false, true],
-        };
-        const vis = visMap[input.visibility] ?? [true, true];
-        return ctx.execute(flipCard(p, cardId, vis));
+        return ctx.execute((state) => {
+          const cardId = resolveCard(state, input.cardName, input.zone);
+          const visMap: Record<string, Visibility> = {
+            public: [true, true],
+            hidden: [false, false],
+            owner_only: p === 0 ? [true, false] : [false, true],
+          };
+          const vis = visMap[input.visibility] ?? [true, true];
+          return flipCard(p, cardId, vis);
+        });
       },
     }),
 
@@ -327,8 +353,10 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
         required: ['cardName', 'zone', 'orientation'],
       },
       async run(input) {
-        const cardId = resolveCard(ctx.getState(), input.cardName, input.zone);
-        return ctx.execute(setOrientation(p, cardId, input.orientation));
+        return ctx.execute((state) => {
+          const cardId = resolveCard(state, input.cardName, input.zone);
+          return setOrientation(p, cardId, input.orientation);
+        });
       },
     }),
 
@@ -348,11 +376,13 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
         required: ['cardName', 'zone', 'counterType'],
       },
       async run(input) {
-        const cardId = resolveCard(ctx.getState(), input.cardName, input.zone);
-        const amount = input.amount ?? 1;
-        return ctx.execute({
-          ...addCounter(p, cardId, input.counterType, amount),
-          ...(input.allowed_by_card_effect && { allowed_by_card_effect: true }),
+        return ctx.execute((state) => {
+          const cardId = resolveCard(state, input.cardName, input.zone);
+          const amount = input.amount ?? 1;
+          return {
+            ...addCounter(p, cardId, input.counterType, amount),
+            ...(input.allowed_by_card_effect && { allowed_by_card_effect: true }),
+          };
         });
       },
     }),
@@ -372,9 +402,11 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
         required: ['cardName', 'zone', 'counterType'],
       },
       async run(input) {
-        const cardId = resolveCard(ctx.getState(), input.cardName, input.zone);
-        const amount = input.amount ?? 1;
-        return ctx.execute(removeCounter(p, cardId, input.counterType, amount));
+        return ctx.execute((state) => {
+          const cardId = resolveCard(state, input.cardName, input.zone);
+          const amount = input.amount ?? 1;
+          return removeCounter(p, cardId, input.counterType, amount);
+        });
       },
     }),
 
@@ -393,8 +425,10 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
         required: ['cardName', 'zone', 'counterType', 'value'],
       },
       async run(input) {
-        const cardId = resolveCard(ctx.getState(), input.cardName, input.zone);
-        return ctx.execute(setCounter(p, cardId, input.counterType, input.value));
+        return ctx.execute((state) => {
+          const cardId = resolveCard(state, input.cardName, input.zone);
+          return setCounter(p, cardId, input.counterType, input.value);
+        });
       },
     }),
 
@@ -472,11 +506,13 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
         required: ['cardNames', 'zone'],
       },
       async run(input) {
-        const cardIds = input.cardNames.map((name: string) =>
-          resolveCard(ctx.getState(), name, input.zone)
-        );
-        const to = input.to ?? 'both';
-        return ctx.execute(reveal(p, cardIds, to));
+        return ctx.execute((state) => {
+          const cardIds = input.cardNames.map((name: string) =>
+            resolveCard(state, name, input.zone)
+          );
+          const to = input.to ?? 'both';
+          return reveal(p, cardIds, to);
+        });
       },
     }),
 

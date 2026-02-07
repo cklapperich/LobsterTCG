@@ -32,6 +32,7 @@ export function createSpawnSubagentTool(
       const result = await generateText({
         model,
         maxTokens: SUBAGENT_CONFIG.MAX_TOKENS,
+        maxRetries: 0, // rate-limited fetch wrapper handles retries
         system: systemPrompt,
         tools: toAISDKTools(tools),
         maxSteps: SUBAGENT_CONFIG.MAX_STEPS,

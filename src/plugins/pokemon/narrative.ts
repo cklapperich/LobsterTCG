@@ -386,7 +386,11 @@ function condenseNames(cards: ReadableCard[]): string {
 function formatCountLine(zones: Record<string, ReadableZone>, prefix: string): string {
   const deckCount = zones[`${prefix}_deck`]?.count ?? 0;
   const discardCount = zones[`${prefix}_discard`]?.count ?? 0;
-  const prizesCount = zones[`${prefix}_prizes`]?.count ?? 0;
+  // Sum across all 6 individual prize zones
+  let prizesCount = 0;
+  for (let i = 1; i <= 6; i++) {
+    prizesCount += zones[`${prefix}_prizes_${i}`]?.count ?? 0;
+  }
   return `Deck: ${deckCount} | Discard: ${discardCount} | Prizes: ${prizesCount}`;
 }
 

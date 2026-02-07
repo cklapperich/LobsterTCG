@@ -23,6 +23,7 @@ import type {
   RevealAction,
   PeekAction,
   MulliganAction,
+  SwapCardStacksAction,
 } from './types';
 import {
   ACTION_TYPES,
@@ -45,7 +46,7 @@ export function moveCard(
   cardInstanceId: string,
   fromZone: string,
   toZone: string,
-  position?: number
+  position?: number | Position
 ): MoveCardAction {
   return { type: ACTION_TYPES.MOVE_CARD, player, cardInstanceId, fromZone, toZone, position };
 }
@@ -55,7 +56,7 @@ export function moveCardStack(
   cardInstanceIds: string[],
   fromZone: string,
   toZone: string,
-  position?: number
+  position?: number | Position
 ): MoveCardStackAction {
   return { type: ACTION_TYPES.MOVE_CARD_STACK, player, cardInstanceIds, fromZone, toZone, position };
 }
@@ -222,4 +223,8 @@ export function revealHand(player: PlayerIndex, zoneKey: string, mutual?: boolea
 
 export function mulligan(player: PlayerIndex, drawCount: number = 7): MulliganAction {
   return { type: ACTION_TYPES.MULLIGAN, player, drawCount };
+}
+
+export function swapCardStacks(player: PlayerIndex, zone1: string, zone2: string): SwapCardStacksAction {
+  return { type: ACTION_TYPES.SWAP_CARD_STACKS, player, zone1, zone2 };
 }

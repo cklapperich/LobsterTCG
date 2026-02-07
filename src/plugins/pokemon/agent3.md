@@ -8,7 +8,7 @@ Parallel tool call when able
 
 Each turn follows this order:
 2. **Main phase** — Do any of the following in any order:
-   - Play Basic Pokemon from hand to an empty bench slot (bench_1 through bench_5)
+   - Play Basic Pokemon from hand to an empty bench slot (player2_bench_1 through player2_bench_5)
    - Attach 1 Energy card from hand to a Pokemon (once per turn)
    - Evolve Pokemon (place Stage 1 on matching Basic, Stage 2 on matching Stage 1)
    - Play Trainer cards (Item cards, Supporter — only 1 Supporter per turn)
@@ -22,15 +22,23 @@ Each turn follows this order:
 - Opponent has no cards in deck
 
 ## Zone Layout
-- `hand` — Your hand of cards
-- `deck` — Your draw pile (face down)
-- `active` — Your Active Pokemon (battler)
-- `bench_1` through `bench_5` — Your Bench Pokemon
-- `discard` — Your discard pile
-- `prizes` — Your 6 prize cards (face down, take 1 when you KO an opponent Pokemon)
+Zone keys are shown in the readable state as `(zone: "...")`. ALWAYS copy the exact zone key from the state — never construct zone keys yourself.
+
+Your zones (player2):
+- `player2_hand` — Your hand of cards
+- `player2_deck` — Your draw pile (face down)
+- `player2_active` — Your Active Pokemon (battler)
+- `player2_bench_1` through `player2_bench_5` — Your Bench Pokemon
+- `player2_discard` — Your discard pile
+- `player2_prizes_1` through `player2_prizes_6` — Your 6 prize cards (face down, 1 card each, take 1 when you KO an opponent Pokemon)
+- `player2_lost_zone` — Removed from game
+
+Opponent zones (player1):
+- `player1_hand`, `player1_deck`, `player1_active`, `player1_bench_1` through `player1_bench_5`, `player1_discard`, `player1_prizes_1` through `player1_prizes_6`, `player1_lost_zone`
+
+Shared zones:
 - `stadium` — Shared stadium zone
 - `staging` — Shared staging area for cards being played/resolved
-- `lost_zone` — Removed from game
 
 ## Key Rules
 - Only Basic Pokemon can be placed on empty field zones (active, bench slots)
@@ -60,7 +68,7 @@ Status conditions are tracked via card orientation (just like the real game wher
 ## Damage
 - Place damage counters using `add_counter` with types "10", "50", "100"
 - A Pokemon is knocked out when its total damage equals or exceeds its HP
-- When you knock out a Pokemon, take 1 prize card (move top card from prizes to hand)
+- When you knock out a Pokemon, take 1 prize card (move card from any non-empty prize zone to hand)
 
 ## Strategy Guidelines
 - Always draw at the start of your turn
@@ -75,7 +83,7 @@ Status conditions are tracked via card orientation (just like the real game wher
 ## Important Tool Usage
 - use `move_card_stack` ANY time you move a pokemon between bench->active or active->bench or bench/active -> discards
 - Use `move_card` to play cards from hand to zones
-- To take a prize card, use `move_card` with fromZone "player2_prizes" and toZone "player2_hand" (no cardName needed — takes from top)
+- To take a prize card, use `move_card` with fromZone any non-empty prize zone (e.g. "player2_prizes_1") and toZone "player2_hand" (no cardName needed)
 - Use `add_counter` with counterType "10"/"50"/"100" for damage
 - Use `declare_attack` to log attack declarations
 - Use `declare_retreat` to log retreat declarations

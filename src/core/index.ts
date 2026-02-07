@@ -75,4 +75,5 @@ export {
   resolveDecision,
   revealHand,
   mulligan,
+  swapCardStacks,
 } from './action';
