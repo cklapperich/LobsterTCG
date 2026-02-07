@@ -22,8 +22,7 @@
   } from './counterDragState.svelte';
   import { playSfx, playBgm, stopBgm, toggleMute, audioSettings } from '../../lib/audio.svelte';
   import { runAITurn, MODEL_OPTIONS } from '../../ai';
-  import agentsMd from '../../plugins/pokemon/agents.md?raw';
-  import agent0Md from '../../plugins/pokemon/agent0.md?raw';
+  import { PROMPT_FULL_TURN, PROMPT_SETUP } from '../../plugins/pokemon/prompt-builder';
   const ACTION_DELAY_MS = 500;
   // gameLog store no longer used - log lives in gameState.log
   import { contextMenuStore, openContextMenu, closeContextMenu as closeContextMenuStore } from './contextMenu.svelte';
@@ -595,7 +594,7 @@
       await runAITurn({
         context: ctx,
         plugin,
-        heuristics: agentsMd,
+        heuristics: PROMPT_FULL_TURN,
         apiKey,
         model: selectedModel.modelId,
         provider: selectedModel.provider,
@@ -631,7 +630,7 @@
       await runAITurn({
         context: ctx,
         plugin,
-        heuristics: agent0Md,
+        heuristics: PROMPT_SETUP,
         apiKey,
         model: selectedModel.modelId,
         provider: selectedModel.provider,
@@ -674,7 +673,7 @@
       await runAITurn({
         context: ctx,
         plugin,
-        heuristics: agentsMd,
+        heuristics: PROMPT_FULL_TURN,
         apiKey,
         model: selectedModel.modelId,
         provider: selectedModel.provider,
