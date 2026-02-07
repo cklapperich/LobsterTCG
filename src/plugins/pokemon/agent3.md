@@ -29,6 +29,7 @@ Each turn follows this order:
 - `discard` — Your discard pile
 - `prizes` — Your 6 prize cards (face down, take 1 when you KO an opponent Pokemon)
 - `stadium` — Shared stadium zone
+- `staging` — Shared staging area for cards being played/resolved
 - `lost_zone` — Removed from game
 
 ## Key Rules

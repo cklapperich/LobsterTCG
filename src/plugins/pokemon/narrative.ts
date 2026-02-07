@@ -122,7 +122,7 @@ function collectUniqueCards(readable: ReadableGameState): ReadableCard[] {
 /**
  * Format a single card's full reference entry.
  */
-function formatCardReference(card: ReadableCard): string[] {
+export function formatCardReference(card: ReadableCard): string[] {
   const lines: string[] = [];
   const supertype = card.supertype as string | undefined;
 
@@ -280,9 +280,8 @@ function formatBoard(readable: ReadableGameState, playerPrefix: string): string[
     }
   }
 
-  // Staging (only if non-empty)
-  const stagingKey = `${playerPrefix}_staging`;
-  const staging = zones[stagingKey];
+  // Staging (shared zone, only if non-empty)
+  const staging = zones['staging'];
   if (staging && staging.count > 0) {
     if (staging.cards.length > 0) {
       lines.push(`Staging: ${condenseNames(staging.cards)}`);
@@ -501,11 +500,9 @@ function getTopCard(zone: ReadableZone | undefined): ReadableCard | undefined {
 
 function formatStadium(zones: Record<string, ReadableZone>): string[] {
   const lines: string[] = [];
-  for (const [key, zone] of Object.entries(zones)) {
-    if (!key.endsWith('_stadium')) continue;
-    if (zone.count === 0) continue;
-
-    for (const card of zone.cards) {
+  const stadium = zones['stadium'];
+  if (stadium && stadium.count > 0) {
+    for (const card of stadium.cards) {
       lines.push(card.name);
     }
   }

@@ -17,7 +17,9 @@
 
 {#each panels as panel (panel.id)}
   <div class="gbc-panel action-panel">
-    <div class="panel-header">{panel.title}</div>
+    {#if panel.title}
+      <div class="panel-header">{panel.title}</div>
+    {/if}
     {#if panel.buttons.length > 0}
       <div class="panel-buttons">
         {#each panel.buttons as btn (btn.id)}

@@ -1,7 +1,7 @@
 import type { CardTemplate, PlayerIndex, Action } from './types';
 import type { GameState } from './types';
 import { INSTANCE_ID_PREFIX, POSITIONS, ORIENTATIONS, REVEAL_TARGETS } from './types';
-import { resolveCardName } from './readable';
+import { resolveCardName, formatCardInventory } from './readable';
 import {
   draw,
   moveCard,
@@ -18,7 +18,6 @@ import {
   flipCard,
   setOrientation,
   placeOnZone,
-  searchZone,
   moveCardStack,
   declareVictory,
   createDecision,
@@ -42,6 +41,8 @@ export interface ToolContext {
   getReadableState: () => string;
   /** True when this context is for a decision mini-turn response. */
   isDecisionResponse?: boolean;
+  /** Format a card template for search results. Plugin-provided for rich output. */
+  formatCardForSearch?: (template: CardTemplate) => string;
   /** Set by tools to abort remaining calls in the current AI SDK step. */
   batchAbortReason?: string;
 }
@@ -242,25 +243,37 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
     // ── Search Zone ────────────────────────────────────────────────
     tool({
       name: 'search_zone',
-      description: 'Search a zone for cards, optionally filtering by name.',
+      description: 'Search a zone to see all cards and their full details. Read-only — does not modify game state. After reviewing, use move_card to take cards, then shuffle the zone.',
       inputSchema: {
         type: 'object' as const,
         properties: {
           zone: { type: 'string', description: 'Zone key to search (e.g. "player2_deck")' },
-          filter: { type: 'string', description: 'Optional filter string to match card names' },
-          count: { type: 'number', description: 'Max number of results' },
-          fromPosition: { type: 'string', enum: [POSITIONS.TOP, POSITIONS.BOTTOM], description: 'Search from top or bottom' },
         },
         required: ['zone'],
       },
-      async run(input) {
-        return ctx.execute(
-          searchZone(p, input.zone, {
-            filter: input.filter,
-            count: input.count,
-            fromPosition: input.fromPosition,
-          }),
-        );
+      run(input) {
+        const state = ctx.getState();
+        const zoneKey = input.zone;
+        const zone = state.zones[zoneKey];
+        if (!zone) return `Error: zone "${zoneKey}" not found`;
+        if (zone.cards.length === 0) return `Zone "${zoneKey}" is empty`;
+
+        const templates = zone.cards.map(c => c.template);
+        const inventory = formatCardInventory(templates, ctx.formatCardForSearch);
+        const uniqueCount = new Set(templates.map(t => t.name)).size;
+
+        const lines: string[] = [
+          `=== SEARCH: ${zone.config.name ?? zoneKey} (${zone.cards.length} cards, ${uniqueCount} unique) ===`,
+          '',
+          inventory,
+          '',
+          '---',
+          `You are resolving a zone search. Review the cards above and select which to take.`,
+          `Use move_card with fromZone="${zoneKey}" and cardName="<name>" to move cards to your hand or the appropriate zone based on the card effect.`,
+          `Then call shuffle with zone="${zoneKey}" to shuffle the zone.`,
+        ];
+
+        return lines.join('\n');
       },
     }),
 

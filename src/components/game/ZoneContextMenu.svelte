@@ -21,6 +21,7 @@
     onRevealToOpponent?: () => void;
     onRevealBothHands?: () => void;
     onMovePile?: () => void;
+    onSearch?: () => void;
     onClose: () => void;
   }
 
@@ -42,6 +43,7 @@
     onRevealToOpponent,
     onRevealBothHands,
     onMovePile,
+    onSearch,
     onClose,
   }: Props = $props();
 
@@ -100,6 +102,12 @@
   {#if zoneConfig.shuffleable}
     <button class="menu-item" onclick={() => handleAction(onShuffle)} disabled={cardCount < 2}>
       Shuffle
+    </button>
+  {/if}
+
+  {#if onSearch && cardCount > 0}
+    <button class="menu-item" onclick={() => handleAction(onSearch)}>
+      Search
     </button>
   {/if}
 

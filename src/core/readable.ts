@@ -292,6 +292,40 @@ function isEmptyValue(value: unknown): boolean {
 }
 
 /**
+ * Format a deduplicated inventory of cards for AI consumption.
+ * Groups cards by template name, formats each unique card once
+ * (via optional plugin formatter or JSON fallback), and appends "x{count}".
+ *
+ * Used by search_zone tool and can be prepended to AI prompts as a decklist.
+ */
+export function formatCardInventory(
+  templates: CardTemplate[],
+  formatter?: (template: CardTemplate) => string,
+): string {
+  const seen = new Map<string, { template: CardTemplate; count: number }>();
+  for (const t of templates) {
+    const entry = seen.get(t.name);
+    if (entry) {
+      entry.count++;
+    } else {
+      seen.set(t.name, { template: t, count: 1 });
+    }
+  }
+
+  const lines: string[] = [];
+  for (const [name, { template, count }] of seen) {
+    const qty = count > 1 ? ` x${count}` : '';
+    if (formatter) {
+      lines.push(`${formatter(template)}${qty}`);
+    } else {
+      const { imageUrl, imageUrlHiRes, ...fields } = template as unknown as Record<string, unknown>;
+      lines.push(`${name}${qty} — ${JSON.stringify(fields)}`);
+    }
+  }
+  return lines.join('\n');
+}
+
+/**
  * Resolve a readable card name back to an instanceId within a zone.
  * Uses the same disambiguation logic as convertZone, so display names
  * produced by toReadableState() round-trip correctly.

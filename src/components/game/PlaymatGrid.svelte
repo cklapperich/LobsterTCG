@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Playmat, CardInstance, GameState, CardTemplate, CounterDefinition, ZoneConfig, ActionPanel } from '../../core';
+  import type { Playmat, CardInstance, GameState, CardTemplate, CounterDefinition, ZoneConfig, ActionPanel, PlaymatSlot } from '../../core';
   import { VISIBILITY } from '../../core';
   import Zone from './Zone.svelte';
   import ActionPanelView from './ActionPanelView.svelte';
@@ -46,6 +46,16 @@
 
   const layout = $derived(playmat.layout);
 
+  // Dynamic grid template from columnScales
+  const gridTemplateColumns = $derived.by(() => {
+    const scales = layout.columnScales ?? Array(layout.cols).fill(1.0);
+    return scales.map(s => `calc((var(--spacing-card-w) + 1.5rem) * ${s})`).join(' ');
+  });
+
+  const gridTemplateRows = $derived.by(() => {
+    return (layout.rowHeights ?? Array(layout.rows).fill('auto')).join(' ');
+  });
+
   // Build slot ID -> player index lookup from playerSlots
   const slotToPlayer = $derived.by(() => {
     const map: Record<string, 0 | 1> = {};
@@ -59,38 +69,84 @@
     return map;
   });
 
-  // Get zone by slot - uses correct player index based on slot ownership
+  // Group slots by (row, group) — compute col span from min/max col of slots
+  type SlotGroup = { key: string; row: number; col: number; colSpan: number; groupCols: number; groupRows: number; slots: PlaymatSlot[] };
+
+  const processedSlots = $derived.by(() => {
+    const grouped: SlotGroup[] = [];
+    const standalone: PlaymatSlot[] = [];
+    const groupMap = new Map<string, SlotGroup>();
+
+    for (const slot of layout.slots) {
+      if (slot.group) {
+        const key = `${slot.position.row},${slot.group}`;
+        let group = groupMap.get(key);
+        if (!group) {
+          group = { key, row: slot.position.row, col: slot.position.col, colSpan: 1, groupCols: 1, groupRows: 1, slots: [] };
+          groupMap.set(key, group);
+          grouped.push(group);
+        }
+        group.slots.push(slot);
+        // Update col span from min/max col
+        const minCol = Math.min(group.col, slot.position.col);
+        const maxCol = Math.max(group.col + group.colSpan - 1, slot.position.col);
+        group.col = minCol;
+        group.colSpan = maxCol - minCol + 1;
+        // Update internal grid dimensions from groupRow/groupCol
+        if (slot.groupRow !== undefined) group.groupRows = Math.max(group.groupRows, slot.groupRow + 1);
+        if (slot.groupCol !== undefined) group.groupCols = Math.max(group.groupCols, slot.groupCol + 1);
+      } else {
+        standalone.push(slot);
+      }
+    }
+
+    return { grouped, standalone };
+  });
+
+  // Get zone by slot - shared zones use bare key, per-player zones use player{N}_ prefix
   function getZone(slot: { id: string; zoneId: string }) {
+    const sharedZone = gameState.zones[slot.zoneId];
+    if (sharedZone) return sharedZone;
+
     const playerIndex = slotToPlayer[slot.id] ?? 0;
     const zoneKey = `player${playerIndex + 1}_${slot.zoneId}`;
     return gameState.zones[zoneKey];
   }
-
-  // Get staging zone
-  const stagingZone = $derived(gameState.zones['player1_staging']);
-  const stagingHasCards = $derived(stagingZone?.cards.length > 0);
 </script>
 
 <div
   class="playmat-grid"
   style="
-    --cols: {layout.cols};
-    --rows: {layout.rows};
+    grid-template-columns: {gridTemplateColumns};
+    grid-template-rows: {gridTemplateRows};
   "
 >
-  {#each layout.slots as slot (slot.id)}
+  <!-- Standalone slots (no group) -->
+  {#each processedSlots.standalone as slot (slot.id)}
     {@const zone = getZone(slot)}
     {#if zone}
       {@const isHandZone = slot.zoneId === 'hand'}
+      {@const isStagingZone = slot.zoneId === 'staging'}
+      {@const isStadiumZone = slot.zoneId === 'stadium'}
+      {@const isActiveZone = slot.zoneId === 'active'}
+      {@const isMidZone = isStagingZone || isStadiumZone}
+      {@const isP1Field = slotToPlayer[slot.id] === 0 && !isHandZone}
       {@const isPublic = zone.config.defaultVisibility[0] && zone.config.defaultVisibility[1]}
       {@const isBrowsable = onBrowse && isPublic && (slot.stackDirection === 'none' || !slot.stackDirection)}
       <div
         class="grid-slot"
         class:hand-zone={isHandZone}
+        class:staging-slot={isStagingZone}
+        class:has-cards={isStagingZone && zone.cards.length > 0}
         class:stack-up={slot.stackDirection === 'up'}
+        class:active-zone={isActiveZone}
+        class:mid-zone={isMidZone}
+        class:p1-field={isP1Field}
         style="
           grid-column: {slot.position.col + 1} / span {slot.position.colSpan ?? 1};
           grid-row: {slot.position.row + 1} / span {slot.position.rowSpan ?? 1};
+          --zone-scale: {slot.scale ?? 1};
+          {slot.align ? `align-self: ${slot.align};` : ''}
         "
       >
         <Zone
@@ -111,11 +167,55 @@
     {/if}
   {/each}
 
-  <!-- Attacks panel - left of p1_active (row 1, col 2) -->
+  <!-- Grouped slots (same row + group name → sub-grid container) -->
+  {#each processedSlots.grouped as group (group.key)}
+    {@const isP1Group = group.slots.some(s => slotToPlayer[s.id] === 0)}
+    {@const hasExplicitPlacement = group.slots.some(s => s.groupRow !== undefined || s.groupCol !== undefined)}
+    <div
+      class="grid-slot zone-group"
+      class:p1-field={isP1Group}
+      style="
+        grid-column: {group.col + 1} / span {group.colSpan};
+        grid-row: {group.row + 1};
+        --zone-scale: {group.slots[0]?.scale ?? 1};
+        {hasExplicitPlacement ? `grid-template-columns: repeat(${group.groupCols}, 1fr);` : ''}
+      "
+    >
+      {#each group.slots as slot (slot.id)}
+        {@const zone = getZone(slot)}
+        {#if zone}
+          {@const isPublic = zone.config.defaultVisibility[0] && zone.config.defaultVisibility[1]}
+          {@const isBrowsable = onBrowse && isPublic && (slot.stackDirection === 'none' || !slot.stackDirection)}
+          {@const hasPlacement = slot.groupRow !== undefined || slot.groupCol !== undefined}
+          <div
+            class="zone-group-item"
+            style="{hasPlacement ? `grid-row: ${(slot.groupRow ?? 0) + 1}; grid-column: ${(slot.groupCol ?? 0) + 1};` : ''}"
+          >
+            <Zone
+              bind:this={zoneRefs[zone.key]}
+              {zone}
+              {slot}
+              {cardBack}
+              {counterDefinitions}
+              {renderFace}
+              {onDrop}
+              {onPreview}
+              {onToggleVisibility}
+              {onZoneContextMenu}
+              {onCounterDrop}
+              onBrowse={isBrowsable ? onBrowse : undefined}
+            />
+          </div>
+        {/if}
+      {/each}
+    </div>
+  {/each}
+
+  <!-- Attacks panel -->
   {#if attacksPanel && onAttackClick}
     <div
       class="grid-slot attacks-slot"
-      style="grid-column: 3; grid-row: 2;"
+      style="grid-column: 1; grid-row: 4;"
     >
       <ActionPanelView
         panels={[attacksPanel]}
@@ -124,28 +224,6 @@
     </div>
   {/if}
 
-  <!-- Staging zone - always present, in extra row below playmat (columns 7-9) -->
-  {#if stagingZone}
-    <div
-      class="grid-slot staging-slot"
-      class:has-cards={stagingHasCards}
-      style="grid-column: 9 / span 3; grid-row: {layout.rows};"
-    >
-      <Zone
-        bind:this={zoneRefs[stagingZone.key]}
-        zone={stagingZone}
-        slot={{ id: 'staging', zoneId: 'staging', position: { row: layout.rows, col: 0 }, stackDirection: 'down' }}
-        {cardBack}
-        {counterDefinitions}
-        {renderFace}
-        {onDrop}
-        {onPreview}
-        {onToggleVisibility}
-        {onZoneContextMenu}
-        {onCounterDrop}
-      />
-    </div>
-  {/if}
 </div>
 
 <style>
@@ -153,10 +231,8 @@
 
   .playmat-grid {
     display: grid;
-    grid-template-columns: repeat(var(--cols), calc(var(--spacing-card-w) + 1.5rem));
-    grid-template-rows: repeat(calc(var(--rows) + 1), auto);
-    column-gap: 0.25rem;
-    row-gap: 0.5rem;
+    column-gap: 0;
+    row-gap: 0;
     padding: 0.5rem;
   }
 
@@ -184,6 +260,28 @@
     @apply border-0;
   }
 
+  .grid-slot.active-zone {
+    overflow: visible;
+    z-index: 10;
+  }
+
+  .grid-slot.mid-zone {
+    overflow: visible;
+    z-index: 5;
+  }
+
+  .grid-slot.p1-field {
+    align-self: end;
+  }
+
+  .zone-group {
+    display: grid;
+    gap: 0;
+    align-self: start;
+    align-items: center;
+    justify-items: center;
+  }
+
   .attacks-slot {
     @apply self-center;
     overflow: hidden;
@@ -203,9 +301,8 @@
 
   @media (max-width: 1024px) {
     .playmat-grid {
-      grid-template-columns: repeat(var(--cols), calc(7rem + 1.5rem));
-      column-gap: 0.125rem;
-      row-gap: 0.25rem;
+      column-gap: 0;
+      row-gap: 0;
       padding: 0.25rem;
     }
   }

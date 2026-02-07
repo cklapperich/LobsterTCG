@@ -28,6 +28,7 @@ Each turn follows this order:
 - `discard` — Your discard pile
 - `prizes` — Your 6 prize cards (face down, take 1 when you KO an opponent Pokemon)
 - `stadium` — Shared stadium zone
+- `staging` — Shared staging area for cards being played/resolved
 - `lost_zone` — Removed from game
 
 ## Key Rules
@@ -106,3 +107,5 @@ Sometimes during a turn, one player needs the other to make a decision (e.g., af
 ### Important:
 - During a decision mini-turn, you do NOT have access to `end_turn` — use `resolve_decision` instead
 - If you have nothing to do for a decision, just call `resolve_decision` immediately
+- NEVER end the turn unless 'staging' is empty!
+- ALWAYS move trainer cards to staging until you're done resolving

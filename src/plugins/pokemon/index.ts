@@ -25,6 +25,7 @@ import {
   getTemplate as getCardTemplate,
 } from './cards';
 import { isBasicPokemon, isFieldZone } from './helpers';
+import { formatCardReference } from './narrative';
 import {
   SUPERTYPES,
   STATUS_TO_DEGREES,
@@ -264,14 +265,12 @@ export function flipFieldCardsFaceUp(state: GameState<CardTemplate>): void {
  * - dice_roll: Pokemon uses coins, not dice
  * - flip_card: visibility is managed by zones, not manual flips
  * - declare_victory: victory is determined by prize cards, deck-out, or bench-out
- * - search_zone: handled by peek instead for AI
  * - place_on_zone: not a standard Pokemon action for AI
  */
 const HIDDEN_DEFAULT_TOOLS: Set<string> = new Set([
   ACTION_TYPES.DICE_ROLL,
   ACTION_TYPES.FLIP_CARD,
   ACTION_TYPES.DECLARE_VICTORY,
-  ACTION_TYPES.SEARCH_ZONE,
   ACTION_TYPES.PLACE_ON_ZONE,
   ACTION_TYPES.SET_ORIENTATION,
 ]);
@@ -375,8 +374,8 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
 
   // Decision-aware filtering
   if (isDecision) {
-    // During a decision mini-turn: hide end_turn and create_decision, show resolve_decision
-    tools = tools.filter(t => t.name !== ACTION_TYPES.END_TURN && t.name !== ACTION_TYPES.CREATE_DECISION);
+    // During a decision mini-turn: hide end_turn, create_decision, and search_zone
+    tools = tools.filter(t => t.name !== ACTION_TYPES.END_TURN && t.name !== ACTION_TYPES.CREATE_DECISION && t.name !== ACTION_TYPES.SEARCH_ZONE);
   } else {
     // Normal turn: hide resolve_decision, show end_turn and create_decision
     tools = tools.filter(t => t.name !== ACTION_TYPES.RESOLVE_DECISION);
@@ -516,10 +515,10 @@ function getActionPanels(state: GameState<PokemonCardTemplate>, player: PlayerIn
     emptyMessage: 'No active Pokemon',
   });
 
-  // MULLIGAN panel
+  // MULLIGAN panel (no title — button label is self-explanatory)
   panels.push({
     id: 'mulligan',
-    title: 'MULLIGAN',
+    title: '',
     buttons: [{
       id: 'mulligan',
       label: 'Mulligan',
@@ -568,6 +567,7 @@ export const plugin: GamePlugin<PokemonCardTemplate> = {
   getCounterDefinitions,
   getCoinFront,
   getCoinBack,
+  formatCardForSearch: (template) => formatCardReference(template as any).join('\n'),
   listTools: createPokemonTools,
   getActionPanels,
   onActionPanelClick,

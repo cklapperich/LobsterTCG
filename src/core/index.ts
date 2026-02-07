@@ -13,7 +13,6 @@ export {
   getCardName,
   checkOpponentZone,
   zoneVisibility,
-  STAGING_ZONE_CONFIG,
 } from './engine';
 
 // Re-export GameLoop
@@ -38,7 +37,7 @@ export type {
 } from './plugin';
 
 // Re-export readable state conversion
-export { toReadableState, resolveCardName } from './readable';
+export { toReadableState, resolveCardName, formatCardInventory } from './readable';
 export type { ReadableCard, ReadableZone, ReadableGameState, ReadableAction, ReadableTurn } from './readable';
 
 // Re-export AI tools

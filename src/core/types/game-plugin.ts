@@ -33,6 +33,9 @@ export interface GamePlugin<T extends CardTemplate = CardTemplate> {
   /** Get coin back image URL (optional) */
   getCoinBack?(): string;
 
+  /** Format a card template for search results (AI consumption). Falls back to JSON if not provided. */
+  formatCardForSearch?(template: T): string;
+
   /** Return Anthropic SDK-compatible tools for AI agents. */
   listTools?(ctx: ToolContext): RunnableTool[];
 

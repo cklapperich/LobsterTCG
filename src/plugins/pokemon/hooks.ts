@@ -65,7 +65,7 @@ function isSupporterPlayed(state: PokemonState, action: Action): boolean {
     return false;
   }
 
-  if (!fromZone?.endsWith('_hand') || !toZone?.endsWith('_staging')) return false;
+  if (!fromZone?.endsWith('_hand') || toZone !== 'staging') return false;
   const template = getTemplateForCard(state, cardInstanceId);
   return !!template && isSupporter(template);
 }
@@ -407,7 +407,7 @@ function logTrainerText(state: PokemonState, action: Action): PostHookResult {
     return {};
   }
 
-  if (!fromZone?.endsWith('_hand') || !toZone?.endsWith('_staging')) return {};
+  if (!fromZone?.endsWith('_hand') || toZone !== 'staging') return {};
 
   const template = getTemplateForCard(state, cardInstanceId);
   if (!template || template.supertype !== SUPERTYPES.TRAINER) return {};

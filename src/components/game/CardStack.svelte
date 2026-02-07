@@ -6,6 +6,7 @@
     cards: CardInstance<CardTemplate>[];
     stackDirection: 'none' | 'down' | 'up' | 'right' | 'fan';
     fixedSize?: boolean;
+    scale?: number;
     zoneKey: string;
     cardBack?: string;
     counterDefinitions?: CounterDefinition[];
@@ -20,6 +21,7 @@
     cards,
     stackDirection,
     fixedSize = false,
+    scale = 1,
     zoneKey,
     cardBack,
     counterDefinitions = [],
@@ -89,7 +91,7 @@
   );
 
   // Calculate stack size based on card count and offset (1.5rem = 24px at base, but use rem)
-  const stackOffset = 1.5; // rem
+  const stackOffset = $derived(1.5 * scale); // rem, scaled
   const extraHeight = $derived(Math.max(0, cards.length - 1) * stackOffset);
   const extraWidth = $derived(Math.max(0, cards.length - 1) * stackOffset);
 
@@ -97,44 +99,39 @@
   const stackStyle = $derived.by(() => {
     if (fixedSize) return '';
     if (stackDirection === 'down') {
-      return `min-height: calc(var(--spacing-card-w) * 1.4 + ${extraHeight}rem)`;
+      return `min-height: calc(var(--spacing-card-w) * ${scale} * 1.4 + ${extraHeight}rem)`;
     }
     if (stackDirection === 'up') {
-      return `min-height: calc(var(--spacing-card-w) * 1.4 + ${extraHeight}rem)`;
+      return `min-height: calc(var(--spacing-card-w) * ${scale} * 1.4 + ${extraHeight}rem)`;
     }
     if (stackDirection === 'right') {
-      return `min-width: calc(var(--spacing-card-w) + ${extraWidth}rem)`;
+      return `min-width: calc(var(--spacing-card-w) * ${scale} + ${extraWidth}rem)`;
     }
     // Fan layout fills container, no min-width needed
     return '';
   });
 
-  // Measure container width and get card width from CSS variable
+  // Measure container width and get card width from CSS variable (scaled)
   $effect(() => {
     if (!stackEl) return;
 
-    // Get card width from CSS variable
-    const styles = getComputedStyle(stackEl);
-    const cardWidthValue = styles.getPropertyValue('--spacing-card-w').trim();
-    if (cardWidthValue) {
-      // Parse rem value to pixels
-      const remValue = parseFloat(cardWidthValue);
-      const rootFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
-      cardWidth = remValue * rootFontSize;
+    function measureCardWidth() {
+      const styles = getComputedStyle(stackEl);
+      const cardWidthValue = styles.getPropertyValue('--spacing-card-w').trim();
+      if (cardWidthValue) {
+        const remValue = parseFloat(cardWidthValue);
+        const rootFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
+        cardWidth = remValue * rootFontSize * scale;
+      }
     }
+
+    measureCardWidth();
 
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
         if (entry.target === stackEl) {
           containerWidth = entry.contentRect.width;
-          // Re-check card width on resize (responsive breakpoints may change it)
-          const styles = getComputedStyle(stackEl);
-          const cardWidthValue = styles.getPropertyValue('--spacing-card-w').trim();
-          if (cardWidthValue) {
-            const remValue = parseFloat(cardWidthValue);
-            const rootFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
-            cardWidth = remValue * rootFontSize;
-          }
+          measureCardWidth();
         }
       }
     });
@@ -160,7 +157,7 @@
       class:offset-right={stackDirection === 'right'}
       class:offset-fan={stackDirection === 'fan'}
       class:animate-overhand-lift={isInPacket}
-      style="--i: {i}; --fan-offset: {fanOffset}px; z-index: {isInPacket ? 200 : i + 1}"
+      style="--i: {i}; --fan-offset: {fanOffset}px; --stack-offset: {stackOffset}rem; z-index: {isInPacket ? 200 : i + 1}"
     >
       <Card
         {card}
@@ -184,8 +181,8 @@
 
   .card-stack {
     @apply relative;
-    min-width: var(--spacing-card-w);
-    min-height: calc(var(--spacing-card-w) * 1.4);
+    min-width: calc(var(--spacing-card-w) * var(--zone-scale, 1));
+    min-height: calc(var(--spacing-card-w) * var(--zone-scale, 1) * 1.4);
   }
 
   .stack-card {
@@ -195,19 +192,19 @@
   }
 
   .stack-card.offset-down {
-    top: calc(var(--i) * 1.5rem);
+    top: calc(var(--i) * var(--stack-offset, 1.5rem));
     left: 0;
   }
 
   .stack-card.offset-up {
     top: auto;
-    bottom: calc(var(--i) * 1.5rem);
+    bottom: calc(var(--i) * var(--stack-offset, 1.5rem));
     left: 0;
   }
 
   .stack-card.offset-right {
     top: 0;
-    left: calc(var(--i) * 1.5rem);
+    left: calc(var(--i) * var(--stack-offset, 1.5rem));
   }
 
   /* Fan layout: cards positioned with dynamic offset */
