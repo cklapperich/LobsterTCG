@@ -1,0 +1,109 @@
+
+# AI Behavioral Issues
+
+1. AI doesn't realize playing Iono could help it win??
+2. AI discarded 2 energy not one for Diancie's effect
+3. AI doesn't realize requirements for playing a card
+
+
+[thinking] The user wants me to execute a plan for Player 2's turn. Let me analyze the current state and the plan provided.
+
+Current state:
+- Turn 4, Player 2's turn, Phase: playing
+- Player 2 Active: Psyduck with 1 Water Energy attached
+- Player 2 Bench 1: Squirtle (no energy)
+- Player 2 Hand: Water Energy x5, Switch, Psyduck, Copycat (8 cards)
+- Player 2 Deck: 41, Discard: 2 (Nest Ball, Hau), Prizes: 6
+
+Opponent:
+- Active: Farfetch'd (70/80 HP, 10 damage) with Fire Energy
+- Bench 1: Charmeleon with Fire Energy and Charmander attached (evolution stack)
+- Bench 2: Charmander
+- Bench 3: Farfetch'd
+- Hand: 6 cards
+
+The plan provided is:
+1. Play Psyduck from hand to bench slot 2.
+2. Attach Water Energy to Squirtle on bench.
+3. Play Copycat (shuffle hand into deck, draw 6 cards).
+4. Attack with Psyduck using Headache (10 damage + coin flip for trainer lock).
+5. End turn.
+
+Let me execute this step by step.
+
+Step 1: Play Psyduck from hand to bench slot 2 (player2_bench_2)
+- Use move_card_stack to move Psyduck from player2_hand to player2_bench_2
+
+Step 2: Attach Water Energy to Squirtle on bench (player2_bench_1)
+- Use move_card_stack to move Water Energy from player2_hand to player2_bench_1 (attaches underneath)
+
+Step 3: Play Copycat
+- This is a Supporter card. Move it to staging first? Or just resolve it.
+- The effect is: Shuffle your hand into your deck. Then, draw a card for each card in your opponent's hand.
+- Opponent has 6 cards in hand.
+- So I need to: move Copycat to staging/discarded, then shuffle hand into deck, then draw 6 cards.
+
+Wait, looking at the log, when Player 1 played Copycat:
+- [Player 1] Moved Copycat from Hand to Discard Pile
+- Then later: [Player 1] Moved Nidoran♀ from Deck to Hand, [Player 1] Moved Fire Energy from Deck to Hand
+
+So the sequence is: Move Copycat to discard, then shuffle hand into deck, then draw cards.
+
+But actually, looking more carefully at the log:
+- [Player 1] Moved Copycat from Staging to Discard Pile
+- [Player 1] Moved Charmeleon from Hand to Staging
+- [Player 1] Moved Copycat from Discard Pile to Hand
+- [Player 1] Moved Timer Ball from Discard Pile to Hand
+- [Player 1] Moved Timer Ball from Hand to Discard Pile
+- [Player 1] Moved Copycat from Hand to Discard Pile
+- [Player 1] Moved Charmeleon from Staging to Hand
+- [Player 1] Moved Charmander from Hand to Bench 2
+- [Player 1] Moved Farfetch'd from Hand to Bench 3
+- [Player 1] Moved Charmeleon from Hand to Bench 1
+- [Player 1] Moved Nidoran♀ from Deck to Hand
+- [Player 1] Moved Fire Energy from Deck to Hand
+- [Player 1] Ended turn
+
+This is confusing. It looks like they might have used Copycat to recycle cards? Or the log is showing things out of order.
+
+Anyway, for Copycat: I play the supporter (move to discard/staging), shuffle my hand into deck, then draw 6 cards (equal to opponent's hand size).
+
+Step 4: Attack with Psyduck using Headache
+- Declare attack
+- Add 10 damage counter to Farfetch'd
+- Flip coin for trainer lock effect
+
+Step 5: End turn
+
+Let me execute:
+
+1. Move Psyduck from hand to bench_2
+2. Move Water Energy from hand to bench_1 (attach to Squirtle)
+3. Play Copycat: Move Copycat to discard, shuffle remaining hand into deck, draw 6 cards
+4. Declare attack Headache with Psyduck
+5. Add 10 damage to Farfetch'd
+6. Flip coin for trainer lock
+7. End turn
+
+Wait, I need to be careful about the order. When playing Copycat, I shuffle my hand into the deck. So I should do this after playing Psyduck and attaching energy, but before attacking.
+
+Current hand after steps 1-2: 8 - 1 (Psyduck) - 1 (Water Energy) = 6 cards remaining (4 Water Energy, Switch, Copycat)
+
+Then Copycat shuffles these 6 into deck and draws 6 new cards.
+
+Let me start executing.
+logging.ts:14 [AI] I'll execute the plan for Player 2's turn.
+
+**Step 1:** Play Psyduck to Bench 2
+**Step 2:** Attach Water Energy to Squirtle on Bench 1
+**Step 3:** Play Copycat (shuffle remaining hand, draw 6)
+**Step 4:** Attack with Headache and end turn
+logging.ts:18 [tool] move_card_stack {fromZone: 'player2_hand', toZone: 'player2_bench_2', toPosition: 'top'}
+logging.ts:18 [tool] move_card_stack {fromZone: 'player2_hand', toZone: 'player2_bench_1', toPosition: 'bottom'}
+logging.ts:18 [tool] move_card {fromZone: 'player2_hand', toZone: 'player2_discard', cardName: 'Copycat'}
+logging.ts:18 [tool] shuffle {zone: 'player2_deck'}
+logging.ts:18 [tool] draw {count: 6}
+logging.ts:18 [tool] declare_attack {attackName: 'Headache'}
+logging.ts:18 [tool] add_counter {cardName: "Farfetch'd", zone: 'player1_active', counterType: '10'}
+logging.ts:18 [tool] coin_flip {num_coins: 1}
+logging.ts:18 [tool] end_turn {}

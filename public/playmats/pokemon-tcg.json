@@ -27,8 +27,8 @@
       { "id": "p2_discard", "zoneId": "discard", "position": { "row": 1, "col": 8 }, "label": "Discard", "stackDirection": "none", "showCount": true, "group": "p2_graveyard", "groupRow": 0, "groupCol": 0 },
       { "id": "p2_lost_zone", "zoneId": "lost_zone", "position": { "row": 1, "col": 8 }, "label": "Lost Zone", "stackDirection": "none", "group": "p2_graveyard", "groupRow": 1, "groupCol": 0 },
 
-      { "id": "stadium", "zoneId": "stadium", "position": { "row": 2, "col": 4 }, "label": "Stadium", "stackDirection": "none", "scale": 0.7, "align": "center" },
-      { "id": "staging", "zoneId": "staging", "position": { "row": 2, "col": 3 }, "label": "Staging", "stackDirection": "down", "scale": 0.7, "align": "center" },
+      { "id": "stadium", "zoneId": "stadium", "position": { "row": 2, "col": 4 }, "label": "Stadium", "stackDirection": "none", "scale": 1.0, "align": "center" },
+      { "id": "staging", "zoneId": "staging", "position": { "row": 2, "col": 3 }, "label": "Staging", "stackDirection": "down", "scale": 1.0, "align": "center" },
 
       { "id": "p1_deck", "zoneId": "deck", "position": { "row": 3, "col": 0 }, "label": "Deck", "stackDirection": "none", "fixedSize": true, "showCount": true },
       { "id": "p1_active", "zoneId": "active", "position": { "row": 3, "col": 1 }, "label": "Active", "stackDirection": "down", "scale": 1.5 },

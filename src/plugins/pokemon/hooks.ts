@@ -424,7 +424,55 @@ function logTrainerText(state: PokemonState, action: Action): PostHookResult {
   return {};
 }
 
-// Warning 8: Only Stadium cards can be placed in the stadium zone
+// Warning 8: Trainer Items/Supporters cannot be placed on field zones
+// (Only Pokemon, Energy, and Pokemon Tools belong on the field.)
+// Checks ALL cards in a move_card_stack — not just [0].
+function warnTrainerToField(state: PokemonState, action: Action): PreHookResult {
+  if (action.allowed_by_card_effect) return { outcome: 'continue' };
+
+  let cardIds: string[];
+  let toZone: string;
+
+  if (action.type === ACTION_TYPES.MOVE_CARD) {
+    const a = action as MoveCardAction;
+    cardIds = [a.cardInstanceId];
+    toZone = a.toZone;
+  } else if (action.type === ACTION_TYPES.MOVE_CARD_STACK) {
+    const a = action as MoveCardStackAction;
+    cardIds = a.cardInstanceIds;
+    toZone = a.toZone;
+    if (cardIds.length === 0) return { outcome: 'continue' };
+  } else {
+    return { outcome: 'continue' };
+  }
+
+  if (!isFieldZone(toZone)) return { outcome: 'continue' };
+
+  for (const cardId of cardIds) {
+    const template = getTemplateForCard(state, cardId);
+    if (!template) continue;
+
+    // Pokemon and Energy are always valid on field zones
+    if (template.supertype === SUPERTYPES.POKEMON) continue;
+    if (isEnergy(template)) continue;
+
+    // Trainer cards: only Pokemon Tools can attach to field Pokemon
+    if (template.supertype === SUPERTYPES.TRAINER) {
+      const isPokemonTool = template.subtypes.some(
+        s => s.toLowerCase().includes('tool')
+      );
+      if (isPokemonTool) continue;
+
+      return blockOrWarn(action,
+        `Cannot place ${template.name} (Trainer) on a field zone. Only Pokemon, Energy, and Pokemon Tools belong on the field.`
+      );
+    }
+  }
+
+  return { outcome: 'continue' };
+}
+
+// Warning 9: Only Stadium cards can be placed in the stadium zone
 function warnStadiumOnly(state: PokemonState, action: Action): PreHookResult {
   if (action.allowed_by_card_effect) return { outcome: 'continue' };
 
@@ -644,6 +692,7 @@ export const pokemonHooksPlugin: Plugin<PokemonCardTemplate> = {
       { hook: warnNonBasicToEmptyField, priority: 90 },
       { hook: warnEnergyOnTopOfPokemon, priority: 90 },
       { hook: warnStadiumOnly, priority: 90 },
+      { hook: warnTrainerToField, priority: 85 },
     ],
     [ACTION_TYPES.MOVE_CARD_STACK]: [
       { hook: warnOneSupporter, priority: 100 },
@@ -654,6 +703,7 @@ export const pokemonHooksPlugin: Plugin<PokemonCardTemplate> = {
       { hook: warnNonBasicToEmptyField, priority: 90 },
       { hook: warnEnergyOnTopOfPokemon, priority: 90 },
       { hook: warnStadiumOnly, priority: 90 },
+      { hook: warnTrainerToField, priority: 85 },
     ],
     [ACTION_TYPES.ADD_COUNTER]: [
       { hook: warnCountersOnTrainers, priority: 100 },
