@@ -428,3 +428,143 @@ Let me attach the Lightning Energy to Snorlax.
 logging.ts:14 [AI] Oracle has been resolved. Now I'll attach Lightning Energy to Snorlax and end my turn.
 logging.ts:18 [tool] move_card {fromZone: 'player2_hand', toZone: 'player2_active', cardName: 'Lightning Energy'}
 logging.ts:18 [tool] end_turn {}
+
+=========================
+
+AI Pipeline: Executor]
+run-turn.ts:199 [system] You are an AI agent playing the Pokemon Trading Card Game. You are Player 2.
+
+You are the executor agent. A plan has been given to you. Your job is to call the appropriate tools to execute the plan.
+*...
+run-turn.ts:115 [rate-limit] RPM: 2 requests in last 60s
+logging.ts:11 [thinking] The user wants me to execute a plan for Player 2's turn. Let me analyze the current state and the plan provided.
+
+Current state:
+- Player 2 (me) has:
+  - Active: Squirtle with 10/70 HP, 1 Water Energy attached
+  - Bench 2: Squirtle (no energy)
+  - Hand: Copycat, Brock's Grit, Squirtle, Pidgeot x2, Pokémon Fan Club, Water Energy
+  - Discard: Water Energy x3, Cynthia, Nest Ball, Psyduck, Golduck
+
+The plan is:
+1. Play Squirtle from hand to bench_1
+2. Attach Water Energy to player2_bench_2 (the existing benched Squirtle)
+3. Use Pokémon Fan Club to search deck for 2 Basic Pokemon
+4. End turn
+
+Let me execute this step by step.
+
+Step 1: Play Squirtle from hand to bench_1
+- Use move_card with cardName "Squirtle", fromZone "player2_hand", toZone "player2_bench_1"
+
+Step 2: Attach Water Energy to player2_bench_2
+- Use move_card with cardName "Water Energy", fromZone "player2_hand", toZone "player2_bench_2"
+
+Step 3: Use Pokémon Fan Club
+- First, I need to move the card to staging or just declare it? Looking at the tools, I should use the card. But there's no "play_trainer" tool. I think I need to move the card to staging first, then search, then shuffle.
+- Actually, looking at the pattern, I should move Pokémon Fan Club to staging, then search the deck, then move the found cards to hand, then shuffle.
+
+Wait, let me check the tools again. I have:
+- move_card: Move a card from one zone to another
+- search_zone: Search a zone to see all cards
+- shuffle: Shuffle a zone
+
+For Pokémon Fan Club:
+1. Move Pokémon Fan Club from hand to staging (or discard?)
+2. Search deck for Basic Pokemon
+3. Move them to hand
+4. Shuffle deck
+5. Move Pokémon Fan Club to discard
+
+Actually, looking at the log, it seems like when a card is played, it goes to staging first then gets resolved. Let me check the log pattern.
+
+Looking at the log: "[Player 1] Moved Pokémon Fan Club from Prize 5 to Hand" - this was a prize card taken.
+
+For playing a supporter, I should:
+1. Move it to staging
+2. Execute the effect
+3. Move it to discard
+
+Let me do this.
+
+Step 3a: Move Pokémon Fan Club to staging
+Step 3b: Search deck for Basic Pokemon
+Step 3c: Move 2 Basic Pokemon to hand
+Step 3d: Shuffle deck
+Step 3e: Move Pokémon Fan Club to discard
+
+Actually, I can search the deck first to see what's available, then move the cards.
+
+Let me start with the first two steps which are independent, then do the supporter.
+
+Actually, I should do them in order. Let me start:
+
+1. Move Squirtle to bench_1
+2. Move Water Energy to bench_2
+3. Move Pokémon Fan Club to staging
+4. Search deck
+5. Move 2 Basic Pokemon to hand
+6. Shuffle deck
+7. Move Pokémon Fan Club to discard
+8. End turn
+
+Let me check if I can do some of these in parallel. Steps 1 and 2 are independent. Step 3 can be done after. Then steps 4-7 are sequential. Step 8 is last.
+
+Actually, looking at the tool descriptions, I can make parallel calls when able. So I can do steps 1 and 2 together.
+
+Wait, I need to be careful about the zone keys. The state shows:
+- "player2_bench_2" has the Squirtle
+- "player2_bench_1" is empty (implied by the fact that only bench_2 is listed)
+
+So:
+- Move Squirtle from player2_hand to player2_bench_1
+- Move Water Energy from player2_hand to player2_bench_2
+
+Then for Pokémon Fan Club:
+- Move Pokémon Fan Club from player2_hand to staging
+- Search player2_deck
+- Based on search results, move 2 Basic Pokemon to player2_hand
+- Shuffle player2_deck
+- Move Pokémon Fan Club from staging to player2_discard
+
+Then end_turn.
+
+Let me execute.
+logging.ts:14 [AI] Looking at the current state, I need to:
+1. Play Squirtle to bench_1
+2. Attach Water Energy to the existing benched Squirtle (bench_2)
+3. Play Pokémon Fan Club to search for 2 Basic Pokémon
+4. End turn
+
+Let me execute these steps:
+logging.ts:18 [tool] move_card {fromZone: 'player2_hand', toZone: 'player2_bench_1', cardName: 'Squirtle'}
+logging.ts:18 [tool] move_card {fromZone: 'player2_hand', toZone: 'player2_bench_2', cardName: 'Water Energy'}
+logging.ts:18 [tool] move_card {fromZone: 'player2_hand', toZone: 'staging', cardName: 'Pokémon Fan Club'}
+run-turn.ts:115 [rate-limit] RPM: 3 requests in last 60s
+logging.ts:11 [thinking] Good, I've played the Squirtle to bench_1, attached Water Energy to bench_2, and moved Pokémon Fan Club to staging. Now I need to search my deck for 2 Basic Pokémon. Let me search the deck to see what's available.
+logging.ts:14 [AI] Now I need to search my deck for 2 Basic Pokémon using Pokémon Fan Club:
+logging.ts:18 [tool] search_zone {zone: 'player2_deck'}
+logging.ts:11 [thinking] I can see the deck contents. I need to find Basic Pokémon. Looking at the search results:
+- Pidgey — Colorless — Basic (x3 available)
+- Farfetch'd — Colorless — Basic (x3 available)
+
+These are the only Basic Pokémon in my deck. I should take 2 of them - probably 2 Pidgey since I already have Pidgeot in hand (Stage 2), so I can evolve Pidgey -> Pidgeotto -> Pidgeot.
+
+Let me take 2 Pidgey cards.
+logging.ts:14 [AI] I can see my deck has Pidgey (Basic) and Farfetch'd (Basic). Since I have Pidgeot in hand, I'll take 2 Pidgey to set up that evolution line:
+logging.ts:18 [tool] move_card {fromZone: 'player2_deck', toZone: 'player2_hand', cardName: 'Pidgey'}
+logging.ts:18 [tool] move_card {fromZone: 'player2_deck', toZone: 'player2_hand', cardName: 'Pidgey'}
+logging.ts:18 [tool] shuffle {zone: 'player2_deck'}
+run-turn.ts:115 [rate-limit] RPM: 5 requests in last 60s
+logging.ts:11 [thinking]  I successfully:
+1. Played Squirtle to bench_1
+2. Attached Water Energy to bench_2
+3. Played Pokémon Fan Club and got 2 Pidgey from deck
+4. Shuffled the deck
+
+Now I need to move the Pokémon Fan Club from staging to discard and end my turn. My active Squirtle has 10 HP and will likely die next turn, but I've set up my bench with 2 Squirtles (one with energy) and now have 2 Pidgey in hand to evolve into Pidgeot.
+
+I should not attack since my Squirtle only does 10 damage (20 with weakness) which won't make a meaningful difference, and I want to preserve the game state. I'll just end turn. 
+logging.ts:14 [AI] Now I need to discard the Pokémon Fan Club from staging and end my turn:
+logging.ts:18 [tool] move_card {fromZone: 'staging', toZone: 'player2_discard', cardName: 'Pokémon Fan Club'}
+logging.ts:18 [tool] end_turn {}
