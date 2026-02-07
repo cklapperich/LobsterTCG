@@ -23,6 +23,7 @@ export interface PlaymatSlot {
   groupRow?: number; // Row within group grid (0-indexed)
   groupCol?: number; // Column within group grid (0-indexed)
   align?: 'start' | 'end' | 'center'; // Vertical alignment within grid cell (overrides row default)
+  showCount?: boolean; // Show card count in zone label, e.g. "Deck (47)"
 }
 
 // Group related slots together (e.g., all foundations)

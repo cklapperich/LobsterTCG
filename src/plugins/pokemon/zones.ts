@@ -5,7 +5,7 @@ export const ZONE_IDS = {
   ACTIVE: 'active',
   BENCH: ['bench_1', 'bench_2', 'bench_3', 'bench_4', 'bench_5'] as const,
   DISCARD: 'discard',
-  PRIZES: 'prizes',
+  PRIZES: ['prizes_1', 'prizes_2', 'prizes_3', 'prizes_4', 'prizes_5', 'prizes_6'] as const,
   LOST_ZONE: 'lost_zone',
   STADIUM: 'stadium',
 } as const;
@@ -13,7 +13,7 @@ export const ZONE_IDS = {
 // All bench zone IDs
 export const BENCH_ZONE_IDS = ZONE_IDS.BENCH;
 
-// Prize zone ID
+// All prize zone IDs
 export const PRIZE_ZONE_IDS = ZONE_IDS.PRIZES;
 
 // All zone IDs as a flat array
@@ -23,7 +23,7 @@ export const ALL_ZONE_IDS = [
   ZONE_IDS.ACTIVE,
   ...ZONE_IDS.BENCH,
   ZONE_IDS.DISCARD,
-  ZONE_IDS.PRIZES,
+  ...ZONE_IDS.PRIZES,
   ZONE_IDS.LOST_ZONE,
   ZONE_IDS.STADIUM,
 ] as const;

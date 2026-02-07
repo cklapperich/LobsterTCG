@@ -1,5 +1,5 @@
 import type { PlayerIndex, Visibility } from './card';
-import type { ACTION_TYPES, ACTION_SOURCES, POSITIONS, REVEAL_TARGETS } from './constants';
+import type { ACTION_TYPES, ACTION_SOURCES, POSITIONS, REVEAL_TARGETS, Position } from './constants';
 
 // Base action interface
 interface BaseAction {
@@ -20,7 +20,7 @@ export interface MoveCardAction extends BaseAction {
   cardInstanceId: string;
   fromZone: string;  // Zone key (e.g., "player2_hand")
   toZone: string;    // Zone key (e.g., "player2_discard")
-  position?: number;
+  position?: number | Position;
 }
 
 export interface MoveCardStackAction extends BaseAction {
@@ -28,7 +28,7 @@ export interface MoveCardStackAction extends BaseAction {
   cardInstanceIds: string[];
   fromZone: string;  // Zone key (e.g., "player1_deck")
   toZone: string;    // Zone key (e.g., "player1_hand")
-  position?: number;
+  position?: number | Position;
 }
 
 export interface PlaceOnZoneAction extends BaseAction {
@@ -155,6 +155,13 @@ export interface MulliganAction extends BaseAction {
   drawCount: number;
 }
 
+// Swap Card Stacks Action - atomically exchange all cards between two zones
+export interface SwapCardStacksAction extends BaseAction {
+  type: typeof ACTION_TYPES.SWAP_CARD_STACKS;
+  zone1: string;
+  zone2: string;
+}
+
 // Union of all action types
 export type Action =
   | DrawAction
@@ -178,4 +185,5 @@ export type Action =
   | RevealHandAction
   | RevealAction
   | PeekAction
-  | MulliganAction;
+  | MulliganAction
+  | SwapCardStacksAction;

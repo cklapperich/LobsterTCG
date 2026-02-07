@@ -1,17 +1,46 @@
 import { generateText, jsonSchema } from 'ai';
 import type { ToolSet } from 'ai';
 import { createFireworks } from '@ai-sdk/fireworks';
+import { createAnthropic } from '@ai-sdk/anthropic';
 import type { GamePlugin } from '../core';
 import type { ToolContext, RunnableTool } from '../core/ai-tools';
 import { createSpawnSubagentTool } from './tools/spawn-subagent';
 import { logStepFinish } from './logging';
 import { AI_CONFIG, TERMINAL_TOOL_NAMES } from './constants';
 
+export type AIProvider = 'fireworks' | 'anthropic';
+
+export interface ModelOption {
+  id: string;
+  label: string;
+  provider: AIProvider;
+  modelId: string;
+  apiKeyEnv: string;
+}
+
+export const MODEL_OPTIONS: ModelOption[] = [
+  {
+    id: 'kimi-k2',
+    label: 'Kimi K2',
+    provider: 'fireworks',
+    modelId: AI_CONFIG.DEFAULT_MODEL,
+    apiKeyEnv: 'VITE_FIREWORKS_API_KEY',
+  },
+  {
+    id: 'sonnet-4.5',
+    label: 'Sonnet 4.5',
+    provider: 'anthropic',
+    modelId: 'claude-sonnet-4-5-20250929',
+    apiKeyEnv: 'VITE_ANTHROPIC_API_KEY',
+  },
+];
+
 export interface AITurnConfig {
   context: ToolContext;
   plugin: GamePlugin;
   heuristics: string;
   model?: string;
+  provider?: AIProvider;
   apiKey: string;
   logging?: boolean;
   decisionMode?: boolean;
@@ -39,23 +68,115 @@ export function toAISDKTools(tools: RunnableTool[], abort?: AbortController, ctx
         if (ctx?.batchAbortReason) {
           return `[batch aborted] ${ctx.batchAbortReason}`;
         }
-        const res = await t.execute(args);
-        if (abort && TERMINAL_TOOLS.has(t.name)) {
-          abort.abort();
+        try {
+          const res = await t.execute(args);
+          if (abort && TERMINAL_TOOLS.has(t.name)) {
+            abort.abort();
+          }
+          return res;
+        } catch (e: any) {
+          const msg = e?.message ?? String(e);
+          console.warn(`[AI] Tool "${t.name}" error:`, msg);
+          return `Error: ${msg}`;
         }
-        return res;
       },
     };
   }
   return result;
 }
 
+/**
+ * Create a fetch wrapper that:
+ * 1. Serializes requests with a minimum delay between each one
+ * 2. Intercepts 429 responses and retries with Retry-After awareness
+ *
+ * This handles rate limits transparently so the AI SDK's own retry loop
+ * (which doesn't respect Retry-After) doesn't pile on more 429s.
+ */
+function createRateLimitedFetch(minDelayMs: number, maxRetries = 3): typeof fetch {
+  let nextAllowedTime = 0;
+  let queue: Promise<void> = Promise.resolve();
+
+  // RPM tracker: rolling window of request timestamps
+  const requestTimestamps: number[] = [];
+  let logInterval: ReturnType<typeof setInterval> | null = null;
+
+  function trackRequest() {
+    const now = Date.now();
+    requestTimestamps.push(now);
+    // Start logging interval on first request
+    if (!logInterval) {
+      logInterval = setInterval(() => {
+        const cutoff = Date.now() - 60000;
+        while (requestTimestamps.length > 0 && requestTimestamps[0] < cutoff) {
+          requestTimestamps.shift();
+        }
+        if (requestTimestamps.length > 0) {
+          console.log(`[rate-limit] RPM: ${requestTimestamps.length} requests in last 60s`);
+        } else {
+          // No requests in the last minute, stop logging
+          clearInterval(logInterval!);
+          logInterval = null;
+        }
+      }, 10000);
+    }
+  }
+
+  const throttledFetch = ((input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const myTurn = queue.then(async () => {
+      const now = Date.now();
+      const wait = Math.max(0, nextAllowedTime - now);
+      if (wait > 0) {
+        console.log(`[rate-limit] waiting ${wait}ms before request`);
+        await new Promise(r => setTimeout(r, wait));
+      }
+      nextAllowedTime = Date.now() + minDelayMs;
+    });
+    queue = myTurn.catch(() => {});
+
+    return myTurn.then(async () => {
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        trackRequest();
+        const res = await fetch(input, init);
+        if (res.status !== 429) return res;
+
+        // Parse Retry-After (seconds) or fall back to exponential backoff
+        const retryAfter = res.headers.get('retry-after');
+        const waitMs = retryAfter
+          ? Math.ceil(parseFloat(retryAfter) * 1000)
+          : Math.min(2000 * Math.pow(2, attempt), 30000);
+
+        // Push back nextAllowedTime so queued requests also wait
+        nextAllowedTime = Math.max(nextAllowedTime, Date.now() + waitMs);
+
+        if (attempt < maxRetries) {
+          console.warn(`[rate-limit] 429 received, retry ${attempt + 1}/${maxRetries} after ${waitMs}ms`);
+          await new Promise(r => setTimeout(r, waitMs));
+        } else {
+          console.warn(`[rate-limit] 429 received, all ${maxRetries} retries exhausted`);
+        }
+      }
+      // All retries exhausted — make one final attempt and return whatever we get
+      trackRequest();
+      return fetch(input, init);
+    });
+  }) as typeof fetch;
+
+  return throttledFetch;
+}
+
 export async function runAITurn(config: AITurnConfig): Promise<void> {
   const { context, plugin, heuristics, apiKey } = config;
   const modelId = config.model ?? AI_CONFIG.DEFAULT_MODEL;
+  const provider = config.provider ?? 'fireworks';
 
-  const fireworks = createFireworks({ apiKey });
-  const model = fireworks(modelId);
+  // Rate-limit all API requests through a single queue
+  const rateLimitedFetch = createRateLimitedFetch(AI_CONFIG.MIN_REQUEST_INTERVAL_MS);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const model = (provider === 'anthropic'
+    ? createAnthropic({ apiKey, fetch: rateLimitedFetch })(modelId)
+    : createFireworks({ apiKey, fetch: rateLimitedFetch })(modelId)) as any;
 
   // Get tools from plugin (respects plugin architecture)
   const gameTools = plugin.listTools!(context);
@@ -87,6 +208,9 @@ export async function runAITurn(config: AITurnConfig): Promise<void> {
     await generateText({
       model,
       maxTokens: AI_CONFIG.MAX_TOKENS,
+      // Our fetch wrapper handles 429 retries with Retry-After awareness,
+      // so disable the SDK's own blind retry loop.
+      maxRetries: 0,
       system: heuristics,
       tools: toAISDKTools(allTools, abort, context),
       maxSteps: AI_CONFIG.MAX_STEPS,

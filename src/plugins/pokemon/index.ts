@@ -10,14 +10,14 @@ import {
   executeAction,
   setOrientation,
   resolveCardName,
-  findCardInZones,
+
   VISIBILITY,
   zoneVisibility,
   ACTION_TYPES,
   PHASES,
   INSTANCE_ID_PREFIX,
 } from '../../core';
-import { createDefaultTools, resolveCardByPosition, type RunnableTool, type ToolContext } from '../../core/ai-tools';
+import { createDefaultTools, type RunnableTool, type ToolContext } from '../../core/ai-tools';
 import { ZONE_IDS } from './zones';
 import type { PokemonCardTemplate } from './cards';
 import {
@@ -27,7 +27,6 @@ import {
 import { isBasicPokemon, isFieldZone } from './helpers';
 import { formatCardReference } from './narrative';
 import {
-  SUPERTYPES,
   STATUS_TO_DEGREES,
   STATUS_CONDITIONS,
   COUNTER_IDS,
@@ -148,7 +147,6 @@ export function loadPlayerDeck(
  */
 export function executeSetup(state: GameState<CardTemplate>, playerIndex: PlayerIndex): void {
   const deckKey = `player${playerIndex + 1}_${ZONE_IDS.DECK}`;
-  const prizesKey = `player${playerIndex + 1}_${ZONE_IDS.PRIZES}`;
 
   // Shuffle the deck
   executeAction(state, shuffleAction(playerIndex, deckKey));
@@ -156,8 +154,9 @@ export function executeSetup(state: GameState<CardTemplate>, playerIndex: Player
   // Draw 7 cards
   executeAction(state, { type: ACTION_TYPES.DRAW, player: playerIndex, count: SETUP.HAND_SIZE });
 
-  // Set 6 prize cards (move top 6 from deck to prizes zone)
+  // Set 6 prize cards (move top card from deck to each individual prize zone)
   for (let i = 0; i < SETUP.PRIZE_COUNT; i++) {
+    const prizesKey = `player${playerIndex + 1}_${ZONE_IDS.PRIZES[i]}`;
     const deckZone = state.zones[deckKey];
     if (deckZone.cards.length > 0) {
       const topCard = deckZone.cards[0];
@@ -273,7 +272,6 @@ const HIDDEN_DEFAULT_TOOLS: Set<string> = new Set([
   ACTION_TYPES.DECLARE_VICTORY,
   ACTION_TYPES.PLACE_ON_ZONE,
   ACTION_TYPES.SET_ORIENTATION,
-  ACTION_TYPES.MULLIGAN,
 ]);
 
 /** Local tool factory matching RunnableTool shape. */
@@ -291,87 +289,29 @@ function tool(options: {
   };
 }
 
-/**
- * Auto-determine card position in a target zone based on Pokemon card type.
- * Pokemon on top, Energy in the middle, Trainer/Item on bottom.
- */
-function getAutoPosition(
-  state: PokemonGameState,
-  toZone: string,
-  cardId: string,
-): number | undefined {
-  const found = findCardInZones(state, cardId);
-  if (!found) return undefined; // face-down / unknown → top
-
-  const template = found.card.template as PokemonCardTemplate;
-  if (!template.supertype) return undefined;
-
-  if (template.supertype === SUPERTYPES.POKEMON) {
-    return undefined; // top (push to end)
-  }
-
-  if (template.supertype === SUPERTYPES.ENERGY) {
-    // Insert before the first Pokemon card in the zone
-    const zoneCards = state.zones[toZone]?.cards;
-    if (!zoneCards) return undefined;
-    for (let i = 0; i < zoneCards.length; i++) {
-      const t = zoneCards[i].template as PokemonCardTemplate;
-      if (t.supertype === SUPERTYPES.POKEMON) return i;
-    }
-    return undefined; // no Pokemon → top
-  }
-
-  // Trainer/Item → bottom
-  return 0;
-}
-
 function createPokemonTools(ctx: ToolContext): RunnableTool[] {
   const p = ctx.playerIndex;
   const isDecision = ctx.isDecisionResponse ?? false;
 
-  // Start with filtered defaults (remove hidden tools and default move_card)
+  // Start with filtered defaults
   let tools = createDefaultTools(ctx).filter(
-    t => !HIDDEN_DEFAULT_TOOLS.has(t.name) && t.name !== ACTION_TYPES.MOVE_CARD
+    t => !HIDDEN_DEFAULT_TOOLS.has(t.name)
   );
 
   // Setup phase: only allow move_card, move_card_stack, end_turn
   if (ctx.getState().phase === PHASES.SETUP) {
-    let setupTools = tools.filter(t => ([ACTION_TYPES.MOVE_CARD_STACK, ACTION_TYPES.END_TURN, ACTION_TYPES.MULLIGAN] as string[]).includes(t.name));
+    let setupTools = tools.filter(t => ([ACTION_TYPES.MOVE_CARD, ACTION_TYPES.MOVE_CARD_STACK, ACTION_TYPES.SWAP_CARD_STACKS, ACTION_TYPES.END_TURN, ACTION_TYPES.MULLIGAN] as string[]).includes(t.name));
     // Add end_phase alias (agent0.md references it)
     const endTurnTool = setupTools.find(t => t.name === ACTION_TYPES.END_TURN);
     if (endTurnTool) {
       setupTools.push({ ...endTurnTool, name: 'end_phase', description: 'End the setup phase' });
     }
-    // We still need the custom move_card tool below, so add it after the Pokemon tools section
-    // For now, filter and we'll add move_card below
-    tools = setupTools;
-
-    // Add the Pokemon move_card with auto-position
-    tools.push(tool({
-      name: 'move_card',
-      description: 'Move a card from one zone to another. Position is auto-determined: Pokemon on top, Energy in middle, Trainer/Item on bottom. Use cardName for visible cards. Omit cardName to take from top of zone (e.g. prize cards).',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          cardName: { type: 'string', description: 'Name of the card to move (optional — omit for face-down cards)' },
-          fromZone: { type: 'string', description: 'Zone key (e.g. "player2_hand")' },
-          toZone: { type: 'string', description: 'Zone key to move the card to (e.g. "player2_active")' },
-          fromPosition: { type: 'string', description: 'Position to pick from when cardName is omitted: "top" (default), "bottom", or numeric index' },
-        },
-        required: ['fromZone', 'toZone'],
-      },
-      async run(input) {
-        const state = ctx.getState() as PokemonGameState;
-        const cardId = input.cardName
-          ? resolveCardName(state, input.cardName, input.fromZone)
-          : resolveCardByPosition(state, input.fromZone, input.fromPosition);
-        const position = getAutoPosition(state, input.toZone, cardId);
-        return ctx.execute(moveCard(p, cardId, input.fromZone, input.toZone, position));
-      },
-    }));
 
     return setupTools;
   }
+
+  // Mulligan is only available during setup (which returns early above)
+  tools = tools.filter(t => t.name !== ACTION_TYPES.MULLIGAN);
 
   // Decision-aware filtering
   if (isDecision) {
@@ -381,30 +321,6 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
     // Normal turn: hide resolve_decision, show end_turn and create_decision
     tools = tools.filter(t => t.name !== ACTION_TYPES.RESOLVE_DECISION);
   }
-
-  // ── Pokemon move_card with auto-position ────────────────────
-  tools.push(tool({
-    name: 'move_card',
-    description: 'Move a card from one zone to another. Position is auto-determined: Pokemon on top, Energy in middle, Trainer/Item on bottom. Use cardName for visible cards. Omit cardName to take from top of zone (e.g. prize cards).',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        cardName: { type: 'string', description: 'Name of the card to move (optional — omit for face-down cards)' },
-        fromZone: { type: 'string', description: 'Zone key (e.g. "player1_hand")' },
-        toZone: { type: 'string', description: 'Zone key to move the card to (e.g. "player1_active")' },
-        fromPosition: { type: 'string', description: 'Position to pick from when cardName is omitted: "top" (default), "bottom", or numeric index' },
-      },
-      required: ['fromZone', 'toZone'],
-    },
-    async run(input) {
-      const state = ctx.getState() as PokemonGameState;
-      const cardId = input.cardName
-        ? resolveCardName(state, input.cardName, input.fromZone)
-        : resolveCardByPosition(state, input.fromZone, input.fromPosition);
-      const position = getAutoPosition(state, input.toZone, cardId);
-      return ctx.execute(moveCard(p, cardId, input.fromZone, input.toZone, position));
-    },
-  }));
 
   // ── Pokemon-specific tools ──────────────────────────────────
 
@@ -485,12 +401,13 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
       required: ['cardName', 'zone', 'status'],
     },
     async run(input) {
-      const state = ctx.getState();
-      const cardId = input.cardName.startsWith(INSTANCE_ID_PREFIX)
-        ? input.cardName
-        : resolveCardName(state, input.cardName, input.zone);
-      const degrees = STATUS_TO_DEGREES[input.status] ?? STATUS_TO_DEGREES[STATUS_CONDITIONS.NORMAL];
-      return ctx.execute(setOrientation(p, cardId, degrees));
+      return ctx.execute((state) => {
+        const cardId = input.cardName.startsWith(INSTANCE_ID_PREFIX)
+          ? input.cardName
+          : resolveCardName(state, input.cardName, input.zone);
+        const degrees = STATUS_TO_DEGREES[input.status] ?? STATUS_TO_DEGREES[STATUS_CONDITIONS.NORMAL];
+        return setOrientation(p, cardId, degrees);
+      });
     },
   }));
 

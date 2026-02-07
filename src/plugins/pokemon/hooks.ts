@@ -1,4 +1,4 @@
-import type { Action, GameState, MoveCardAction, MoveCardStackAction, AddCounterAction } from '../../core/types';
+import type { Action, GameState, MoveCardAction, MoveCardStackAction, AddCounterAction, Position } from '../../core/types';
 import { VISIBILITY, ACTION_TYPES, PHASES, CARD_FLAGS, ACTION_SOURCES } from '../../core/types';
 import type { PreHookResult, PostHookResult, Plugin } from '../../core/plugin/types';
 import type { PokemonCardTemplate } from './cards';
@@ -312,7 +312,7 @@ function warnEnergyOnTopOfPokemon(state: PokemonState, action: Action): PreHookR
   let cardInstanceId: string;
   let toZone: string;
   let fromZone: string | undefined;
-  let position: number | undefined;
+  let position: number | Position | undefined;
 
   if (action.type === ACTION_TYPES.MOVE_CARD) {
     const moveAction = action as MoveCardAction;
@@ -341,11 +341,14 @@ function warnEnergyOnTopOfPokemon(state: PokemonState, action: Action): PreHookR
 
   // Array convention: index 0 = visual bottom, end of array = visual top.
   // Energy at the visual bottom (position 0) is fine — it's underneath the Pokemon.
-  // Warn when energy would land on top: position undefined (append to end) or
-  // position >= zone length (explicit top).
+  // Warn when energy would land on top: position undefined (append to end),
+  // position === 'bottom' (appends to end = visual top for field zones), or
+  // numeric position >= zone length (explicit top).
+  // position === 'top' means index 0 (visual bottom) — that's fine for energy.
   const zone = state.zones[toZone];
   if (zone && zone.cards.length > 0) {
-    const isTop = position === undefined || position >= zone.cards.length;
+    const isTop = position === undefined || position === 'bottom' ||
+      (typeof position === 'number' && position >= zone.cards.length);
     if (isTop) {
       const zoneName = zone.config.name?.toLowerCase() ?? toZone;
       return blockOrWarn(action, `Cannot place energy on top of Pokemon in ${zoneName}. Energy should be attached underneath. Set allowed_by_card_effect if a card effect permits this.`);

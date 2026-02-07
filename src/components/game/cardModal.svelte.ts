@@ -1,12 +1,12 @@
-// Card modal store - manages peek/arrange modal state
+// Card modal store - manages peek/browse/search modal state
 import type { CardInstance, CardTemplate } from '../../core';
 
 export interface CardModalState {
   cards: CardInstance<CardTemplate>[];
   zoneKey: string;
   zoneName: string;
-  position: 'top' | 'bottom' | 'all';
-  mode: 'peek' | 'arrange' | 'browse' | 'search';
+  allowReorder: boolean;
+  shuffleOnConfirm: boolean;
   isDecision?: boolean;
 }
 

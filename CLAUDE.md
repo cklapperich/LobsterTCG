@@ -179,7 +179,7 @@ Tools extract SFX from Pokemon TCG GB ROM using PyBoy emulator. Memory addresses
 
 | File | Purpose |
 |------|---------|
-| `index.ts` | Main plugin: `startPokemonGame()`, `executeSetup()`, `initializeGame()`, `loadPlayerDeck()`, `getCounterDefinitions()`, `getCoinFront()`, `getCoinBack()`, `getCardInfo()`. Exports `plugin` object implementing `GamePlugin`. `formatCardForSearch` wraps `formatCardReference()` for rich narrative output in zone searches. `listTools(ctx)` filters defaults and adds Pokemon-specific tools: `declare_attack` (with energy cost validation), `declare_retreat`, `declare_ability`, `set_status` (orientation wrapper for paralyzed/asleep/confused). Setup phase restricts tools to `move_card`, `move_card_stack`, `end_turn`/`end_phase`. Decision-aware tool filtering: normal turn hides `resolve_decision`; decision mini-turn hides `end_turn` + `create_decision` + `search_zone`. `getActionPanels()` builds ATTACKS panel from active Pokemon template and MULLIGAN panel. `onActionPanelClick()` handles attack logging and mulligan (shuffle hand, redraw 7). |
+| `index.ts` | Main plugin: `startPokemonGame()`, `executeSetup()`, `initializeGame()`, `loadPlayerDeck()`, `getCounterDefinitions()`, `getCoinFront()`, `getCoinBack()`, `getCardInfo()`. Exports `plugin` object implementing `GamePlugin`. `formatCardForSearch` wraps `formatCardReference()` for rich narrative output in zone searches. `listTools(ctx)` filters defaults and adds Pokemon-specific tools: `declare_attack` (with energy cost validation), `declare_retreat`, `declare_ability`, `set_status` (orientation wrapper for paralyzed/asleep/confused). Setup phase restricts tools to `move_card`, `move_card_stack`, `mulligan`, `end_turn`/`end_phase`. Decision-aware tool filtering: normal turn hides `resolve_decision`; decision mini-turn hides `end_turn` + `create_decision` + `search_zone`. `getActionPanels()` builds ATTACKS panel from active Pokemon template and MULLIGAN panel. `onActionPanelClick()` handles attack logging and mulligan (shuffle hand, redraw 7). |
 | `helpers.ts` | Pokemon card type helpers: `isBasicPokemon()`, `isEvolution()`, `isSupporter()`, `isStadium()`, `isEnergy()`, `isFieldZone()`, `isStadiumZone()`. Zone helpers accept zone keys (e.g., `isFieldZone('player1_active')` → true, `isStadiumZone('stadium')` → true). |
 | `cards.ts` | Card database backed by `cards-western.json`. `PokemonCardTemplate`, `PokemonAttack`, `PokemonAbility`, `POKEMON_TEMPLATE_MAP`, `getTemplate()`, `getCardBack()`, `parsePTCGODeck()`. |
 | `cards-western.json` | Western card database (all sets). Card data including names, images, attacks, abilities, HP, types. |
@@ -192,7 +192,8 @@ Tools extract SFX from Pokemon TCG GB ROM using PyBoy emulator. Memory addresses
 | `counters/*.png` | Counter images: burn, poison, damage-10/50/100. |
 | `cardback.png` | Pokemon card back image. |
 | `coinfront.png`, `coinback.png` | Coin flip images. |
-| `agents.md` | System prompt for AI agent (Pokemon TCG heuristics, turn structure, rules). Loaded as raw text via Vite `?raw` import. |
+| `agents.md` | System prompt for AI agent (Pokemon TCG heuristics, turn structure, rules). Used for normal turns and decision mini-turns. Loaded as raw text via Vite `?raw` import. |
+| `agent0.md` | System prompt for AI setup turn (place initial Pokemon, mulligan if no basics). Used only during setup phase via `triggerAISetupTurn()`. Loaded as raw text via Vite `?raw` import. |
 
 ### /src/lib/
 

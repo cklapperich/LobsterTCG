@@ -137,7 +137,7 @@
   ondrop={handleDrop}
   class:browsable={!!onBrowse && displayCards.length > 0}
 >
-  <div class="zone-label">{label}</div>
+  <div class="zone-label">{label}{slot.showCount && zone.cards.length > 0 ? ` (${zone.cards.length})` : ''}</div>
   <div class="zone-content" class:fixed-size={fixedSize}>
     {#if displayCards.length > 0}
       <CardStack
