@@ -105,6 +105,9 @@ export function executeDrop(
       dragStore.current = null;
       return null;
     }
+    if (preResult.outcome === 'replace') {
+      Object.assign(action, preResult.action);
+    }
     if (preResult.outcome === 'warn') {
       gameState.log.push(`Warning: ${preResult.reason}`);
     }
@@ -126,7 +129,16 @@ export function executeDrop(
       card.visibility = zoneVisibility(toZoneKey, toZone.config);
       card.orientation = undefined;
       if (toZone.config.canHaveCounters === false) card.counters = {};
-      if (position !== undefined) {
+      if (action.position !== undefined) {
+        const pos = action.position === 'top' ? toZone.cards.length :
+                    action.position === 'bottom' ? 0 :
+                    typeof action.position === 'number' ? action.position : undefined;
+        if (pos !== undefined) {
+          toZone.cards.splice(pos, 0, card);
+        } else {
+          toZone.cards.push(card);
+        }
+      } else if (position !== undefined) {
         toZone.cards.splice(position, 0, card);
       } else {
         toZone.cards.push(card);
@@ -194,6 +206,9 @@ export function executeStackDrop(
       gameState.log.push(`Action blocked: ${preResult.reason ?? 'Unknown'}`);
       dragStore.current = null;
       return null;
+    }
+    if (preResult.outcome === 'replace') {
+      Object.assign(action, preResult.action);
     }
     if (preResult.outcome === 'warn') {
       gameState.log.push(`Warning: ${preResult.reason}`);

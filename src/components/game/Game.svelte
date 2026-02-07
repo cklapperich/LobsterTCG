@@ -118,14 +118,28 @@
     }
   });
 
-  // Announce when it becomes the human player's turn (SFX + log entry)
-  function announceHumanTurn() {
-    if (!gameState || gameState.activePlayer !== 0 || gameState.pendingDecision) return;
+  // Announce turn start: SFX + log entry on any turn transition.
+  // Dedup key prevents re-firing for the same turn. aiThinking gate
+  // ensures this doesn't fire mid-AI-execution.
+  let lastAnnouncedKey = '';
+  $effect(() => {
+    if (!gameState || aiThinking || gameState.pendingDecision) return;
+    const key = `${gameState.phase}-${gameState.turnNumber}-${gameState.activePlayer}`;
+    if (key !== lastAnnouncedKey) {
+      lastAnnouncedKey = key;
+      announceTurnStart();
+    }
+  });
+
+  function announceTurnStart() {
+    if (!gameState) return;
     playSfx('turnStart');
+    const player = `Player ${gameState.activePlayer + 1}`;
     const turnLabel = gameState.phase === PHASES.PLAYING
-      ? `--- Turn ${gameState.turnNumber}: Your Turn ---`
-      : '--- Your Turn (Setup) ---';
-    addLog(turnLabel);
+      ? `--- Turn ${gameState.turnNumber}: ${player}'s Turn ---`
+      : `--- ${player}'s Turn (Setup) ---`;
+    gameState.log.push(turnLabel);
+    gameState = { ...gameState };
   }
 
   // Auto-open browse modal when a reveal decision targets the human player
@@ -173,6 +187,9 @@
       gameState.log.push(reason);
       gameState = { ...gameState };
       return reason;
+    }
+    if (preResult.outcome === 'replace') {
+      action = preResult.action;
     }
     if (preResult.outcome === 'warn') {
       gameState.log.push(`Warning: ${preResult.reason}`);
@@ -631,7 +648,6 @@
     }
 
     aiThinking = false;
-    announceHumanTurn();
   }
 
   /**
@@ -675,7 +691,7 @@
     }
 
     aiThinking = false;
-    announceHumanTurn();
+
   }
 
   /**
@@ -713,7 +729,7 @@
     }
 
     aiThinking = false;
-    announceHumanTurn();
+
   }
 
   function handleMulligan() {
@@ -764,7 +780,7 @@
     if (wasSetup && gameState.phase === PHASES.PLAYING && gameState.turnNumber === 1) {
       flipFieldCardsFaceUp(gameState);
       gameState = { ...gameState };
-      announceHumanTurn();
+  
       return; // Human's turn 1 — no AI trigger
     }
 

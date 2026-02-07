@@ -326,6 +326,15 @@ export function formatCardInventory(
 }
 
 /**
+ * Normalize Unicode quote/apostrophe variants to ASCII apostrophe (U+0027).
+ * Card databases often use typographic quotes (U+2019 RIGHT SINGLE QUOTATION
+ * MARK, etc.) but AI models emit ASCII apostrophes in tool calls.
+ */
+function normalizeQuotes(s: string): string {
+  return s.replace(/[\u2018\u2019\u201A\u201B\u2032\u0060\u00B4]/g, "'");
+}
+
+/**
  * Resolve a readable card name back to an instanceId within a zone.
  * Uses the same disambiguation logic as convertZone, so display names
  * produced by toReadableState() round-trip correctly.
@@ -344,10 +353,11 @@ export function resolveCardName<T extends CardTemplate>(
   }
 
   const ambiguousNames = findAmbiguousNames(zone.cards);
+  const normalizedInput = normalizeQuotes(cardName);
 
   for (const card of zone.cards) {
     const displayName = computeDisplayName(card, ambiguousNames);
-    if (displayName === cardName) {
+    if (displayName === cardName || normalizeQuotes(displayName) === normalizedInput) {
       return card.instanceId;
     }
   }

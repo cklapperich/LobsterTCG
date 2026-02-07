@@ -109,8 +109,8 @@ export function resolveCardByPosition(
   if (!zone) throw new Error(`Zone not found: ${zoneKey}`);
   if (zone.cards.length === 0) throw new Error(`Zone "${zoneKey}" is empty`);
 
-  if (!fromPosition || fromPosition === 'top') return zone.cards[zone.cards.length - 1].instanceId;
-  if (fromPosition === 'bottom') return zone.cards[0].instanceId;
+  if (!fromPosition || fromPosition === 'top') return zone.cards[0].instanceId;
+  if (fromPosition === 'bottom') return zone.cards[zone.cards.length - 1].instanceId;
 
   const index = parseInt(fromPosition, 10);
   if (isNaN(index) || index < 0 || index >= zone.cards.length)

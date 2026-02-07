@@ -162,7 +162,7 @@ export function executeSetup(state: GameState<CardTemplate>, playerIndex: Player
     const prizesKey = `player${playerIndex + 1}_${ZONE_IDS.PRIZES[i]}`;
     const deckZone = state.zones[deckKey];
     if (deckZone.cards.length > 0) {
-      const topCard = deckZone.cards.at(-1)!;
+      const topCard = deckZone.cards[0];
       executeAction(state, moveCard(playerIndex, topCard.instanceId, deckKey, prizesKey));
     }
   }

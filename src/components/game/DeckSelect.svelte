@@ -4,6 +4,7 @@
   import { parsePTCGODeck } from '../../plugins/pokemon/cards';
   import { playSfx } from '../../lib/audio.svelte';
   import { MODEL_OPTIONS } from '../../ai';
+  import GbcDropdown from './GbcDropdown.svelte';
 
   interface DeckOption {
     id: string;
@@ -92,7 +93,7 @@
     }
   }
 
-  function handleSelectChange() {
+  function handleCheckboxChange() {
     playSfx('cursor');
   }
 </script>
@@ -117,20 +118,10 @@
             <span class="player-badge bg-gbc-red text-gbc-cream px-2 py-1">P1</span>
             PLAYER 1 DECK
           </div>
-          <div class="select-wrapper">
-            <select
-              bind:value={player1Deck}
-              onchange={handleSelectChange}
-              class="deck-dropdown"
-            >
-              {#each deckOptions as deck}
-                <option value={deck.id}>
-                  {deck.name} ({deck.cardCount} cards)
-                </option>
-              {/each}
-            </select>
-            <div class="select-arrow"></div>
-          </div>
+          <GbcDropdown
+            options={deckOptions.map(d => ({ value: d.id, label: `${d.name} (${d.cardCount} cards)` }))}
+            bind:value={player1Deck}
+          />
         </div>
 
         <!-- Player 2 Deck Selection -->
@@ -139,20 +130,10 @@
             <span class="player-badge bg-gbc-blue text-gbc-cream px-2 py-1">P2</span>
             PLAYER 2 DECK
           </div>
-          <div class="select-wrapper">
-            <select
-              bind:value={player2Deck}
-              onchange={handleSelectChange}
-              class="deck-dropdown"
-            >
-              {#each deckOptions as deck}
-                <option value={deck.id}>
-                  {deck.name} ({deck.cardCount} cards)
-                </option>
-              {/each}
-            </select>
-            <div class="select-arrow"></div>
-          </div>
+          <GbcDropdown
+            options={deckOptions.map(d => ({ value: d.id, label: `${d.name} (${d.cardCount} cards)` }))}
+            bind:value={player2Deck}
+          />
         </div>
       </div>
 
@@ -163,19 +144,10 @@
             <span class="player-badge bg-gbc-green text-gbc-cream px-2 py-1">MAT</span>
             PLAYMAT
           </div>
-          <div class="select-wrapper">
-            <select
-              bind:value={playmatImage}
-              onchange={handleSelectChange}
-              class="deck-dropdown"
-            >
-              <option value="">None</option>
-              {#each playmatOptions as mat}
-                <option value={mat.id}>{mat.name}</option>
-              {/each}
-            </select>
-            <div class="select-arrow"></div>
-          </div>
+          <GbcDropdown
+            options={[{ value: '', label: 'None' }, ...playmatOptions.map(m => ({ value: m.id, label: m.name }))]}
+            bind:value={playmatImage}
+          />
         </div>
       {/if}
 
@@ -185,27 +157,19 @@
           <span class="player-badge bg-gbc-yellow text-gbc-border px-2 py-1">AI</span>
           AI MODEL
         </div>
-        <div class="select-wrapper">
-          <select
-            bind:value={aiModel}
-            onchange={handleSelectChange}
-            class="deck-dropdown"
-          >
-            {#each MODEL_OPTIONS as option}
-              <option value={option.id}>{option.label}</option>
-            {/each}
-          </select>
-          <div class="select-arrow"></div>
-        </div>
+        <GbcDropdown
+          options={MODEL_OPTIONS.map(m => ({ value: m.id, label: m.label }))}
+          bind:value={aiModel}
+        />
       </div>
 
       <div class="test-options flex justify-center gap-4 mb-4">
         <label class="gbc-checkbox flex items-center gap-2 cursor-pointer text-gbc-green text-[0.5rem]">
-          <input type="checkbox" bind:checked={lassTest} onchange={handleSelectChange} />
+          <input type="checkbox" bind:checked={lassTest} onchange={handleCheckboxChange} />
           <span>LASS TEST</span>
         </label>
         <label class="gbc-checkbox flex items-center gap-2 cursor-pointer text-gbc-green text-[0.5rem]">
-          <input type="checkbox" bind:checked={fastBallTest} onchange={handleSelectChange} />
+          <input type="checkbox" bind:checked={fastBallTest} onchange={handleCheckboxChange} />
           <span>FAST BALL TEST</span>
         </label>
       </div>
@@ -250,35 +214,6 @@
   .player-badge {
     @apply font-retro text-[0.5rem] tracking-wide;
     box-shadow: 0.125rem 0.125rem 0 var(--color-gbc-border);
-  }
-
-  .select-wrapper {
-    @apply relative;
-  }
-
-  .deck-dropdown {
-    @apply w-full font-retro text-[0.5rem] bg-gbc-cream text-gbc-border;
-    @apply border-4 border-gbc-border p-3 pr-10 cursor-pointer;
-    @apply appearance-none;
-    box-shadow:
-      inset 0.125rem 0.125rem 0 rgba(0, 0, 0, 0.1),
-      0.25rem 0.25rem 0 var(--color-gbc-border);
-  }
-
-  .deck-dropdown:focus {
-    @apply outline-none bg-gbc-light;
-  }
-
-  .deck-dropdown option {
-    @apply bg-gbc-cream text-gbc-border py-2;
-  }
-
-  .select-arrow {
-    @apply absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none;
-    @apply w-0 h-0;
-    border-left: 0.4rem solid transparent;
-    border-right: 0.4rem solid transparent;
-    border-top: 0.5rem solid var(--color-gbc-border);
   }
 
   .gbc-checkbox input[type="checkbox"] {
