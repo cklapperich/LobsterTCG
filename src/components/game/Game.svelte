@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { Playmat, CardInstance, CardTemplate, GameState, CounterDefinition, DeckList, ZoneConfig, Action } from '../../core';
-  import { executeAction, shuffle, moveCard, VISIBILITY, flipCard, endTurn, loadDeck, getCardName, findCardInZones, toReadableState, PluginManager, setOrientation, createDecision, resolveDecision, revealHand, ACTION_TYPES, PHASES, ACTION_SOURCES } from '../../core';
+  import { executeAction, shuffle, moveCard, VISIBILITY, flipCard, endTurn, loadDeck, getCardName, findCardInZones, toReadableState, PluginManager, setOrientation, createDecision, resolveDecision, revealHand, mulligan as mulliganAction, ACTION_TYPES, PHASES, ACTION_SOURCES } from '../../core';
   import type { ToolContext } from '../../core/ai-tools';
   import { plugin, executeSetup, ZONE_IDS, pokemonHooksPlugin, autoMulligan, flipFieldCardsFaceUp, ensureCardInHand } from '../../plugins/pokemon';
   import { getTemplate } from '../../plugins/pokemon/cards';
@@ -68,9 +68,10 @@
     gameState && plugin.getActionPanels ? plugin.getActionPanels(gameState, 0) : []
   );
 
-  // Split attacks panel (goes in grid) from other panels (stay in sidebar)
-  const attacksPanel = $derived(actionPanels.find(p => p.id === 'attacks'));
-  const sidebarPanels = $derived(actionPanels.filter(p => p.id !== 'attacks'));
+  // Grid panels (attacks + abilities) vs sidebar panels
+  const GRID_PANEL_IDS = new Set(['attacks', 'abilities']);
+  const gridPanels = $derived(actionPanels.filter(p => GRID_PANEL_IDS.has(p.id)));
+  const sidebarPanels = $derived(actionPanels.filter(p => !GRID_PANEL_IDS.has(p.id)));
 
   function handleActionPanelClick(panelId: string, buttonId: string) {
     if (!gameState || !plugin.onActionPanelClick) return;
@@ -95,6 +96,11 @@
   const gameLog = $derived(gameState?.log ?? []);
   let logContainer = $state<HTMLDivElement | null>(null);
   let logInput = $state('');
+
+  // Request modal state
+  let showRequestModal = $state(false);
+  let requestInput = $state('');
+  let requestInputEl = $state<HTMLInputElement | null>(null);
 
   // Auto-scroll log to bottom when new entries are added
   $effect(() => {
@@ -227,6 +233,8 @@
         return `[AI] Requested decision: ${action.message ?? 'Action needed'}`;
       case ACTION_TYPES.RESOLVE_DECISION:
         return `[AI] Resolved decision`;
+      case ACTION_TYPES.MULLIGAN:
+        return `[AI] Mulliganed (drew ${action.drawCount})`;
       case ACTION_TYPES.COIN_FLIP:
       case ACTION_TYPES.SEARCH_ZONE:
         return null;
@@ -699,6 +707,17 @@
     aiThinking = false;
   }
 
+  function handleMulligan() {
+    if (!gameState || aiThinking) return;
+    const action = mulliganAction(gameState.activePlayer);
+    const blocked = tryAction(action);
+    if (!blocked) {
+      gameState.log.push(`[Player ${gameState.activePlayer + 1}] Mulliganed`);
+      gameState = { ...gameState };
+      playSfx('shuffle');
+    }
+  }
+
   function handleEndTurn() {
     if (!gameState) return;
     const currentPlayer = gameState.activePlayer;
@@ -749,14 +768,27 @@
 
   function handleRequestAction() {
     if (!gameState || aiThinking || gameState.pendingDecision) return;
-    const message = prompt('Describe what the opponent should do (optional):');
-    if (message === null) return; // cancelled
-    executeAction(gameState, createDecision(0, 1, message || undefined));
+    showRequestModal = true;
+    requestInput = '';
+    // Focus input after modal renders
+    setTimeout(() => requestInputEl?.focus(), 50);
+  }
+
+  function handleRequestSubmit() {
+    if (!gameState) return;
+    showRequestModal = false;
+    executeAction(gameState, createDecision(0, 1, requestInput.trim() || undefined));
     gameState = { ...gameState };
     playSfx('confirm');
+    requestInput = '';
 
     // Trigger AI decision mini-turn
     triggerAIDecisionTurn();
+  }
+
+  function handleRequestCancel() {
+    showRequestModal = false;
+    requestInput = '';
   }
 
   // Counter handlers
@@ -953,24 +985,6 @@
           </div>
         {/if}
 
-        <!-- Preview -->
-        <div class="gbc-panel preview-panel">
-          <div class="text-gbc-yellow text-[0.5rem] text-center mb-3 py-1 px-2 bg-gbc-border">PREVIEW</div>
-          {#if previewCard && previewCard.visibility[0]}
-            <div class="preview-card">
-              {#if previewCard.template.imageUrl}
-                <img src={previewCard.template.imageUrl} alt={previewCard.template.name} class="preview-image" />
-              {/if}
-            </div>
-          {:else if previewCard}
-            <div class="preview-card face-down">
-              <div class="back-pattern"></div>
-            </div>
-          {:else}
-            <div class="preview-placeholder"></div>
-          {/if}
-        </div>
-
         <!-- Buttons -->
         <div class="sidebar-buttons">
           {#if decisionTargetsHuman}
@@ -990,6 +1004,13 @@
               {gameState.phase === PHASES.SETUP ? 'END SETUP' : 'END TURN'}
             </button>
           {/if}
+          <button
+            class="gbc-btn sidebar-btn"
+            onclick={handleMulligan}
+            disabled={!gameState || aiThinking}
+          >
+            MULLIGAN
+          </button>
           <button
             class="gbc-btn sidebar-btn"
             onclick={handleRequestAction}
@@ -1061,8 +1082,8 @@
           {gameState}
           {cardBack}
           {counterDefinitions}
-          {attacksPanel}
-          onAttackClick={handleActionPanelClick}
+          actionPanels={gridPanels}
+          onActionPanelClick={handleActionPanelClick}
           onDrop={handleDrop}
           onPreview={handlePreview}
           onToggleVisibility={handleToggleVisibility}
@@ -1140,6 +1161,15 @@
     {/if}
   {/if}
 
+  <!-- Fullscreen Card Preview -->
+  {#if previewCard && previewCard.visibility[0] && previewCard.template.imageUrl}
+    <div class="preview-overlay" onclick={() => previewCard = null} onkeydown={(e) => e.key === 'Escape' && (previewCard = null)} role="button" tabindex="-1">
+      <div class="preview-overlay-card">
+        <img src={previewCard.template.imageUrl} alt={previewCard.template.name} />
+      </div>
+    </div>
+  {/if}
+
   <!-- Coin Flip Modal -->
   <CoinFlip
     bind:this={coinFlipRef}
@@ -1147,6 +1177,29 @@
     coinBack={plugin.getCoinBack?.() ?? ''}
     onResult={handleCoinResult}
   />
+
+  <!-- Request Action Modal -->
+  {#if showRequestModal}
+    <div class="debug-overlay" onclick={handleRequestCancel} onkeydown={(e) => e.key === 'Escape' && handleRequestCancel()} role="button" tabindex="-1">
+      <div class="request-modal gbc-panel" onclick={(e) => e.stopPropagation()} onkeydown={() => {}} role="dialog" tabindex="-1">
+        <div class="text-gbc-yellow text-[0.5rem] text-center py-1 px-2 bg-gbc-border">REQUEST ACTION</div>
+        <form class="px-3 py-3 flex flex-col gap-2" onsubmit={(e) => { e.preventDefault(); handleRequestSubmit(); }}>
+          <label class="text-gbc-light text-[0.45rem]">Describe what the opponent should do (optional):</label>
+          <input
+            type="text"
+            class="request-input"
+            placeholder="e.g. Discard a card..."
+            bind:value={requestInput}
+            bind:this={requestInputEl}
+          />
+          <div class="flex justify-end gap-2 mt-1">
+            <button type="button" class="gbc-btn text-[0.45rem] py-1.5 px-4" onclick={handleRequestCancel}>CANCEL</button>
+            <button type="submit" class="gbc-btn text-[0.45rem] py-1.5 px-4">SEND</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  {/if}
 
   <!-- Debug Modal -->
   {#if showDebugModal}
@@ -1227,16 +1280,12 @@
 
   .sidebar-buttons {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
     gap: 0.25rem;
   }
 
   .sidebar-btn {
-    @apply text-[0.45rem] py-1.5 px-2 w-full;
-  }
-
-  .preview-panel {
-    @apply max-lg:w-auto;
+    @apply text-[0.9rem] py-2 px-3 w-full;
   }
 
   .log-panel {
@@ -1271,37 +1320,20 @@
     @apply border-gbc-green;
   }
 
-  .preview-card {
-    width: 18rem;
-    aspect-ratio: 5 / 7;
-    @apply rounded-xl border-4 border-gbc-border;
-    @apply flex flex-col items-center justify-center;
-    @apply bg-gbc-cream overflow-hidden;
+  .preview-overlay {
+    @apply fixed inset-0 z-[150] flex items-center justify-center cursor-pointer;
+    background: rgba(0, 0, 0, 0.75);
   }
 
-  .preview-card.face-down {
-    @apply bg-gbc-blue;
+  .preview-overlay-card {
+    pointer-events: none;
   }
 
-  .preview-image {
-    @apply w-full h-auto;
-  }
-
-  .preview-card.face-down .back-pattern {
-    @apply w-[85%] h-[90%] rounded-lg border-4 border-gbc-cream;
-    background: repeating-linear-gradient(
-      45deg,
-      var(--color-gbc-dark-green),
-      var(--color-gbc-dark-green) 0.5rem,
-      var(--color-gbc-blue) 0.5rem,
-      var(--color-gbc-blue) 1rem
-    );
-  }
-
-  .preview-placeholder {
-    width: 18rem;
-    aspect-ratio: 5 / 7;
-    @apply rounded-xl bg-gbc-border opacity-30;
+  .preview-overlay-card img {
+    max-height: 85vh;
+    max-width: 90vw;
+    object-fit: contain;
+    @apply rounded-xl;
   }
 
   .debug-overlay {
@@ -1317,6 +1349,23 @@
     @apply overflow-auto px-3 py-2 text-[0.45rem] text-gbc-light font-retro leading-relaxed whitespace-pre m-0;
     scrollbar-width: thin;
     scrollbar-color: var(--color-gbc-green) var(--color-gbc-border);
+  }
+
+  .request-modal {
+    @apply w-80;
+  }
+
+  .request-input {
+    @apply w-full bg-gbc-dark-green text-gbc-light text-[0.45rem] px-2 py-1.5 border border-gbc-border rounded-sm font-retro;
+    @apply outline-none;
+  }
+
+  .request-input::placeholder {
+    @apply text-gbc-green/50;
+  }
+
+  .request-input:focus {
+    @apply border-gbc-green;
   }
 
   :global(.gbc-btn.active) {

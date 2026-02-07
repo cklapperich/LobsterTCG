@@ -21,6 +21,7 @@ export const ACTION_TYPES = {
   REVEAL_HAND: 'reveal_hand',
   REVEAL: 'reveal',
   PEEK: 'peek',
+  MULLIGAN: 'mulligan',
 } as const;
 export type ActionType = typeof ACTION_TYPES[keyof typeof ACTION_TYPES];
 

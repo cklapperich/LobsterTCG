@@ -74,4 +74,5 @@ export {
   createDecision,
   resolveDecision,
   revealHand,
+  mulligan,
 } from './action';

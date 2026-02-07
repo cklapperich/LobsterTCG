@@ -98,12 +98,24 @@
     endDrag();
   }
 
+  // Timer-based single/double click separation:
+  // Single click (after 250ms) → preview; double click → flip card (cancels pending single click)
+  let clickTimer: ReturnType<typeof setTimeout> | null = null;
+
   function handleClick() {
-    playSfx('cursor');
-    onPreview?.(card);
+    if (clickTimer) return; // already pending
+    clickTimer = setTimeout(() => {
+      clickTimer = null;
+      playSfx('cursor');
+      onPreview?.(card);
+    }, 250);
   }
 
   function handleDoubleClick() {
+    if (clickTimer) {
+      clearTimeout(clickTimer);
+      clickTimer = null;
+    }
     onToggleVisibility?.(card.instanceId);
   }
 

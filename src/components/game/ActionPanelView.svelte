@@ -15,8 +15,8 @@
   }
 </script>
 
-{#each panels as panel (panel.id)}
-  <div class="gbc-panel action-panel">
+<div class="gbc-panel action-panel">
+  {#each panels as panel, i (panel.id)}
     {#if panel.title}
       <div class="panel-header">{panel.title}</div>
     {/if}
@@ -39,8 +39,8 @@
     {:else if panel.emptyMessage}
       <div class="empty-message">{panel.emptyMessage}</div>
     {/if}
-  </div>
-{/each}
+  {/each}
+</div>
 
 <style>
   @reference "../../app.css";

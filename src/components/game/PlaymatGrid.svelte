@@ -9,8 +9,8 @@
     gameState: GameState<CardTemplate>;
     cardBack?: string;
     counterDefinitions?: CounterDefinition[];
-    attacksPanel?: ActionPanel;
-    onAttackClick?: (panelId: string, buttonId: string) => void;
+    actionPanels?: ActionPanel[];
+    onActionPanelClick?: (panelId: string, buttonId: string) => void;
     renderFace?: (template: CardTemplate) => { rank?: string; suit?: string; color?: string };
     onDrop?: (cardInstanceId: string, toZoneKey: string, position?: number) => void;
     onPreview?: (card: CardInstance<CardTemplate>) => void;
@@ -25,8 +25,8 @@
     gameState,
     cardBack,
     counterDefinitions = [],
-    attacksPanel,
-    onAttackClick,
+    actionPanels = [],
+    onActionPanelClick,
     renderFace,
     onDrop,
     onPreview,
@@ -211,15 +211,15 @@
     </div>
   {/each}
 
-  <!-- Attacks panel -->
-  {#if attacksPanel && onAttackClick}
+  <!-- Action panels (attacks + abilities) — aligned with the mid row -->
+  {#if onActionPanelClick && actionPanels.length > 0}
     <div
-      class="grid-slot attacks-slot"
-      style="grid-column: 1; grid-row: 4;"
+      class="grid-slot actions-slot mid-zone"
+      style="grid-column: 1; grid-row: 3;"
     >
       <ActionPanelView
-        panels={[attacksPanel]}
-        onButtonClick={onAttackClick}
+        panels={actionPanels}
+        onButtonClick={onActionPanelClick}
       />
     </div>
   {/if}
@@ -282,12 +282,12 @@
     justify-items: center;
   }
 
-  .attacks-slot {
+  .actions-slot {
     @apply self-center;
-    overflow: hidden;
+    overflow: visible;
   }
 
-  .attacks-slot :global(.action-panel) {
+  .actions-slot :global(.action-panel) {
     @apply w-full;
   }
 

@@ -22,6 +22,7 @@ import type {
   RevealHandAction,
   RevealAction,
   PeekAction,
+  MulliganAction,
 } from './types';
 import {
   ACTION_TYPES,
@@ -217,4 +218,8 @@ export function resolveDecision(player: PlayerIndex): ResolveDecisionAction {
 
 export function revealHand(player: PlayerIndex, zoneKey: string, mutual?: boolean, message?: string): RevealHandAction {
   return { type: ACTION_TYPES.REVEAL_HAND, player, zoneKey, ...(mutual ? { mutual } : {}), ...(message ? { message } : {}) };
+}
+
+export function mulligan(player: PlayerIndex, drawCount: number = 7): MulliganAction {
+  return { type: ACTION_TYPES.MULLIGAN, player, drawCount };
 }
