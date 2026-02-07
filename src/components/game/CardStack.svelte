@@ -155,6 +155,7 @@
       class:offset-down={stackDirection === 'down'}
       class:offset-up={stackDirection === 'up'}
       class:offset-right={stackDirection === 'right'}
+      class:offset-none={stackDirection === 'none'}
       class:offset-fan={stackDirection === 'fan'}
       class:animate-overhand-lift={isInPacket}
       style="--i: {i}; --fan-offset: {fanOffset}px; --stack-offset: {stackOffset}rem; z-index: {isInPacket ? 200 : i + 1}"
@@ -205,6 +206,12 @@
   .stack-card.offset-right {
     top: 0;
     left: calc(var(--i) * var(--stack-offset, 1.5rem));
+  }
+
+  /* No-direction stacking: subtle offset for deck thickness effect */
+  .stack-card.offset-none {
+    top: calc(var(--i) * -0.022rem);
+    left: calc(var(--i) * 0.01rem);
   }
 
   /* Fan layout: cards positioned with dynamic offset */

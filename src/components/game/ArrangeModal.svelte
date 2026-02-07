@@ -222,7 +222,7 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="modal-backdrop" onclick={handleBackdropClick} onkeydown={(e) => { if (e.key === 'Escape') { playSfx('cancel'); doClose(); } }} role="presentation">
-  <div class="modal gbc-panel" class:modal-tall={isSelectable}>
+  <div class="modal gbc-panel">
     <div class="modal-header">
       <span class="modal-title">{title}</span>
       <button class="close-btn" onclick={() => { playSfx('cancel'); doClose(); }}>×</button>
@@ -289,10 +289,6 @@
     @apply max-w-[90vw] max-h-[80vh] flex flex-col;
   }
 
-  .modal.modal-tall {
-    @apply h-[95vh] max-h-[95vh];
-  }
-
   .modal-header {
     @apply flex justify-between items-center py-2 px-3 bg-gbc-border;
   }
@@ -307,7 +303,7 @@
   }
 
   .modal-content {
-    @apply p-4 overflow-x-auto flex-1;
+    @apply p-4 overflow-x-auto;
   }
 
   .card-row {
@@ -333,27 +329,17 @@
 
   .card-slot.selectable {
     @apply cursor-pointer;
-    transform: scale(1.5);
-    transform-origin: top center;
-    margin: 1.5rem 1.5rem 4rem;
+    --zone-scale: 1.5;
+    margin: 0.5rem;
   }
 
   .card-slot:hover {
     transform: translateY(-0.25rem);
   }
 
-  .card-slot.selectable:hover {
-    transform: scale(1.5) translateY(-0.25rem);
-  }
-
   .card-slot.selected,
   .card-slot.selected:hover {
     transform: translateY(-0.5rem);
-  }
-
-  .card-slot.selectable.selected,
-  .card-slot.selectable.selected:hover {
-    transform: scale(1.5) translateY(-0.5rem);
   }
 
   .card-slot.selected::after {

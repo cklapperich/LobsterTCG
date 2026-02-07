@@ -19,7 +19,7 @@
   }
 
   interface Props {
-    onStartGame: (player1Deck: DeckList, player2Deck: DeckList, options: { lassTest: boolean; playmatImage: string; aiModel: string }) => void;
+    onStartGame: (player1Deck: DeckList, player2Deck: DeckList, options: { lassTest: boolean; fastBallTest: boolean; playmatImage: string; aiModel: string }) => void;
   }
 
   let { onStartGame }: Props = $props();
@@ -29,6 +29,7 @@
   let player1Deck = $state<string>('');
   let player2Deck = $state<string>('');
   let lassTest = $state(false);
+  let fastBallTest = $state(false);
   let playmatImage = $state<string>('');
   let aiModel = $state<string>(MODEL_OPTIONS[0]?.id ?? '');
 
@@ -87,7 +88,7 @@
     if (deck1 && deck2) {
       playSfx('confirm');
       const selectedPlaymat = playmatOptions.find(p => p.id === playmatImage);
-      onStartGame(deck1.deckList, deck2.deckList, { lassTest, playmatImage: selectedPlaymat?.url ?? '', aiModel });
+      onStartGame(deck1.deckList, deck2.deckList, { lassTest, fastBallTest, playmatImage: selectedPlaymat?.url ?? '', aiModel });
     }
   }
 
@@ -198,10 +199,14 @@
         </div>
       </div>
 
-      <div class="test-options flex justify-center mb-4">
+      <div class="test-options flex justify-center gap-4 mb-4">
         <label class="gbc-checkbox flex items-center gap-2 cursor-pointer text-gbc-green text-[0.5rem]">
           <input type="checkbox" bind:checked={lassTest} onchange={handleSelectChange} />
           <span>LASS TEST</span>
+        </label>
+        <label class="gbc-checkbox flex items-center gap-2 cursor-pointer text-gbc-green text-[0.5rem]">
+          <input type="checkbox" bind:checked={fastBallTest} onchange={handleSelectChange} />
+          <span>FAST BALL TEST</span>
         </label>
       </div>
 

@@ -12,5 +12,12 @@ export const SUBAGENT_CONFIG = {
 } as const;
 
 export const TERMINAL_TOOL_NAMES = [
-  'end_turn', 'end_phase', 'concede', 'declare_victory', 'resolve_decision',
+  'end_turn', 'end_phase', 'concede', 'declare_victory', 'resolve_decision', 'request_replan',
 ] as const;
+
+export const PIPELINE_CONFIG = {
+  CHECKUP_MAX_STEPS: 15,
+  PLANNER_MAX_STEPS: 5,
+  EXECUTOR_MAX_STEPS: 30,
+  MAX_RETRY_CYCLES: 2, // 3 total: initial + 2 retries
+} as const;

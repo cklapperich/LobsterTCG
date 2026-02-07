@@ -7,6 +7,8 @@ import {
   loadPlaymat,
   shuffle as shuffleAction,
   moveCard,
+  draw as drawAction,
+  concede as concedeAction,
   executeAction,
   setOrientation,
   resolveCardName,
@@ -16,6 +18,7 @@ import {
   ACTION_TYPES,
   PHASES,
   INSTANCE_ID_PREFIX,
+  ORIENTATIONS,
 } from '../../core';
 import { createDefaultTools, type RunnableTool, type ToolContext } from '../../core/ai-tools';
 import { ZONE_IDS } from './zones';
@@ -159,7 +162,7 @@ export function executeSetup(state: GameState<CardTemplate>, playerIndex: Player
     const prizesKey = `player${playerIndex + 1}_${ZONE_IDS.PRIZES[i]}`;
     const deckZone = state.zones[deckKey];
     if (deckZone.cards.length > 0) {
-      const topCard = deckZone.cards[0];
+      const topCard = deckZone.cards.at(-1)!;
       executeAction(state, moveCard(playerIndex, topCard.instanceId, deckKey, prizesKey));
     }
   }
@@ -289,9 +292,71 @@ function tool(options: {
   };
 }
 
+/** Reusable set_status tool factory (used by both checkup and executor roles). */
+function createSetStatusTool(ctx: ToolContext): RunnableTool {
+  const p = ctx.playerIndex;
+  return tool({
+    name: 'set_status',
+    description: 'Set a Pokemon\'s status condition. Only active Pokemon can have status.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        cardName: { type: 'string', description: 'Name of the Pokemon' },
+        zone: { type: 'string', description: 'Zone key the card is in' },
+        status: { type: 'string', enum: [STATUS_CONDITIONS.NORMAL, STATUS_CONDITIONS.PARALYZED, STATUS_CONDITIONS.ASLEEP, STATUS_CONDITIONS.CONFUSED], description: 'Status condition to apply, or "normal" to clear' },
+      },
+      required: ['cardName', 'zone', 'status'],
+    },
+    async run(input) {
+      return ctx.execute((state) => {
+        const cardId = input.cardName.startsWith(INSTANCE_ID_PREFIX)
+          ? input.cardName
+          : resolveCardName(state, input.cardName, input.zone);
+        const degrees = STATUS_TO_DEGREES[input.status] ?? STATUS_TO_DEGREES[STATUS_CONDITIONS.NORMAL];
+        return setOrientation(p, cardId, degrees);
+      });
+    },
+  });
+}
+
+/** No-op end_phase tool for checkup agent. Just returns a string; AbortController stops the agent. */
+function createCheckupEndPhaseTool(): RunnableTool {
+  return tool({
+    name: 'end_phase',
+    description: 'Signal that checkup is complete.',
+    inputSchema: { type: 'object' as const, properties: {}, required: [] },
+    run() { return 'Checkup phase complete.'; },
+  });
+}
+
 function createPokemonTools(ctx: ToolContext): RunnableTool[] {
   const p = ctx.playerIndex;
   const isDecision = ctx.isDecisionResponse ?? false;
+  const role = ctx.agentRole;
+
+  // ── Planner: no tools ──────────────────────────────────────────
+  if (role === 'planner') return [];
+
+  // ── Checkup: limited tools + no-op end_phase ──────────────────
+  if (role === 'checkup') {
+    const CHECKUP_TOOL_NAMES: Set<string> = new Set([
+      ACTION_TYPES.ADD_COUNTER,
+      ACTION_TYPES.REMOVE_COUNTER,
+      ACTION_TYPES.SET_COUNTER,
+      ACTION_TYPES.COIN_FLIP,
+      ACTION_TYPES.DRAW,
+      ACTION_TYPES.MOVE_CARD_STACK,
+      ACTION_TYPES.SWAP_CARD_STACKS,
+      ACTION_TYPES.CONCEDE,
+    ]);
+    const checkupTools = createDefaultTools(ctx)
+      .filter(t => CHECKUP_TOOL_NAMES.has(t.name));
+    checkupTools.push(createSetStatusTool(ctx));
+    checkupTools.push(createCheckupEndPhaseTool());
+    return checkupTools;
+  }
+
+  // ── Setup / Executor / default ─────────────────────────────────
 
   // Start with filtered defaults
   let tools = createDefaultTools(ctx).filter(
@@ -388,28 +453,7 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
   }));
 
   // ── Status condition tool (Pokemon-specific wrapper around orientation) ──
-  tools.push(tool({
-    name: 'set_status',
-    description: 'Set a Pokemon\'s status condition. Only active Pokemon can have status.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        cardName: { type: 'string', description: 'Name of the Pokemon' },
-        zone: { type: 'string', description: 'Zone key the card is in' },
-        status: { type: 'string', enum: [STATUS_CONDITIONS.NORMAL, STATUS_CONDITIONS.PARALYZED, STATUS_CONDITIONS.ASLEEP, STATUS_CONDITIONS.CONFUSED], description: 'Status condition to apply, or "normal" to clear' },
-      },
-      required: ['cardName', 'zone', 'status'],
-    },
-    async run(input) {
-      return ctx.execute((state) => {
-        const cardId = input.cardName.startsWith(INSTANCE_ID_PREFIX)
-          ? input.cardName
-          : resolveCardName(state, input.cardName, input.zone);
-        const degrees = STATUS_TO_DEGREES[input.status] ?? STATUS_TO_DEGREES[STATUS_CONDITIONS.NORMAL];
-        return setOrientation(p, cardId, degrees);
-      });
-    },
-  }));
+  tools.push(createSetStatusTool(ctx));
 
   return tools;
 }
@@ -498,6 +542,69 @@ function onActionPanelClick(state: GameState<PokemonCardTemplate>, player: Playe
   }
 }
 
+// ── Start-of-Turn Skip Hook ──────────────────────────────────────
+
+/** Status orientations that require agent attention. */
+const STATUS_ORIENTATIONS: Set<string> = new Set([
+  ORIENTATIONS.TAPPED,         // paralyzed
+  ORIENTATIONS.COUNTER_TAPPED, // asleep
+  ORIENTATIONS.FLIPPED,        // confused
+]);
+
+/**
+ * Check if the start-of-turn agent can be skipped.
+ * Conditions for skipping (all must be true):
+ *   - No poison/burn counters on any AI field Pokemon
+ *   - No status orientation (sleep/paralyzed/confused) on any AI field Pokemon
+ *   - Active slot is occupied (no need to promote)
+ *
+ * When skipping: auto-draw 1 card, check deck-out → auto-concede.
+ */
+async function shouldSkipStartOfTurn(ctx: ToolContext): Promise<boolean> {
+  const state = ctx.getState();
+  const p = ctx.playerIndex;
+
+  // Check active slot — if empty, agent needs to promote
+  const activeKey = `player${p + 1}_${ZONE_IDS.ACTIVE}`;
+  const activeZone = state.zones[activeKey];
+  if (!activeZone || activeZone.cards.length === 0) return false;
+
+  // Check all field zones for status conditions or poison/burn counters
+  const fieldZones = [
+    `player${p + 1}_${ZONE_IDS.ACTIVE}`,
+    ...ZONE_IDS.BENCH.map(b => `player${p + 1}_${b}`),
+  ];
+
+  for (const zoneKey of fieldZones) {
+    const zone = state.zones[zoneKey];
+    if (!zone) continue;
+    for (const card of zone.cards) {
+      // Check orientation-based status
+      if (card.orientation && STATUS_ORIENTATIONS.has(card.orientation)) return false;
+      // Check poison/burn counters
+      if (card.counters) {
+        if (card.counters[COUNTER_IDS.POISON] > 0) return false;
+        if (card.counters[COUNTER_IDS.BURN] > 0) return false;
+      }
+    }
+  }
+
+  // Nothing to do — auto-draw and check deck-out
+  const deckKey = `player${p + 1}_${ZONE_IDS.DECK}`;
+  const deck = state.zones[deckKey];
+
+  if (!deck || deck.cards.length === 0) {
+    // Deck-out: auto-concede
+    console.log('[AI Pipeline] Deck empty at draw — auto-conceding');
+    await ctx.execute(concedeAction(p));
+    return true;
+  }
+
+  await ctx.execute(drawAction(p, 1));
+  console.log('[AI Pipeline] Start-of-turn skipped (no checkup needed), auto-drew 1 card');
+  return true;
+}
+
 // Plugin object conforming to GamePlugin interface
 export const plugin: GamePlugin<PokemonCardTemplate> = {
   getPlaymat: getPokemonPlaymat,
@@ -508,6 +615,7 @@ export const plugin: GamePlugin<PokemonCardTemplate> = {
   getCoinFront,
   getCoinBack,
   formatCardForSearch: (template) => formatCardReference(template as any).join('\n'),
+  shouldSkipStartOfTurn,
   listTools: createPokemonTools,
   getActionPanels,
   onActionPanelClick,

@@ -86,7 +86,6 @@ ALWAYS do pokemon checkup at the start of your turn. Your opponent handles check
 
 ## @STRATEGY
 ### Strategy Guidelines
-- Always draw at the start of your turn
 - Set up your bench with Basic Pokemon early
 - Always attach energy every turn to build up attackers
 - Prioritize knocking out Pokemon that threaten you
@@ -160,26 +159,29 @@ Sometimes during a turn, one player needs the other to make a decision (e.g., af
 - But if you setup a weak / valuable pokemon on bench, opponent can Gust of Wind it to front and maybe kill it — bad. Keeping cards in hand prevents this.
 
 ## @ROLE_START_OF_TURN
-You are the start-of-turn agent.
+You are the start-of-turn checkup agent.
 Use parallel tool calls when you can.
 Tools will be executed first to last.
 
 Your job:
-1. **Pokemon Check up** — Apply burn, poison, or sleep as needed, or remove status conditions as needed. Never remove paralysis.
-2. Move a new pokemon stack to active slot if needed.
-3. **Draw Card** — Draw 1 card from your deck (mandatory). If opponent mulliganed, and its your first turn, draw 1 extra.
+1. **Pokemon Check up** — Apply burn, poison, or sleep as needed, or remove status conditions as needed. Never remove paralysis — it ends automatically at the end of the affected player's NEXT turn, not during checkup.
+2. Move a new pokemon stack to active slot if needed (e.g. if active was knocked out).
+3. **Draw Card** — Draw 1 card from your deck (mandatory). If opponent mulliganed, and its your first turn, draw 1 extra. If your deck is empty and you cannot draw, call `concede` — you lose by deck-out.
 4. Call `end_phase`
 
 ## @ROLE_PLANNER
-Your job is to plan your turn.
-First, summarize what happened during the opponent's turn from the chatlog. Infer what actions they took.
-Then, make a high level plan. Think deeply and consider several different options.
-Explain what makes your plays legal. Your plan should note when you do normally-illegal actions due to a card effect, like attacking without enough energy.
+You are the planning agent. You have NO tools. Output ONLY a short numbered plan — no analysis, no preamble.
 
-Then, call spawn_subagent and feed it the plan.
+**Format — follow this exactly:**
+1. One-line summary of what opponent did last turn.
+2. Numbered action steps. Each step = one tool call with arguments.
+3. Final step is ALWAYS either `declare_attack` + `end_turn`, or just `end_turn`.
+
+Keep it under 15 steps. Note when a card effect makes a normally-illegal action legal.
 
 ## @ROLE_EXECUTOR
-A plan has been given to you. Your job is to call the appropriate tools to execute the plan.
-If the next step of a plan is not a valid move, call `end_phase`.
-When you have no more moves to execute, call `end_phase`.
+You are the executor agent. A plan has been given to you. Your job is to call the appropriate tools to execute the plan.
+**Drawing and checkup are already done** — do NOT draw or handle status conditions.
+If a step fails or a random outcome (coin flip, search) changes what's possible, call `request_replan` with a reason — the planner will make a new plan based on the current state.
+When you have no more moves to execute, call `end_turn`.
 Use parallel tool calls when able.

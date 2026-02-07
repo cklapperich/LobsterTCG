@@ -1,12 +1,12 @@
 import { generateText, jsonSchema } from 'ai';
-import type { ToolSet } from 'ai';
+import type { LanguageModelV1, ToolSet } from 'ai';
 import { createFireworks } from '@ai-sdk/fireworks';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import type { GamePlugin } from '../core';
 import type { ToolContext, RunnableTool } from '../core/ai-tools';
 import { createSpawnSubagentTool } from './spawn-subagent';
 import { logStepFinish } from './logging';
-import { AI_CONFIG, TERMINAL_TOOL_NAMES } from './constants';
+import { AI_CONFIG, PIPELINE_CONFIG, TERMINAL_TOOL_NAMES } from './constants';
 
 export type AIProvider = 'fireworks' | 'anthropic';
 
@@ -165,27 +165,85 @@ function createRateLimitedFetch(minDelayMs: number, maxRetries = 3): typeof fetc
   return throttledFetch;
 }
 
+// ── Agent Phase Runner ──────────────────────────────────────────
+
+interface AgentPhaseConfig {
+  model: LanguageModelV1;
+  systemPrompt: string;
+  userMessage: string;
+  tools: RunnableTool[];
+  maxSteps: number;
+  ctx: ToolContext;
+  label: string;
+  logging?: boolean;
+}
+
+interface AgentPhaseResult {
+  text: string;
+  stepCount: number;
+  aborted: boolean;
+}
+
+/**
+ * Run a single agent phase — wraps one generateText call.
+ * Each phase gets its own AbortController so terminal tools
+ * only stop the current phase, not the whole pipeline.
+ */
+async function runAgentPhase(config: AgentPhaseConfig): Promise<AgentPhaseResult> {
+  const { model, systemPrompt, userMessage, tools, maxSteps, ctx, label, logging } = config;
+  const abort = new AbortController();
+  let stepCount = 0;
+
+  if (logging) {
+    console.group(`[AI Pipeline: ${label}]`);
+    console.log('%c[system]', 'color: #88f', systemPrompt.slice(0, 200) + '...');
+  }
+
+  try {
+    const result = await generateText({
+      model,
+      maxTokens: AI_CONFIG.MAX_TOKENS,
+      maxRetries: 0,
+      system: systemPrompt,
+      tools: tools.length > 0 ? toAISDKTools(tools, abort, ctx) : undefined,
+      maxSteps,
+      abortSignal: abort.signal,
+      messages: [{ role: 'user', content: userMessage }],
+      onStepFinish: (step) => {
+        stepCount++;
+        if (logging) logStepFinish(step);
+        ctx.batchAbortReason = undefined;
+      },
+    });
+
+    if (logging) console.groupEnd();
+    return { text: result.text ?? '', stepCount, aborted: false };
+  } catch (e: any) {
+    if (e?.name === 'AbortError') {
+      if (logging) console.groupEnd();
+      return { text: '', stepCount, aborted: true };
+    }
+    if (logging) console.groupEnd();
+    throw e;
+  }
+}
+
+// ── Single-Agent Turn Runner (setup/decision) ──────────────────
+
 export async function runAITurn(config: AITurnConfig): Promise<void> {
   const { context, plugin, heuristics, apiKey } = config;
   const modelId = config.model ?? AI_CONFIG.DEFAULT_MODEL;
   const provider = config.provider ?? 'fireworks';
 
-  // Rate-limit all API requests through a single queue
   const rateLimitedFetch = createRateLimitedFetch(AI_CONFIG.MIN_REQUEST_INTERVAL_MS);
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const model = (provider === 'anthropic'
     ? createAnthropic({ apiKey, fetch: rateLimitedFetch })(modelId)
     : createFireworks({ apiKey, fetch: rateLimitedFetch })(modelId)) as any;
 
-  // Get tools from plugin (respects plugin architecture)
   const gameTools = plugin.listTools!(context);
-
-  // Add spawn_subagent tool
   const subagentTool = createSpawnSubagentTool(model, gameTools, heuristics);
   const allTools = [...gameTools, subagentTool];
 
-  // Initial readable state
   const readableState = context.getReadableState();
 
   const userMessage = config.setupMode
@@ -194,38 +252,179 @@ export async function runAITurn(config: AITurnConfig): Promise<void> {
     ? `Current game state:\n${readableState}\n\nYour opponent has requested a decision. Read the pendingDecision field and recent log entries. Take the necessary actions, then call resolve_decision when done.`
     : `Current game state:\n${readableState}\n\nIt's your turn. Take actions to advance toward winning. Call end_turn when done.`;
 
-  // Log system prompt
-  if (config.logging) {
-    console.group('[AI Turn]');
-    console.log('%c[system]', 'color: #88f', heuristics.slice(0, 200) + '...');
-  }
+  await runAgentPhase({
+    model,
+    systemPrompt: heuristics,
+    userMessage,
+    tools: allTools,
+    maxSteps: AI_CONFIG.MAX_STEPS,
+    ctx: context,
+    label: config.setupMode ? 'Setup' : config.decisionMode ? 'Decision' : 'Turn',
+    logging: config.logging,
+  });
+}
 
-  // AbortController stops the loop as soon as a terminal tool (end_turn, etc.) executes
-  const abort = new AbortController();
+// ── Multi-Agent Pipeline ────────────────────────────────────────
 
-  // Run the tool loop — AI SDK handles the agentic loop via maxSteps
+export interface AIPipelineConfig {
+  context: ToolContext;
+  plugin: GamePlugin;
+  checkupPrompt: string;
+  plannerPrompt: string;
+  executorPrompt: string;
+  model?: string;
+  provider?: AIProvider;
+  apiKey: string;
+  logging?: boolean;
+}
+
+/**
+ * Run a full AI turn as a 3-phase pipeline:
+ *   1. Checkup Agent — handles poison/burn/sleep/draw
+ *   2. Planner Agent — reads state, outputs a text plan (no tools)
+ *   3. Executor Agent — receives plan, executes with tools
+ *
+ * Phases 2+3 loop with error recovery (max PIPELINE_CONFIG.MAX_RETRY_CYCLES retries).
+ */
+export async function runAIPipeline(config: AIPipelineConfig): Promise<void> {
+  const { context: ctx, plugin, apiKey } = config;
+  const modelId = config.model ?? AI_CONFIG.DEFAULT_MODEL;
+  const provider = config.provider ?? 'fireworks';
+
+  // Shared rate limiter + model across all phases
+  const rateLimitedFetch = createRateLimitedFetch(AI_CONFIG.MIN_REQUEST_INTERVAL_MS);
+  const model = (provider === 'anthropic'
+    ? createAnthropic({ apiKey, fetch: rateLimitedFetch })(modelId)
+    : createFireworks({ apiKey, fetch: rateLimitedFetch })(modelId)) as any;
+
+  // ── Phase 1: START OF TURN ─────────────────────────────────────
+  // Plugin can skip the agent and handle mandatory actions (draw, deck-out) itself.
+  let skipStartOfTurn = false;
   try {
-    await generateText({
-      model,
-      maxTokens: AI_CONFIG.MAX_TOKENS,
-      // Our fetch wrapper handles 429 retries with Retry-After awareness,
-      // so disable the SDK's own blind retry loop.
-      maxRetries: 0,
-      system: heuristics,
-      tools: toAISDKTools(allTools, abort, context),
-      maxSteps: AI_CONFIG.MAX_STEPS,
-      abortSignal: abort.signal,
-      messages: [{ role: 'user', content: userMessage }],
-      onStepFinish: (step) => {
-        if (config.logging) logStepFinish(step);
-        // Clear batch abort so the next step starts fresh
-        context.batchAbortReason = undefined;
-      },
-    });
-  } catch (e: any) {
-    // AbortError is expected when a terminal tool fires — ignore it
-    if (e?.name !== 'AbortError') throw e;
+    skipStartOfTurn = await plugin.shouldSkipStartOfTurn?.(ctx) ?? false;
+  } catch (e) {
+    console.warn('[AI Pipeline] shouldSkipStartOfTurn hook failed:', e);
   }
 
-  if (config.logging) console.groupEnd();
+  if (!skipStartOfTurn) {
+    try {
+      ctx.agentRole = 'checkup';
+      const checkupTools = plugin.listTools!(ctx);
+
+      if (checkupTools.length > 0) {
+        const readableState = ctx.getReadableState();
+        await runAgentPhase({
+          model,
+          systemPrompt: config.checkupPrompt,
+          userMessage: `Current game state:\n${readableState}\n\nPerform the start-of-turn checkup, then call end_phase.`,
+          tools: checkupTools,
+          maxSteps: PIPELINE_CONFIG.CHECKUP_MAX_STEPS,
+          ctx,
+          label: 'Checkup',
+          logging: config.logging,
+        });
+      }
+    } catch (e) {
+      // Checkup failure is non-fatal — planner/executor can compensate
+      console.warn('[AI Pipeline] Checkup agent failed, continuing:', e);
+    }
+  }
+
+  // ── Phases 2+3: PLANNER → EXECUTOR retry loop ────────────────
+  let lastError: string | undefined;
+
+  for (let attempt = 0; attempt <= PIPELINE_CONFIG.MAX_RETRY_CYCLES; attempt++) {
+    // Phase 2: PLANNER (no tools, text-only output)
+    ctx.agentRole = 'planner';
+    const plannerTools = plugin.listTools!(ctx); // should return []
+
+    const plannerState = ctx.getReadableState();
+    let plannerMessage = `Current game state:\n${plannerState}\n\nPlan your turn. Output a numbered plan as text.`;
+    if (lastError) {
+      plannerMessage += `\n\n⚠️ RETRY: The previous execution attempt failed with this error:\n${lastError}\nPlease adjust your plan to avoid this issue.`;
+    }
+
+    let planText = '';
+    try {
+      const planResult = await runAgentPhase({
+        model,
+        systemPrompt: config.plannerPrompt,
+        userMessage: plannerMessage,
+        tools: plannerTools,
+        maxSteps: PIPELINE_CONFIG.PLANNER_MAX_STEPS,
+        ctx,
+        label: attempt > 0 ? `Planner (retry ${attempt})` : 'Planner',
+        logging: config.logging,
+      });
+      planText = planResult.text;
+    } catch (e) {
+      console.warn('[AI Pipeline] Planner failed:', e);
+      planText = 'Execute your best available play and call end_turn.';
+    }
+
+    // Phase 3: EXECUTOR (full tools + request_replan)
+    ctx.agentRole = 'executor';
+    ctx.replanReason = undefined;
+    const executorTools = [
+      ...plugin.listTools!(ctx),
+      // Pipeline-level tool: bail back to planner
+      {
+        name: 'request_replan',
+        description: 'Abandon the current plan and return to the planner for a new one. Use when a coin flip, search result, or error makes the plan impossible to continue.',
+        parameters: { type: 'object' as const, properties: { reason: { type: 'string', description: 'Why the plan needs to change' } }, required: ['reason'] },
+        execute: (input: Record<string, any>) => { ctx.replanReason = input.reason; return 'Returning to planner...'; },
+      } satisfies RunnableTool,
+    ];
+
+    const executorState = ctx.getReadableState();
+    const executorMessage = `Current game state:\n${executorState}\n\nExecute this plan:\n${planText}\n\nCall end_turn when done. If you can't proceed (coin flip failed, card not found, wrong tool used), call request_replan instead.`;
+
+    try {
+      const execResult = await runAgentPhase({
+        model,
+        systemPrompt: config.executorPrompt,
+        userMessage: executorMessage,
+        tools: executorTools,
+        maxSteps: PIPELINE_CONFIG.EXECUTOR_MAX_STEPS,
+        ctx,
+        label: attempt > 0 ? `Executor (retry ${attempt})` : 'Executor',
+        logging: config.logging,
+      });
+
+      // Check if executor requested a replan
+      if (ctx.replanReason) {
+        lastError = ctx.replanReason;
+        if (attempt < PIPELINE_CONFIG.MAX_RETRY_CYCLES) {
+          console.warn(`[AI Pipeline] Executor requested replan: ${lastError}`);
+          continue;
+        }
+      }
+
+      // If executor called end_turn (aborted=true), we're done
+      if (execResult.aborted) break;
+
+      // If the executor finished without calling end_turn and it's still AI's turn,
+      // capture error for retry
+      const state = ctx.getState();
+      if (state.activePlayer === 1) {
+        lastError = `Executor completed ${execResult.stepCount} steps without calling end_turn. The turn was not ended.`;
+        if (attempt < PIPELINE_CONFIG.MAX_RETRY_CYCLES) {
+          console.warn(`[AI Pipeline] ${lastError} Retrying...`);
+          continue;
+        }
+      }
+      break;
+    } catch (e: any) {
+      lastError = e?.message ?? String(e);
+      if (attempt < PIPELINE_CONFIG.MAX_RETRY_CYCLES) {
+        console.warn(`[AI Pipeline] Executor error, retrying: ${lastError}`);
+        continue;
+      }
+      console.error('[AI Pipeline] Executor failed after all retries:', e);
+      break;
+    }
+  }
+
+  // Clear agentRole when pipeline is done
+  ctx.agentRole = undefined;
 }

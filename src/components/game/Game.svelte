@@ -21,8 +21,8 @@
     clearZoneCounters,
   } from './counterDragState.svelte';
   import { playSfx, playBgm, stopBgm, toggleMute, audioSettings } from '../../lib/audio.svelte';
-  import { runAITurn, MODEL_OPTIONS } from '../../ai';
-  import { PROMPT_FULL_TURN, PROMPT_SETUP } from '../../plugins/pokemon/prompt-builder';
+  import { runAITurn, runAIPipeline, MODEL_OPTIONS } from '../../ai';
+  import { PROMPT_FULL_TURN, PROMPT_SETUP, PROMPT_START_OF_TURN, PROMPT_PLANNER, PROMPT_EXECUTOR } from '../../plugins/pokemon/prompt-builder';
   const ACTION_DELAY_MS = 500;
   // gameLog store no longer used - log lives in gameState.log
   import { contextMenuStore, openContextMenu, closeContextMenu as closeContextMenuStore } from './contextMenu.svelte';
@@ -33,12 +33,13 @@
     player1Deck: DeckList;
     player2Deck: DeckList;
     lassTest?: boolean;
+    fastBallTest?: boolean;
     playmatImage?: string;
     aiModel?: string;
     onBackToMenu?: () => void;
   }
 
-  let { player1Deck, player2Deck, lassTest, playmatImage, aiModel, onBackToMenu }: Props = $props();
+  let { player1Deck, player2Deck, lassTest, fastBallTest, playmatImage, aiModel, onBackToMenu }: Props = $props();
 
   // Resolve model config from selected model ID
   const selectedModel = $derived(MODEL_OPTIONS.find(m => m.id === aiModel) ?? MODEL_OPTIONS[0]);
@@ -117,15 +118,15 @@
     }
   });
 
-  // Play turnStart SFX whenever it becomes the human player's turn (not during decisions)
-  let prevActivePlayer: number | undefined;
-  $effect(() => {
-    const ap = gameState?.activePlayer;
-    if (ap === 0 && prevActivePlayer !== 0 && !gameState?.pendingDecision) {
-      playSfx('turnStart');
-    }
-    prevActivePlayer = ap;
-  });
+  // Announce when it becomes the human player's turn (SFX + log entry)
+  function announceHumanTurn() {
+    if (!gameState || gameState.activePlayer !== 0 || gameState.pendingDecision) return;
+    playSfx('turnStart');
+    const turnLabel = gameState.phase === PHASES.PLAYING
+      ? `--- Turn ${gameState.turnNumber}: Your Turn ---`
+      : '--- Your Turn (Setup) ---';
+    addLog(turnLabel);
+  }
 
   // Auto-open browse modal when a reveal decision targets the human player
   $effect(() => {
@@ -276,10 +277,14 @@
       executeSetup(gameState, 0);
       executeSetup(gameState, 1);
 
-      // Lass test: ensure both players have Lass in opening hand
+      // Test card injection
       if (lassTest) {
         ensureCardInHand(gameState, 0, 'base1-75');
         ensureCardInHand(gameState, 1, 'base1-75');
+      }
+      if (fastBallTest) {
+        ensureCardInHand(gameState, 0, 'ecard3-124');
+        ensureCardInHand(gameState, 1, 'ecard3-124');
       }
 
       gameState.log = ['Game started — Setup Phase'];
@@ -449,10 +454,14 @@
       executeSetup(state, 0);
       executeSetup(state, 1);
 
-      // Lass test: ensure both players have Lass in opening hand
+      // Test card injection
       if (lassTest) {
         ensureCardInHand(state, 0, 'base1-75');
         ensureCardInHand(state, 1, 'base1-75');
+      }
+      if (fastBallTest) {
+        ensureCardInHand(state, 0, 'ecard3-124');
+        ensureCardInHand(state, 1, 'ecard3-124');
       }
 
       state.log = ['Game started — Setup Phase'];
@@ -547,6 +556,14 @@
           // Log the action
           if (logMessage) addLog(logMessage);
 
+          // Auto-preview card when opponent moves it to staging
+          if (action.type === ACTION_TYPES.MOVE_CARD && action.toZone === 'staging' && gameState) {
+            const card = gameState.zones['staging']?.cards.find(c => c.instanceId === action.cardInstanceId);
+            if (card && card.visibility[0] && card.template.imageUrl) {
+              previewCard = card;
+            }
+          }
+
           // SFX based on action type
           const sfxMap: Record<string, Parameters<typeof playSfx>[0]> = {
             [ACTION_TYPES.DRAW]: 'cardDrop',
@@ -591,10 +608,12 @@
     const { ctx } = buildAIContext();
 
     try {
-      await runAITurn({
+      await runAIPipeline({
         context: ctx,
         plugin,
-        heuristics: PROMPT_FULL_TURN,
+        checkupPrompt: PROMPT_START_OF_TURN,
+        plannerPrompt: PROMPT_PLANNER,
+        executorPrompt: PROMPT_EXECUTOR,
         apiKey,
         model: selectedModel.modelId,
         provider: selectedModel.provider,
@@ -612,6 +631,7 @@
     }
 
     aiThinking = false;
+    announceHumanTurn();
   }
 
   /**
@@ -655,6 +675,7 @@
     }
 
     aiThinking = false;
+    announceHumanTurn();
   }
 
   /**
@@ -692,6 +713,7 @@
     }
 
     aiThinking = false;
+    announceHumanTurn();
   }
 
   function handleMulligan() {
@@ -742,6 +764,7 @@
     if (wasSetup && gameState.phase === PHASES.PLAYING && gameState.turnNumber === 1) {
       flipFieldCardsFaceUp(gameState);
       gameState = { ...gameState };
+      announceHumanTurn();
       return; // Human's turn 1 — no AI trigger
     }
 
@@ -866,27 +889,34 @@
     if (!gameState || !contextMenu || gameState.pendingDecision) return;
     const zoneKey = contextMenu.zoneKey;
 
+    // Collect card names from both hands BEFORE the reveal action (for logging)
+    const playerZone = gameState.zones[zoneKey];
+    const playerCardNames = playerZone?.cards.map(c => c.template.name).join(', ') ?? '';
+    const suffix = zoneKey.replace(/^player[12]_/, '');
+    const opponentZoneKey = `player2_${suffix}`;
+    const opponentZone = gameState.zones[opponentZoneKey];
+    const opponentCardNames = opponentZone?.cards.map(c => c.template.name).join(', ') ?? '';
+
     // Pull card effect text from staging zone (the card being resolved)
     const stagingKey = 'staging';
     const stagingCard = gameState.zones[stagingKey]?.cards.at(-1);
     const template = stagingCard ? getTemplate(stagingCard.template.id) : undefined;
     const rules = (template as any)?.rules?.join(' ') ?? '';
+    // Include BOTH hands' card names in the decision message so AI sees them
+    const handInfo = `\nPlayer 1 hand: ${playerCardNames}\nYour hand (Player 2): ${opponentCardNames}`;
     const actionMsg = rules
-      ? `Both hands revealed. Card effect (${template!.name}): ${rules} — Execute this effect on YOUR hand (move cards, shuffle deck, etc.), then call resolve_decision.`
-      : `Both hands revealed. Execute the card effect on your hand, then call resolve_decision.`;
+      ? `Both hands revealed. Card effect (${template!.name}): ${rules}${handInfo} — Execute this effect on YOUR hand (move cards, shuffle deck, etc.), then call resolve_decision.`
+      : `Both hands revealed.${handInfo} — Execute the card effect on your hand, then call resolve_decision.`;
 
     executeAction(gameState, revealHand(0, zoneKey, true, actionMsg));
-    gameState.log.push(`[Player 1] Revealed both hands (mutual)`);
     gameState = { ...gameState };
     playSfx('confirm');
 
     // Show the opponent's hand to the human (cards are PUBLIC after mutual reveal)
-    const suffix = zoneKey.replace(/^player[12]_/, '');
-    const opponentZoneKey = `player2_${suffix}`;
-    const opponentZone = gameState.zones[opponentZoneKey];
-    if (opponentZone && opponentZone.cards.length > 0) {
-      const zoneName = opponentZone.config.name ?? opponentZoneKey;
-      openCardModal({ cards: [...opponentZone.cards], zoneKey: opponentZoneKey, zoneName, allowReorder: false, shuffleOnConfirm: false });
+    const opponentZoneNow = gameState.zones[opponentZoneKey];
+    if (opponentZoneNow && opponentZoneNow.cards.length > 0) {
+      const zoneName = opponentZoneNow.config.name ?? opponentZoneKey;
+      openCardModal({ cards: [...opponentZoneNow.cards], zoneKey: opponentZoneKey, zoneName, allowReorder: false, shuffleOnConfirm: false });
     }
 
     // If AI is the target, trigger a decision mini-turn
