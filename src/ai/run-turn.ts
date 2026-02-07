@@ -4,7 +4,7 @@ import { createFireworks } from '@ai-sdk/fireworks';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import type { GamePlugin } from '../core';
 import type { ToolContext, RunnableTool } from '../core/ai-tools';
-import { createSpawnSubagentTool } from './tools/spawn-subagent';
+import { createSpawnSubagentTool } from './spawn-subagent';
 import { logStepFinish } from './logging';
 import { AI_CONFIG, TERMINAL_TOOL_NAMES } from './constants';
 

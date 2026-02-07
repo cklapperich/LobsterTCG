@@ -1,8 +1,8 @@
 import { generateText } from 'ai';
 import type { LanguageModelV1 } from 'ai';
-import type { RunnableTool } from '../../core/ai-tools';
-import { toAISDKTools } from '../run-turn';
-import { SUBAGENT_CONFIG } from '../constants';
+import type { RunnableTool } from '../core/ai-tools';
+import { toAISDKTools } from './run-turn';
+import { SUBAGENT_CONFIG } from './constants';
 
 /**
  * Create a tool that spawns a subagent for analysis tasks.
