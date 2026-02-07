@@ -127,7 +127,7 @@ describe('warnOneSupporter', () => {
     expect(state.log.some(l => l.includes('Already played a Supporter'))).toBe(true);
   });
 
-  it('allows second Supporter with allowed_by_effect', () => {
+  it('allows second Supporter with allowed_by_card_effect', () => {
     const { state, gameLoop, blocked } = setupGame();
 
     const tierno = placeCard(state, 0, 'hand', TIERNO);
@@ -135,7 +135,7 @@ describe('warnOneSupporter', () => {
     gameLoop.processNext();
 
     const trevor = placeCard(state, 0, 'hand', TREVOR);
-    gameLoop.submit({ ...moveCard(0, trevor, 'player1_hand', 'staging'), allowed_by_effect: true });
+    gameLoop.submit({ ...moveCard(0, trevor, 'player1_hand', 'staging'), allowed_by_card_effect: true });
     gameLoop.processNext();
     expect(blocked).toHaveLength(0);
   });
@@ -445,3 +445,49 @@ describe('warnStadiumOnly', () => {
 
 // Note: opponent zone checks are now in the core engine (checkOpponentZone),
 // tested in the core test suite. The GameLoop applies them automatically.
+
+describe('trainer rules in readable state', () => {
+  it('should include rules[] on trainer cards in readable state and narrative', async () => {
+    const { toReadableState } = await import('../../core/readable');
+    const { pokemonHooksPlugin: hooksPlugin } = await import('./hooks');
+    const { formatNarrativeState } = await import('./narrative');
+    const { PluginManager } = await import('../../core');
+
+    const { state } = setupGame();
+    const IONO = 'sv45-80';
+    const SWITCH = 'me1-130';
+    const LILLIE = 'me1-119';
+
+    // Verify templates have rules
+    expect(getTemplate(IONO)!.rules!.length).toBeGreaterThan(0);
+    expect(getTemplate(SWITCH)!.rules!.length).toBeGreaterThan(0);
+    expect(getTemplate(LILLIE)!.rules!.length).toBeGreaterThan(0);
+
+    placeCard(state, 0, 'hand', IONO);
+    placeCard(state, 0, 'hand', SWITCH);
+    placeCard(state, 0, 'hand', LILLIE);
+
+    // Card instances should preserve rules on template
+    for (const card of state.zones['player1_hand'].cards) {
+      const t = card.template as PokemonCardTemplate;
+      expect(t.rules).toBeDefined();
+      expect(t.rules!.length).toBeGreaterThan(0);
+    }
+
+    // Readable state should include rules
+    const readable = toReadableState(state, 0);
+    for (const card of readable.zones['player1_hand'].cards) {
+      expect(card.rules).toBeDefined();
+      expect((card.rules as string[]).length).toBeGreaterThan(0);
+    }
+
+    // Narrative should include rules text
+    const pm = new PluginManager();
+    pm.register(hooksPlugin as any);
+    const modified = pm.applyReadableStateModifier(readable);
+    const narrative = formatNarrativeState(modified);
+    expect(narrative).toContain('Each player shuffles'); // Iono
+    expect(narrative).toContain('Switch your Active'); // Switch
+    expect(narrative).toContain('Shuffle your hand into your deck'); // Lillie
+  });
+});

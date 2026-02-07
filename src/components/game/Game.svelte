@@ -3,7 +3,7 @@
   import type { Playmat, CardInstance, CardTemplate, GameState, CounterDefinition, DeckList, ZoneConfig, Action } from '../../core';
   import { executeAction, shuffle, moveCard, VISIBILITY, flipCard, endTurn, loadDeck, getCardName, findCardInZones, toReadableState, PluginManager, setOrientation, createDecision, resolveDecision, revealHand, mulligan as mulliganAction, ACTION_TYPES, PHASES, ACTION_SOURCES } from '../../core';
   import type { ToolContext } from '../../core/ai-tools';
-  import { plugin, executeSetup, ZONE_IDS, pokemonHooksPlugin, autoMulligan, flipFieldCardsFaceUp, ensureCardInHand } from '../../plugins/pokemon';
+  import { plugin, executeSetup, ZONE_IDS, pokemonHooksPlugin, flipFieldCardsFaceUp, ensureCardInHand } from '../../plugins/pokemon';
   import { getTemplate } from '../../plugins/pokemon/cards';
   import PlaymatGrid from './PlaymatGrid.svelte';
   import ZoneContextMenu from './ZoneContextMenu.svelte';
@@ -20,7 +20,7 @@
     executeCounterReturn,
     clearZoneCounters,
   } from './counterDragState.svelte';
-  import { playSfx } from '../../lib/audio.svelte';
+  import { playSfx, playBgm, stopBgm, toggleMute, audioSettings } from '../../lib/audio.svelte';
   import { runAITurn } from '../../ai';
   import agentsMd from '../../plugins/pokemon/agents.md?raw';
   import agent0Md from '../../plugins/pokemon/agent0.md?raw';
@@ -96,6 +96,10 @@
   const gameLog = $derived(gameState?.log ?? []);
   let logContainer = $state<HTMLDivElement | null>(null);
   let logInput = $state('');
+
+  // Staging confirmation modal state
+  let showStagingConfirm = $state(false);
+  let stagingConfirmCallback = $state<(() => void) | null>(null);
 
   // Request modal state
   let showRequestModal = $state(false);
@@ -258,12 +262,6 @@
       executeSetup(gameState, 0);
       executeSetup(gameState, 1);
 
-      // Auto-mulligan AI (player 1)
-      const mulliganCount = autoMulligan(gameState, 1);
-      if (mulliganCount > 0) {
-        gameState.log.push(`AI mulliganed ${mulliganCount} time(s)`);
-      }
-
       // Lass test: ensure both players have Lass in opening hand
       if (lassTest) {
         ensureCardInHand(gameState, 0, 'base1-75');
@@ -273,6 +271,7 @@
       gameState.log = ['Game started — Setup Phase'];
       gameState = { ...gameState };
       loading = false;
+      playBgm();
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to load game';
       loading = false;
@@ -479,12 +478,6 @@
       executeSetup(state, 0);
       executeSetup(state, 1);
 
-      // Auto-mulligan AI (player 1)
-      const mulliganCount = autoMulligan(state, 1);
-      if (mulliganCount > 0) {
-        state.log.push(`AI mulliganed ${mulliganCount} time(s)`);
-      }
-
       // Lass test: ensure both players have Lass in opening hand
       if (lassTest) {
         ensureCardInHand(state, 0, 'base1-75');
@@ -496,10 +489,12 @@
       previewCard = null;
       closeContextMenuStore();
       closeCardModalStore();
+      playBgm();
     });
   }
 
   function handleBackToMenu() {
+    stopBgm();
     playSfx('cancel');
     onBackToMenu?.();
   }
@@ -512,11 +507,14 @@
 
   function handleDebug() {
     if (!gameState) return;
+    // Snapshot strips Svelte 5 proxy — Object.entries() on proxied templates
+    // may not enumerate all keys (e.g. rules[] on trainer cards).
+    const snapshot = $state.snapshot(gameState);
     // Narrative: always show AI (Player 1) perspective to match hardcoded labels
-    const aiReadable = pluginManager.applyReadableStateModifier(toReadableState(gameState, 1));
+    const aiReadable = pluginManager.applyReadableStateModifier(toReadableState(snapshot, 1));
     debugNarrative = pluginManager.formatReadableState(aiReadable);
     // JSON: show active player's perspective
-    const jsonReadable = pluginManager.applyReadableStateModifier(toReadableState(gameState, gameState.activePlayer));
+    const jsonReadable = pluginManager.applyReadableStateModifier(toReadableState(snapshot, snapshot.activePlayer));
     debugJson = JSON.stringify(jsonReadable, null, 2);
     showDebugModal = true;
   }
@@ -534,12 +532,23 @@
       formatCardForSearch: plugin.formatCardForSearch,
       getState: () => gameState!,
       getReadableState: () => {
-        const modified = pluginManager.applyReadableStateModifier(toReadableState(gameState!, 1));
+        // Snapshot strips Svelte 5 proxy so Object.entries() enumerates all template fields
+        const snapshot = $state.snapshot(gameState!);
+        const modified = pluginManager.applyReadableStateModifier(toReadableState(snapshot, 1));
         return pluginManager.formatReadableState(modified);
       },
       execute: (action) => {
         const result = queue.then(async () => {
           action.source = ACTION_SOURCES.AI;
+
+          // Block AI from ending turn with cards in staging
+          if (action.type === ACTION_TYPES.END_TURN && gameState) {
+            const staging = gameState.zones['staging'];
+            if (staging && staging.cards.length > 0) {
+              const names = staging.cards.map(c => c.template.name).join(', ');
+              return `Action blocked: Cannot end turn with cards in staging (${names}). Move them to the appropriate zone first.`;
+            }
+          }
 
           // Special case: coin_flip uses visual CoinFlip animation
           if (action.type === ACTION_TYPES.COIN_FLIP && coinFlipRef) {
@@ -719,6 +728,24 @@
   }
 
   function handleEndTurn() {
+    if (!gameState) return;
+
+    // Check if staging has cards — prompt human player for confirmation
+    const staging = gameState.zones['staging'];
+    if (staging && staging.cards.length > 0 && gameState.activePlayer === 0) {
+      showStagingConfirm = true;
+      stagingConfirmCallback = () => {
+        showStagingConfirm = false;
+        stagingConfirmCallback = null;
+        executeEndTurnInner();
+      };
+      return;
+    }
+
+    executeEndTurnInner();
+  }
+
+  function executeEndTurnInner() {
     if (!gameState) return;
     const currentPlayer = gameState.activePlayer;
     const wasSetup = gameState.phase === PHASES.SETUP;
@@ -953,21 +980,39 @@
       <div class="sidebar">
         <!-- Phase indicator -->
         <div class="gbc-panel phase-panel">
-          <h1 class="text-base max-sm:text-sm m-0 tracking-wide title-shadow font-retro phase-title text-center">
-            {#if gameState.phase === PHASES.SETUP}
-              <span class="text-gbc-yellow">SETUP</span>
-            {:else if aiThinking}
-              <span class="text-gbc-red animate-pulse">AI THINKING</span>
-            {:else if decisionTargetsHuman}
-              <span class="text-gbc-red animate-pulse">DECISION</span>
-            {:else if gameState.pendingDecision?.targetPlayer === 1}
-              <span class="text-gbc-blue animate-pulse">WAITING...</span>
-            {:else if gameState.activePlayer === 0}
-              <span class="text-gbc-green">YOUR TURN</span>
-            {:else}
-              <span class="text-gbc-blue">AI TURN</span>
-            {/if}
-          </h1>
+          <div class="phase-header">
+            <h1 class="text-base max-sm:text-sm m-0 tracking-wide title-shadow font-retro phase-title text-center flex-1">
+              {#if gameState.phase === PHASES.SETUP}
+                <span class="text-gbc-yellow">SETUP</span>
+              {:else if aiThinking}
+                <span class="text-gbc-red animate-pulse">AI THINKING</span>
+              {:else if decisionTargetsHuman}
+                <span class="text-gbc-red animate-pulse">DECISION</span>
+              {:else if gameState.pendingDecision?.targetPlayer === 1}
+                <span class="text-gbc-blue animate-pulse">WAITING...</span>
+              {:else if gameState.activePlayer === 0}
+                <span class="text-gbc-green">YOUR TURN</span>
+              {:else}
+                <span class="text-gbc-blue">AI TURN</span>
+              {/if}
+            </h1>
+            <button
+              class="mute-btn"
+              onclick={toggleMute}
+              title={audioSettings.bgmMuted ? 'Unmute music' : 'Mute music'}
+            >
+              {#if audioSettings.bgmMuted}
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+                  <path d="M3.63 3.63a.75.75 0 0 1 1.06 0L21 19.37a.75.75 0 0 1-1.06 1.06l-3.33-3.33A7.47 7.47 0 0 1 12 19.5V21a.75.75 0 0 1-1.28.53L6 16.81H3a.75.75 0 0 1-.75-.75v-8.12c0-.41.34-.75.75-.75h3L6.72 6.5 3.63 4.69a.75.75 0 0 1 0-1.06ZM12 4.5a.75.75 0 0 1 .75.75v7.19l5.25 5.25V5.25a.75.75 0 0 0-1.28-.53L12 9.44V4.5Z"/>
+                </svg>
+              {:else}
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+                  <path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.318.664-2.66 1.905A9.76 9.76 0 0 0 1.5 12c0 .898.121 1.768.35 2.595.341 1.24 1.518 1.905 2.659 1.905h1.93l4.5 4.5c.945.945 2.561.276 2.561-1.06V4.06ZM18.584 5.106a.75.75 0 0 1 1.06 0c3.808 3.807 3.808 9.98 0 13.788a.75.75 0 0 1-1.06-1.06 8.25 8.25 0 0 0 0-11.668.75.75 0 0 1 0-1.06Z"/>
+                  <path d="M15.932 7.757a.75.75 0 0 1 1.061 0 6 6 0 0 1 0 8.486.75.75 0 0 1-1.06-1.061 4.5 4.5 0 0 0 0-6.364.75.75 0 0 1 0-1.06Z"/>
+                </svg>
+              {/if}
+            </button>
+          </div>
           {#if gameState.phase !== PHASES.SETUP}
             <div class="text-center mt-1">
               <span class="text-gbc-light text-[0.45rem]">TURN</span>
@@ -1004,13 +1049,15 @@
               {gameState.phase === PHASES.SETUP ? 'END SETUP' : 'END TURN'}
             </button>
           {/if}
-          <button
-            class="gbc-btn sidebar-btn"
-            onclick={handleMulligan}
-            disabled={!gameState || aiThinking}
-          >
-            MULLIGAN
-          </button>
+          {#if gameState.phase === PHASES.SETUP}
+            <button
+              class="gbc-btn sidebar-btn"
+              onclick={handleMulligan}
+              disabled={!gameState || aiThinking}
+            >
+              MULLIGAN
+            </button>
+          {/if}
           <button
             class="gbc-btn sidebar-btn"
             onclick={handleRequestAction}
@@ -1178,6 +1225,26 @@
     onResult={handleCoinResult}
   />
 
+  <!-- Staging Confirmation Modal -->
+  {#if showStagingConfirm}
+    {@const stagingCards = gameState?.zones['staging']?.cards ?? []}
+    <div class="debug-overlay" onclick={() => { showStagingConfirm = false; stagingConfirmCallback = null; }} onkeydown={(e) => { if (e.key === 'Escape') { showStagingConfirm = false; stagingConfirmCallback = null; }}} role="button" tabindex="-1">
+      <div class="request-modal gbc-panel" onclick={(e) => e.stopPropagation()} onkeydown={() => {}} role="dialog" tabindex="-1">
+        <div class="text-gbc-yellow text-[0.5rem] text-center py-1 px-2 bg-gbc-border">CARDS IN STAGING</div>
+        <div class="px-3 py-3 flex flex-col gap-2">
+          <span class="text-gbc-light text-[0.45rem]">
+            Staging still has cards: {stagingCards.map(c => c.template.name).join(', ')}
+          </span>
+          <span class="text-gbc-yellow text-[0.45rem]">End turn anyway?</span>
+          <div class="flex justify-end gap-2 mt-1">
+            <button class="gbc-btn text-[0.45rem] py-1.5 px-4" onclick={() => { showStagingConfirm = false; stagingConfirmCallback = null; playSfx('cancel'); }}>CANCEL</button>
+            <button class="gbc-btn text-[0.45rem] py-1.5 px-4" onclick={() => stagingConfirmCallback?.()}>END TURN</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  {/if}
+
   <!-- Request Action Modal -->
   {#if showRequestModal}
     <div class="debug-overlay" onclick={handleRequestCancel} onkeydown={(e) => e.key === 'Escape' && handleRequestCancel()} role="button" tabindex="-1">
@@ -1272,6 +1339,17 @@
 
   .phase-panel {
     @apply py-2 px-3;
+  }
+
+  .phase-header {
+    @apply flex items-center gap-1;
+  }
+
+  .mute-btn {
+    @apply shrink-0 p-1 rounded-sm cursor-pointer;
+    @apply text-gbc-light/60 hover:text-gbc-light;
+    @apply bg-transparent border-none outline-none;
+    transition: color 0.1s;
   }
 
   .decision-msg {

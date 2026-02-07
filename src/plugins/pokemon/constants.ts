@@ -79,8 +79,8 @@ export const SETUP = { HAND_SIZE: 7, PRIZE_COUNT: 6, MAX_MULLIGANS: 20 } as cons
 // First turn where evolution is allowed
 export const FIRST_EVOLUTION_TURN = 2;
 
-// First turn where supporters are allowed (same rule as evolution)
-export const FIRST_SUPPORTER_TURN = 2;
+// First turn where supporters are blocked (only the player who goes first)
+export const FIRST_SUPPORTER_TURN = 1;
 
 // Pokemon-specific action types (custom actions, not in core Action union)
 export const POKEMON_ACTION_TYPES = {

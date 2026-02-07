@@ -154,6 +154,7 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
           toZone: { type: 'string', description: 'Zone key to move the card to (e.g. "player2_active")' },
           position: { type: 'number', description: 'Optional position in the target zone (0 = top)' },
           fromPosition: { type: 'string', description: 'Position to pick from when cardName is omitted: "top" (default), "bottom", or numeric index' },
+          allowed_by_card_effect: { type: 'boolean', description: 'Set true when a card effect permits bypassing normal rules (e.g. extra energy attachment, evolution on first turn)' },
         },
         required: ['fromZone', 'toZone'],
       },
@@ -161,9 +162,10 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
         const cardId = input.cardName
           ? resolveCard(ctx.getState(), input.cardName, input.fromZone)
           : resolveCardByPosition(ctx.getState(), input.fromZone, input.fromPosition);
-        return ctx.execute(
-          moveCard(p, cardId, input.fromZone, input.toZone, input.position),
-        );
+        return ctx.execute({
+          ...moveCard(p, cardId, input.fromZone, input.toZone, input.position),
+          ...(input.allowed_by_card_effect && { allowed_by_card_effect: true }),
+        });
       },
     }),
 
@@ -177,6 +179,7 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
           fromZone: { type: 'string', description: 'Zone key to move all cards from (e.g. "player2_active")' },
           toZone: { type: 'string', description: 'Zone key to move the cards to (e.g. "player2_discard")' },
           position: { type: 'number', description: 'Optional position in the target zone (0 = top)' },
+          allowed_by_card_effect: { type: 'boolean', description: 'Set true when a card effect permits bypassing normal rules' },
         },
         required: ['fromZone', 'toZone'],
       },
@@ -185,9 +188,10 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
         if (!zone) return `Error: zone "${input.fromZone}" not found`;
         if (zone.cards.length === 0) return `Error: zone "${input.fromZone}" is empty`;
         const cardIds = zone.cards.map(c => c.instanceId);
-        return ctx.execute(
-          moveCardStack(p, cardIds, input.fromZone, input.toZone, input.position),
-        );
+        return ctx.execute({
+          ...moveCardStack(p, cardIds, input.fromZone, input.toZone, input.position),
+          ...(input.allowed_by_card_effect && { allowed_by_card_effect: true }),
+        });
       },
     }),
 
@@ -205,6 +209,7 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
           },
           zone: { type: 'string', description: 'Target zone key (e.g. "player2_deck")' },
           position: { type: 'string', enum: [POSITIONS.TOP, POSITIONS.BOTTOM], description: 'Place on top or bottom of the zone' },
+          allowed_by_card_effect: { type: 'boolean', description: 'Set true when a card effect permits bypassing normal rules' },
         },
         required: ['cardNames', 'zone', 'position'],
       },
@@ -219,9 +224,10 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
           }
           throw new Error(`Card "${name}" not found in any zone`);
         });
-        return ctx.execute(
-          placeOnZone(p, cardIds, input.zone, input.position),
-        );
+        return ctx.execute({
+          ...placeOnZone(p, cardIds, input.zone, input.position),
+          ...(input.allowed_by_card_effect && { allowed_by_card_effect: true }),
+        });
       },
     }),
 
@@ -337,13 +343,17 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
           zone: { type: 'string', description: 'Zone key the card is in (e.g. "player1_active")' },
           counterType: { type: 'string', description: 'Counter type (e.g. "10" for 10-damage counter, "poison")' },
           amount: { type: 'number', description: 'Number of counters to add (default 1)' },
+          allowed_by_card_effect: { type: 'boolean', description: 'Set true when a card effect permits bypassing normal rules' },
         },
         required: ['cardName', 'zone', 'counterType'],
       },
       async run(input) {
         const cardId = resolveCard(ctx.getState(), input.cardName, input.zone);
         const amount = input.amount ?? 1;
-        return ctx.execute(addCounter(p, cardId, input.counterType, amount));
+        return ctx.execute({
+          ...addCounter(p, cardId, input.counterType, amount),
+          ...(input.allowed_by_card_effect && { allowed_by_card_effect: true }),
+        });
       },
     }),
 
