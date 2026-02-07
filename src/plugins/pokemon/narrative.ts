@@ -244,9 +244,9 @@ function formatBoard(readable: ReadableGameState, playerPrefix: string): string[
     if (zone.count === 0) continue;
 
     if (zone.cards.length === 0 && zone.count > 0) {
-      lines.push(`[${label}] (${zone.count} face-down card${zone.count > 1 ? 's' : ''})`);
+      lines.push(`[${label}] (zone: "${zoneKey}") (${zone.count} face-down card${zone.count > 1 ? 's' : ''})`);
     } else {
-      lines.push(...formatFieldZoneCompact(label, zone));
+      lines.push(...formatFieldZoneCompact(label, zoneKey, zone));
     }
   }
 
@@ -254,7 +254,7 @@ function formatBoard(readable: ReadableGameState, playerPrefix: string): string[
   const handKey = `${playerPrefix}_hand`;
   const hand = zones[handKey];
   if (hand) {
-    lines.push(formatHandLine(hand));
+    lines.push(formatHandLine(hand, handKey));
   }
 
   // Count line: Deck | Discard | Prizes
@@ -265,7 +265,7 @@ function formatBoard(readable: ReadableGameState, playerPrefix: string): string[
   const discard = zones[discardKey];
   if (discard && discard.cards.length > 0) {
     if (discard.cards.length <= NARRATIVE.DISCARD_DISPLAY_LIMIT) {
-      lines.push(`  Discard: ${condenseNames(discard.cards)}`);
+      lines.push(`  Discard (zone: "${discardKey}"): ${condenseNames(discard.cards)}`);
     }
   }
 
@@ -284,9 +284,9 @@ function formatBoard(readable: ReadableGameState, playerPrefix: string): string[
   const staging = zones['staging'];
   if (staging && staging.count > 0) {
     if (staging.cards.length > 0) {
-      lines.push(`Staging: ${condenseNames(staging.cards)}`);
+      lines.push(`Staging (zone: "staging"): ${condenseNames(staging.cards)}`);
     } else {
-      lines.push(`Staging: ${staging.count}`);
+      lines.push(`Staging (zone: "staging"): ${staging.count}`);
     }
   }
 
@@ -295,7 +295,7 @@ function formatBoard(readable: ReadableGameState, playerPrefix: string): string[
 
 // ── Compact field zone (instance state only, no attacks/abilities) ──
 
-function formatFieldZoneCompact(label: string, zone: ReadableZone): string[] {
+function formatFieldZoneCompact(label: string, zoneKey: string, zone: ReadableZone): string[] {
   const lines: string[] = [];
   const cards = zone.cards;
   if (cards.length === 0) return lines;
@@ -304,7 +304,7 @@ function formatFieldZoneCompact(label: string, zone: ReadableZone): string[] {
   const pokemon = cards[cards.length - 1];
   const attached = cards.slice(0, -1);
 
-  lines.push(`[${label}] ${formatInstanceStats(pokemon)}`);
+  lines.push(`[${label}] (zone: "${zoneKey}") ${formatInstanceStats(pokemon)}`);
 
   if (attached.length > 0) {
     lines.push(`  Attached: ${condenseNames(attached)}`);
@@ -348,11 +348,11 @@ function formatInstanceStats(card: ReadableCard): string {
 
 // ── Hand formatting ──────────────────────────────────────────────
 
-function formatHandLine(zone: ReadableZone): string {
-  if (zone.count === 0) return 'Hand: 0';
+function formatHandLine(zone: ReadableZone, zoneKey: string): string {
+  if (zone.count === 0) return `Hand (zone: "${zoneKey}"): 0`;
 
   if (zone.cards.length === 0) {
-    return `Hand: ${zone.count} (hidden)`;
+    return `Hand (zone: "${zoneKey}"): ${zone.count} (hidden)`;
   }
 
   // Sum actual visible card count from condensed entries (each may have count > 1)
@@ -361,9 +361,9 @@ function formatHandLine(zone: ReadableZone): string {
   const cardList = condenseNames(zone.cards);
 
   if (hiddenCount > 0) {
-    return `Hand (${zone.count}): ${cardList}, [${hiddenCount} hidden]`;
+    return `Hand (zone: "${zoneKey}") (${zone.count}): ${cardList}, [${hiddenCount} hidden]`;
   }
-  return `Hand (${zone.count}): ${cardList}`;
+  return `Hand (zone: "${zoneKey}") (${zone.count}): ${cardList}`;
 }
 
 // ── Shared helpers ───────────────────────────────────────────────
@@ -502,6 +502,7 @@ function formatStadium(zones: Record<string, ReadableZone>): string[] {
   const lines: string[] = [];
   const stadium = zones['stadium'];
   if (stadium && stadium.count > 0) {
+    lines.push(`(zone: "stadium")`);
     for (const card of stadium.cards) {
       lines.push(card.name);
     }

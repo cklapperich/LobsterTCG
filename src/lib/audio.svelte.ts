@@ -14,8 +14,21 @@ const SFX_PATHS = {
 
 type SfxKey = keyof typeof SFX_PATHS;
 
+// Battle theme paths
+const BATTLE_THEMES = [
+  '/battle_themes/03 Duel vs. Team GR.mp3',
+  '/battle_themes/05 Duel.mp3',
+  '/battle_themes/12 Duel vs. Fortress Leader.mp3',
+  '/battle_themes/14 Club Master Duel.mp3',
+  '/battle_themes/16 Ronald\'s Theme.mp3',
+  '/battle_themes/20 Grand Master Duel.mp3',
+];
+
 // Audio element cache for preloading
 const audioCache = new Map<SfxKey, HTMLAudioElement>();
+
+// Background music state
+let bgmAudio: HTMLAudioElement | null = null;
 
 // Preload an audio file
 function preload(key: SfxKey): HTMLAudioElement {
@@ -39,9 +52,44 @@ export function playSfx(key: SfxKey): void {
   }
 }
 
-// Audio settings state (for future mute/volume controls)
+// Start a random battle theme on loop
+export function playBgm(): void {
+  stopBgm();
+  const theme = BATTLE_THEMES[Math.floor(Math.random() * BATTLE_THEMES.length)];
+  bgmAudio = new Audio(theme);
+  bgmAudio.loop = true;
+  bgmAudio.volume = audioSettings.volume * 0.4; // BGM quieter than SFX
+  if (!audioSettings.bgmMuted) {
+    bgmAudio.play().catch(() => {});
+  }
+}
+
+// Stop background music
+export function stopBgm(): void {
+  if (bgmAudio) {
+    bgmAudio.pause();
+    bgmAudio.currentTime = 0;
+    bgmAudio = null;
+  }
+}
+
+// Toggle BGM mute (SFX unaffected)
+export function toggleMute(): void {
+  audioSettings.bgmMuted = !audioSettings.bgmMuted;
+  if (bgmAudio) {
+    if (audioSettings.bgmMuted) {
+      bgmAudio.pause();
+    } else {
+      bgmAudio.volume = audioSettings.volume * 0.4;
+      bgmAudio.play().catch(() => {});
+    }
+  }
+}
+
+// Audio settings state
 export const audioSettings = $state({
   muted: false,
+  bgmMuted: false,
   volume: 0.5,
 });
 

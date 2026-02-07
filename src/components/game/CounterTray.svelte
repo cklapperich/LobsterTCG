@@ -88,7 +88,6 @@
 
   {#each Object.entries(groupedCounters()) as [category, categoryCounters]}
     <div class="category">
-      <div class="category-label">{category.toUpperCase()}</div>
       <div class="counter-row">
         {#each categoryCounters as counter (counter.id)}
           <div
@@ -134,10 +133,6 @@
 
   .category:last-child {
     @apply mb-0;
-  }
-
-  .category-label {
-    @apply text-gbc-light text-[0.4rem] px-2 mb-1;
   }
 
   .counter-row {

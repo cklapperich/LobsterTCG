@@ -97,10 +97,10 @@ describe('checkOpponentZone', () => {
     expect(blocked).toHaveLength(0);
   });
 
-  it('allows opponent zone move with allowed_by_effect', () => {
+  it('allows opponent zone move with allowed_by_card_effect', () => {
     const { state, gameLoop, blocked } = setupGame();
     const card = placeCard(state, 0, 'hand');
-    gameLoop.submit({ ...moveCard(1, card, 'player2_hand', 'player2_field'), source: ACTION_SOURCES.AI, allowed_by_effect: true });
+    gameLoop.submit({ ...moveCard(1, card, 'player2_hand', 'player2_field'), source: ACTION_SOURCES.AI, allowed_by_card_effect: true });
     gameLoop.processNext();
     expect(blocked).toHaveLength(0);
   });

@@ -875,7 +875,7 @@ export function checkOpponentZone<T extends CardTemplate>(
   state: GameState<T>,
   action: Action
 ): { shouldBlock: boolean; reason: string } | null {
-  if (action.allowed_by_effect) return null;
+  if (action.allowed_by_card_effect) return null;
 
   // Only check actions that place/move cards into zones
   let zoneKey: string | undefined;
@@ -904,7 +904,7 @@ export function checkOpponentZone<T extends CardTemplate>(
   if (zone?.config.shared) return null;
 
   const zoneName = zone?.config.name ?? zoneKey;
-  const reason = `Cannot move cards to opponent's ${zoneName}. Set allowed_by_effect if a card effect permits this.`;
+  const reason = `Cannot move cards to opponent's ${zoneName}. Set allowed_by_card_effect if a card effect permits this.`;
   return {
     shouldBlock: action.source === ACTION_SOURCES.AI,
     reason,
@@ -920,7 +920,7 @@ export function executeAction<T extends CardTemplate>(
   action: Action
 ): string | null {
   // Capacity pre-check (before recording in action history)
-  if (!action.allowed_by_effect) {
+  if (!action.allowed_by_card_effect) {
     const blocked = checkZoneCapacity(state, action);
     if (blocked) {
       state.log.push(blocked);

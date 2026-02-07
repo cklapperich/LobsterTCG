@@ -273,6 +273,7 @@ const HIDDEN_DEFAULT_TOOLS: Set<string> = new Set([
   ACTION_TYPES.DECLARE_VICTORY,
   ACTION_TYPES.PLACE_ON_ZONE,
   ACTION_TYPES.SET_ORIENTATION,
+  ACTION_TYPES.MULLIGAN,
 ]);
 
 /** Local tool factory matching RunnableTool shape. */
@@ -335,7 +336,7 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
 
   // Setup phase: only allow move_card, move_card_stack, end_turn
   if (ctx.getState().phase === PHASES.SETUP) {
-    let setupTools = tools.filter(t => ([ACTION_TYPES.MOVE_CARD_STACK, ACTION_TYPES.END_TURN] as string[]).includes(t.name));
+    let setupTools = tools.filter(t => ([ACTION_TYPES.MOVE_CARD_STACK, ACTION_TYPES.END_TURN, ACTION_TYPES.MULLIGAN] as string[]).includes(t.name));
     // Add end_phase alias (agent0.md references it)
     const endTurnTool = setupTools.find(t => t.name === ACTION_TYPES.END_TURN);
     if (endTurnTool) {
@@ -415,6 +416,7 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
       properties: {
         attackName: { type: 'string', description: 'Name of the attack to use' },
         targetCardName: { type: 'string', description: 'Optional: name of a target card' },
+        allowed_by_card_effect: { type: 'boolean', description: 'Set true when a card effect permits bypassing normal rules (e.g. attacking on first turn)' },
       },
       required: ['attackName'],
     },
@@ -424,6 +426,7 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
         player: p,
         attackName: input.attackName,
         targetCardName: input.targetCardName,
+        ...(input.allowed_by_card_effect && { allowed_by_card_effect: true }),
       } as any);
     },
   }));
@@ -453,6 +456,7 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
       properties: {
         cardName: { type: 'string', description: 'Name of the Pokemon with the ability' },
         abilityName: { type: 'string', description: 'Name of the ability to use' },
+        allowed_by_card_effect: { type: 'boolean', description: 'Set true when a card effect permits bypassing normal rules' },
       },
       required: ['cardName', 'abilityName'],
     },
@@ -462,6 +466,7 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
         player: p,
         cardName: input.cardName,
         abilityName: input.abilityName,
+        ...(input.allowed_by_card_effect && { allowed_by_card_effect: true }),
       } as any);
     },
   }));

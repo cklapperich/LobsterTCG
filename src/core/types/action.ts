@@ -5,7 +5,7 @@ import type { ACTION_TYPES, ACTION_SOURCES, POSITIONS, REVEAL_TARGETS } from './
 interface BaseAction {
   type: string;
   player: PlayerIndex;
-  allowed_by_effect?: boolean;  // Card effect overrides normal rules
+  allowed_by_card_effect?: boolean;  // Card effect overrides normal rules
   source?: typeof ACTION_SOURCES.UI | typeof ACTION_SOURCES.AI;
 }
 
