@@ -231,11 +231,11 @@
   }
 
   .menu-header {
-    @apply text-gbc-yellow text-[0.4rem] text-center py-1 px-2 bg-gbc-border mb-1;
+    @apply text-gbc-yellow text-[0.6rem] text-center py-1 px-2 bg-gbc-border mb-1;
   }
 
   .menu-item {
-    @apply block w-full text-left text-[0.5rem] py-1.5 px-2;
+    @apply block w-full text-left text-[0.75rem] py-2 px-3;
     @apply text-gbc-cream bg-transparent border-none cursor-pointer;
     @apply hover:bg-gbc-border hover:text-gbc-yellow;
     @apply disabled:opacity-50 disabled:cursor-not-allowed;
@@ -251,7 +251,7 @@
   }
 
   .menu-item .arrow {
-    @apply text-[0.4rem] ml-2;
+    @apply text-[0.6rem] ml-2;
   }
 
   .submenu-wrapper {
@@ -267,7 +267,7 @@
   }
 
   .submenu-section {
-    @apply text-gbc-yellow text-[0.35rem] py-0.5 px-2 uppercase tracking-wider;
+    @apply text-gbc-yellow text-[0.525rem] py-0.5 px-2 uppercase tracking-wider;
   }
 
   .submenu-divider {

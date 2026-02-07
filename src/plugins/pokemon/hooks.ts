@@ -450,6 +450,16 @@ function warnStadiumOnly(state: PokemonState, action: Action): PreHookResult {
   return blockOrWarn(action, `Cannot place ${template.name} (${template.supertype}) in stadium zone. Only Stadium cards can be placed there. Set allowed_by_effect if a card effect permits this.`);
 }
 
+// Post-hook: Log Pokemon-specific mulligan message (opponent draws extra)
+function logMulliganMessage(state: PokemonState, action: Action): PostHookResult {
+  if (action.type !== ACTION_TYPES.MULLIGAN) return {};
+  const otherPlayer = action.player === 0 ? 2 : 1;
+  (state as GameState<PokemonCardTemplate>).log.push(
+    `Player ${action.player + 1} mulliganed. Don't forget to draw 1 extra card Player ${otherPlayer}!`
+  );
+  return {};
+}
+
 // ── Declare Attack: Custom Action ────────────────────────────────
 
 /** Action shape for declare_attack (Pokemon plugin custom action, not in core Action union). */
@@ -462,13 +472,53 @@ export interface DeclareAttackAction {
   allowed_by_effect?: boolean;
 }
 
-/** Custom executor: logs attack declaration to state.log and records in currentTurn.actions. */
+/** Action shape for declare_ability (Pokemon plugin custom action, not in core Action union). */
+export interface DeclareAbilityAction {
+  type: typeof POKEMON_ACTION_TYPES.DECLARE_ABILITY;
+  player: 0 | 1;
+  cardName: string;
+  abilityName: string;
+  source?: 'ui' | 'ai';
+  allowed_by_effect?: boolean;
+}
+
+/** Custom executor: logs attack declaration + effect text to state.log and records in currentTurn.actions. */
 function executeDeclareAttack(state: GameState<PokemonCardTemplate>, action: DeclareAttackAction): void {
   state.currentTurn.actions.push(action as unknown as Action);
   const activeKey = `player${action.player + 1}_${ZONE_IDS.ACTIVE}`;
-  const activeName = state.zones[activeKey]?.cards.at(-1)?.template?.name ?? 'Active Pokemon';
+  const topCard = state.zones[activeKey]?.cards.at(-1);
+  const activeName = topCard?.template?.name ?? 'Active Pokemon';
   const target = action.targetCardName ? ` targeting ${action.targetCardName}` : '';
   state.log.push(`${activeName} used ${action.attackName}!${target}`);
+
+  // Log attack effect text
+  if (topCard) {
+    const template = getCardTemplate((topCard.template as PokemonCardTemplate).id);
+    const attack = template?.attacks?.find(a => a.name.toLowerCase() === action.attackName.toLowerCase());
+    if (attack?.effect) {
+      state.log.push(`[${attack.name}] ${attack.effect}`);
+    }
+  }
+}
+
+/** Custom executor: logs ability declaration + effect text to state.log and records in currentTurn.actions. */
+function executeDeclareAbility(state: GameState<PokemonCardTemplate>, action: DeclareAbilityAction): void {
+  state.currentTurn.actions.push(action as unknown as Action);
+  state.log.push(`${action.cardName} used ability: ${action.abilityName}`);
+
+  // Log ability effect text — search all zones for the card
+  for (const zone of Object.values(state.zones)) {
+    for (const card of zone.cards) {
+      if (card.template.name === action.cardName) {
+        const template = getCardTemplate((card.template as PokemonCardTemplate).id);
+        const ability = template?.abilities?.find(a => a.name.toLowerCase() === action.abilityName.toLowerCase());
+        if (ability?.effect) {
+          state.log.push(`[${ability.name}] ${ability.effect}`);
+        }
+        return;
+      }
+    }
+  }
 }
 
 /** Pre-hook: the player who goes first (turnNumber <= 1) cannot attack. */
@@ -566,6 +616,7 @@ export const pokemonHooksPlugin: Plugin<PokemonCardTemplate> = {
   readableStateFormatter: formatNarrativeState,
   customActions: [
     { type: POKEMON_ACTION_TYPES.DECLARE_ATTACK, executor: executeDeclareAttack as any },
+    { type: POKEMON_ACTION_TYPES.DECLARE_ABILITY, executor: executeDeclareAbility as any },
   ],
   postHooks: {
     [ACTION_TYPES.MOVE_CARD]: [
@@ -575,6 +626,9 @@ export const pokemonHooksPlugin: Plugin<PokemonCardTemplate> = {
     [ACTION_TYPES.MOVE_CARD_STACK]: [
       { hook: setupFaceDown, priority: 50 },
       { hook: logTrainerText, priority: 100 },
+    ],
+    [ACTION_TYPES.MULLIGAN]: [
+      { hook: logMulliganMessage, priority: 100 },
     ],
   },
   preHooks: {

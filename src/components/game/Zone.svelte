@@ -165,7 +165,7 @@
   @reference "../../app.css";
 
   .zone {
-    @apply bg-gbc-dark-green border-4 border-gbc-border px-2 pb-2 pt-0.5 rounded;
+    @apply bg-gbc-dark-green border-4 border-gbc-border px-2 pb-2 pt-0 rounded flex flex-col items-center;
     box-shadow:
       inset 0.125rem 0.125rem 0 rgba(255,255,255,0.1),
       inset -0.125rem -0.125rem 0 rgba(0,0,0,0.2);
@@ -185,8 +185,7 @@
   }
 
   .zone-label {
-    @apply text-gbc-yellow text-[0.4rem] text-center mb-1 py-0.5 px-1 bg-gbc-border inline-block;
-    @apply relative left-1/2 -translate-x-1/2;
+    @apply text-gbc-yellow text-[0.4rem] text-center mb-1 py-0.5 px-1 bg-gbc-border;
     cursor: context-menu;
   }
 

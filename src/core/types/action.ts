@@ -149,6 +149,12 @@ export interface PeekAction extends BaseAction {
   fromPosition: typeof POSITIONS.TOP | typeof POSITIONS.BOTTOM;
 }
 
+// Mulligan Action - shuffle hand back into deck and redraw
+export interface MulliganAction extends BaseAction {
+  type: typeof ACTION_TYPES.MULLIGAN;
+  drawCount: number;
+}
+
 // Union of all action types
 export type Action =
   | DrawAction
@@ -171,4 +177,5 @@ export type Action =
   | ResolveDecisionAction
   | RevealHandAction
   | RevealAction
-  | PeekAction;
+  | PeekAction
+  | MulliganAction;

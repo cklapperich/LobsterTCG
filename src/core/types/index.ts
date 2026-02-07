@@ -63,6 +63,7 @@ export type {
   RevealHandAction,
   RevealAction,
   PeekAction,
+  MulliganAction,
 } from './action';
 
 // Game types

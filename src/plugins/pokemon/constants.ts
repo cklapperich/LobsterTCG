@@ -85,6 +85,7 @@ export const FIRST_SUPPORTER_TURN = 2;
 // Pokemon-specific action types (custom actions, not in core Action union)
 export const POKEMON_ACTION_TYPES = {
   DECLARE_ATTACK: 'declare_attack',
+  DECLARE_ABILITY: 'declare_ability',
 } as const;
 
 // Narrative display limits

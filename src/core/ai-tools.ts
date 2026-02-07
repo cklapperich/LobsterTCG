@@ -23,6 +23,7 @@ import {
   createDecision,
   resolveDecision,
   revealHand,
+  mulligan,
 } from './action';
 import type { Visibility } from './types';
 
@@ -559,6 +560,23 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
       },
       async run() {
         return ctx.execute(resolveDecision(p));
+      },
+    }),
+
+    // ── Mulligan ────────────────────────────────────────────────────
+    tool({
+      name: 'mulligan',
+      description: 'Shuffle your hand back into your deck and draw a new hand.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          drawCount: { type: 'number', description: 'Number of cards to draw (default 7)' },
+        },
+        required: [],
+      },
+      async run(input) {
+        const count = input.drawCount ?? 7;
+        return ctx.execute(mulligan(p, count));
       },
     }),
   ];

@@ -447,7 +447,7 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
 
   tools.push(tool({
     name: 'declare_ability',
-    description: 'Declare that a Pokemon is using an ability. Logs the declaration to the game log.',
+    description: 'Declare that a Pokemon is using an ability. Logs the declaration and effect text to the game log.',
     inputSchema: {
       type: 'object' as const,
       properties: {
@@ -457,9 +457,12 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
       required: ['cardName', 'abilityName'],
     },
     async run(input) {
-      const state = ctx.getState();
-      state.log.push(`${input.cardName} used ability: ${input.abilityName}`);
-      return ctx.getReadableState();
+      return ctx.execute({
+        type: POKEMON_ACTION_TYPES.DECLARE_ABILITY,
+        player: p,
+        cardName: input.cardName,
+        abilityName: input.abilityName,
+      } as any);
     },
   }));
 
@@ -491,6 +494,15 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
 
 // ── Action Panels ────────────────────────────────────────────────
 
+/** Collect all field zone keys for a player (active + bench). */
+function getFieldZoneKeys(player: PlayerIndex): string[] {
+  const p = `player${player + 1}`;
+  return [
+    `${p}_${ZONE_IDS.ACTIVE}`,
+    ...ZONE_IDS.BENCH.map(b => `${p}_${b}`),
+  ];
+}
+
 function getActionPanels(state: GameState<PokemonCardTemplate>, player: PlayerIndex): ActionPanel[] {
   const panels: ActionPanel[] = [];
 
@@ -515,15 +527,29 @@ function getActionPanels(state: GameState<PokemonCardTemplate>, player: PlayerIn
     emptyMessage: 'No active Pokemon',
   });
 
-  // MULLIGAN panel (no title — button label is self-explanatory)
+  // ABILITIES panel — shows abilities from all field Pokemon
+  const abilityButtons: ActionPanel['buttons'] = [];
+  for (const zoneKey of getFieldZoneKeys(player)) {
+    const zone = state.zones[zoneKey];
+    const topCard = zone?.cards.at(-1);
+    if (!topCard) continue;
+    const tmpl = getCardTemplate(topCard.template.id);
+    if (!tmpl?.abilities) continue;
+    for (const ability of tmpl.abilities) {
+      abilityButtons.push({
+        id: `${zoneKey}::${ability.name}`,
+        label: ability.name,
+        sublabel: tmpl.name,
+        tooltip: ability.effect,
+      });
+    }
+  }
+
   panels.push({
-    id: 'mulligan',
-    title: '',
-    buttons: [{
-      id: 'mulligan',
-      label: 'Mulligan',
-      sublabel: 'Shuffle hand, draw 7',
-    }],
+    id: 'abilities',
+    title: 'ABILITIES',
+    buttons: abilityButtons,
+    emptyMessage: 'No abilities',
   });
 
   return panels;
@@ -536,25 +562,17 @@ function onActionPanelClick(state: GameState<PokemonCardTemplate>, player: Playe
       player,
       attackName: buttonId,
     };
-  } else if (panelId === 'mulligan') {
-    const handKey = `player${player + 1}_${ZONE_IDS.HAND}`;
-    const deckKey = `player${player + 1}_${ZONE_IDS.DECK}`;
-    const handZone = state.zones[handKey];
-
-    // Move all hand cards to deck
-    const cardIds = handZone.cards.map(c => c.instanceId);
-    for (const id of cardIds) {
-      executeAction(state, moveCard(player, id, handKey, deckKey));
-    }
-
-    // Shuffle deck
-    executeAction(state, shuffleAction(player, deckKey));
-
-    // Draw 7
-    executeAction(state, { type: ACTION_TYPES.DRAW, player, count: SETUP.HAND_SIZE });
-
-    const otherPlayer = player === 0 ? 2 : 1;
-    state.log.push(`Player ${player + 1} mulliganed. Don't forget to draw 1 extra card Player ${otherPlayer}!`);
+  }
+  if (panelId === 'abilities') {
+    const [zoneKey, abilityName] = buttonId.split('::');
+    const zone = state.zones[zoneKey];
+    const cardName = zone?.cards.at(-1)?.template?.name ?? 'Pokemon';
+    return {
+      type: POKEMON_ACTION_TYPES.DECLARE_ABILITY,
+      player,
+      cardName,
+      abilityName,
+    };
   }
 }
 

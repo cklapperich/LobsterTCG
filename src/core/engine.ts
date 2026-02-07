@@ -26,6 +26,7 @@ import type {
   RevealHandAction,
   RevealAction,
   PeekAction,
+  MulliganAction,
   PlayerInfo,
   GameConfig,
   GameState,
@@ -684,6 +685,44 @@ function executePeek<T extends CardTemplate>(
 }
 
 // ============================================================================
+// Mulligan Executor
+// ============================================================================
+
+function executeMulligan<T extends CardTemplate>(
+  state: GameState<T>,
+  action: MulliganAction
+): void {
+  const deckKey = `player${action.player + 1}_deck`;
+  const handKey = `player${action.player + 1}_hand`;
+  const deck = getZone(state, deckKey);
+  const hand = getZone(state, handKey);
+
+  if (!deck || !hand) return;
+
+  // Move all hand cards back to deck
+  while (hand.cards.length > 0) {
+    const card = hand.cards.pop()!;
+    card.visibility = zoneVisibility(deckKey, deck.config);
+    card.orientation = undefined;
+    deck.cards.push(card);
+  }
+
+  // Shuffle deck
+  shuffleArray(deck.cards);
+  consolidateCountersToTop(deck);
+
+  // Draw drawCount cards
+  for (let i = 0; i < action.drawCount && deck.cards.length > 0; i++) {
+    const card = deck.cards.shift();
+    if (card) {
+      card.visibility = zoneVisibility(handKey, hand.config);
+      card.orientation = undefined;
+      hand.cards.push(card);
+    }
+  }
+}
+
+// ============================================================================
 // Decision Executors
 // ============================================================================
 
@@ -970,6 +1009,9 @@ export function executeAction<T extends CardTemplate>(
       break;
     case ACTION_TYPES.PEEK:
       executePeek(state, action);
+      break;
+    case ACTION_TYPES.MULLIGAN:
+      executeMulligan(state, action);
       break;
   }
 
