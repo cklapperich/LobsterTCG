@@ -36,6 +36,22 @@ export interface GamePlugin<T extends CardTemplate = CardTemplate> {
   /** Format a card template for search results (AI consumption). Falls back to JSON if not provided. */
   formatCardForSearch?(template: T): string;
 
+  /**
+   * Called before the start-of-turn agent runs in the pipeline.
+   * Return true to skip the agent — the hook should handle any mandatory
+   * start-of-turn actions (draw, deck-out) via ctx.execute() before returning.
+   * Return false (or omit) to let the agent run normally.
+   */
+  shouldSkipStartOfTurn?(ctx: ToolContext): Promise<boolean>;
+
+  /**
+   * Called before the setup agent runs.
+   * Return true to skip the agent — the hook should handle setup
+   * (e.g. auto-place cards) via ctx.execute() before returning.
+   * Return false (or omit) to let the agent run normally.
+   */
+  shouldSkipSetup?(ctx: ToolContext): Promise<boolean>;
+
   /** Return Anthropic SDK-compatible tools for AI agents. */
   listTools?(ctx: ToolContext): RunnableTool[];
 

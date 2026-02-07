@@ -137,7 +137,9 @@
   ondrop={handleDrop}
   class:browsable={!!onBrowse && displayCards.length > 0}
 >
-  <div class="zone-label">{label}{slot.showCount && zone.cards.length > 0 ? ` (${zone.cards.length})` : ''}</div>
+  {#if slot.label}
+    <div class="zone-label">{label}{slot.showCount && zone.cards.length > 0 ? ` (${zone.cards.length})` : ''}</div>
+  {/if}
   <div class="zone-content" class:fixed-size={fixedSize}>
     {#if displayCards.length > 0}
       <CardStack
@@ -185,8 +187,10 @@
   }
 
   .zone-label {
-    @apply text-gbc-yellow text-[0.4rem] text-center mb-1 py-0.5 px-1 bg-gbc-border;
+    @apply text-gbc-yellow text-[0.8rem] text-center mb-1 py-0.5 px-1 bg-gbc-border;
     cursor: context-menu;
+    position: relative;
+    z-index: 100;
   }
 
   .zone-content {
@@ -196,7 +200,6 @@
 
   .zone-content.fixed-size {
     max-height: calc(var(--spacing-card-w) * var(--zone-scale, 1) * 1.4);
-    overflow: hidden;
   }
 
   .empty-zone {

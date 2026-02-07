@@ -36,7 +36,14 @@ Per-player zones: `player{1|2}_{zoneId}` (e.g., "player1_hand"). Shared zones (`
 Zones with `config.shared: true` (e.g., stadium, staging) use bare keys and are created as a single instance by the engine. They can be interacted with by any player. Non-shared zones are protected by a core engine check (`checkOpponentZone` in engine.ts, enforced in both GameLoop and executeDrop) that warns UI / blocks AI when targeting an opponent's zone. Counter actions (add/remove/set counter) are exempt — placing damage on opponent Pokemon is normal gameplay. Card effects can bypass with `allowed_by_effect: true`. `PlaymatGrid.getZone()` tries bare key first (shared), then falls back to player-prefixed key.
 
 ### Playmat as JSON Config
-Playmats define visual grid layout separately from game logic. Zones are decoupled from visual slots.
+Playmats define visual grid layout separately from game logic. Zones are decoupled from visual slots. PlaymatSlot properties control rendering behavior:
+
+- **`label`**: Zone title text. If omitted, no title is rendered (used to hide labels on prize zones, etc.).
+- **`fixedSize`**: Constrains zone to single-card height via `max-height` (no `overflow: hidden` — content overflows visually). Used for decks and prizes.
+- **`stackDirection`**: `'none'` renders a stacked deck with subtle per-card offset for 3D thickness effect (`top: -0.022rem * i`, `left: 0.01rem * i`). `'down'`/`'up'`/`'right'` offset cards along an axis. `'fan'` dynamically spaces cards to fill container width.
+- **`showCount`**: Appends card count to the label, e.g. "Deck (47)".
+- **`scale`**: Multiplier for card/zone sizing (e.g. 0.5 for prizes, 1.5 for active).
+- **`group`/`groupRow`/`groupCol`**: Groups multiple slots into a sub-grid (e.g. 2x3 prize grid).
 
 ### Readable State
 `toReadableState()` converts internal state (instanceIds, visibility tuples) into human-readable format with card names, suitable for AI agents or logging. Only shows cards visible to the specified player.
@@ -150,9 +157,9 @@ Tools extract SFX from Pokemon TCG GB ROM using PyBoy emulator. Memory addresses
 | `Game.svelte` | Root game UI. Loads playmat, manages game state, handles drag/drop, context menus, shuffle animations, SFX playback. Decision system: `buildAIContext()` shared helper, `triggerAIDecisionTurn()`, blocking mechanism via `pendingDecisionResolve`, decision banner, button relabeling (END TURN ↔ RESOLVE DECISION), REQUEST ACTION button, reveal-hand auto-modal. Search: `handleSearchZone()` opens search modal, `handleSearchConfirm()` moves selected cards to staging and shuffles source zone. |
 | `DeckSelect.svelte` | Pre-game deck selection screen. Loads deck files via Vite glob import, parses PTCGO format, lets each player pick a deck. |
 | `PlaymatGrid.svelte` | Renders CSS Grid based on playmat config. Maps slots to Zone components. |
-| `Zone.svelte` | Single zone view with label, card count, CardStack, context menu, drag-over highlighting. |
+| `Zone.svelte` | Single zone view with label (only rendered when `slot.label` is set), card count, CardStack, context menu, drag-over highlighting. `fixedSize` uses `max-height` without `overflow: hidden` so stacking offsets and shuffle animations can visually overflow. |
 | `Card.svelte` | Card visual with face-up/down rendering, counters, drag support, hover preview. Renders orientation via `data-orientation` attribute + CSS rotation (paralyzed=90°, asleep=-90°, confused=180°). |
-| `CardStack.svelte` | Renders cards with stack direction (none/down/right/fan). Handles shuffle animation. |
+| `CardStack.svelte` | Renders cards with stack direction (none/down/right/fan). `none` applies subtle per-card offset for deck thickness visual. Handles overhand shuffle animation (`animate-overhand-lift`). |
 | `CoinFlip.svelte` | Animated coin flip overlay with heads/tails result display and SFX. |
 | `CounterIcon.svelte` | Draggable counter badge with image and quantity. |
 | `ArrangeModal.svelte` | Modal for peeking/reordering/searching cards from top/bottom of zone. Search mode (`mode: 'search'`): multi-select with green glow, `onSearchConfirm` callback. |
@@ -192,8 +199,8 @@ Tools extract SFX from Pokemon TCG GB ROM using PyBoy emulator. Memory addresses
 | `counters/*.png` | Counter images: burn, poison, damage-10/50/100. |
 | `cardback.png` | Pokemon card back image. |
 | `coinfront.png`, `coinback.png` | Coin flip images. |
-| `agents.md` | System prompt for AI agent (Pokemon TCG heuristics, turn structure, rules). Used for normal turns and decision mini-turns. Loaded as raw text via Vite `?raw` import. |
-| `agent0.md` | System prompt for AI setup turn (place initial Pokemon, mulligan if no basics). Used only during setup phase via `triggerAISetupTurn()`. Loaded as raw text via Vite `?raw` import. |
+| `prompt-sections.md` | Single source of truth for all AI agent prompts. Sections delimited by `## @SECTION_NAME` headings (e.g., `@INTRO`, `@TURN_STRUCTURE`, `@KEY_RULES`, `@ROLE_SETUP`). Adding a new section = add a `## @NAME` block, no TypeScript changes needed. |
+| `prompt-builder.ts` | Parses `prompt-sections.md` into composable sections. `buildPrompt(...keys)` composes a prompt from section names. Pre-built exports: `PROMPT_SETUP` (setup phase), `PROMPT_FULL_TURN` (normal/decision turns), `PROMPT_START_OF_TURN`, `PROMPT_PLANNER`, `PROMPT_EXECUTOR` (for future multi-agent pipeline). |
 
 ### /src/lib/
 

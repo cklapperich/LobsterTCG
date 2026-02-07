@@ -56,6 +56,7 @@ interface WesternCard {
   names: Record<string, string>;
   set: string;
   number: string;
+  ptcgoCode?: string;
   setId?: string;
   seriesId?: string;
   images?: CardImage[];
@@ -80,6 +81,7 @@ const RULES_TEXT_PATCHES = new Map<string, string[]>([
 // Lazy-loaded western card maps
 let westernCardMap: Map<string, WesternCard> | null = null;
 let cardsBySetNumber: Map<string, WesternCard> | null = null;
+let cardsByPtcgoNumber: Map<string, WesternCard> | null = null;
 
 /**
  * Ensure western card maps are loaded (lazy initialization).
@@ -89,6 +91,7 @@ function ensureWesternCardsLoaded(): void {
 
   westernCardMap = new Map();
   cardsBySetNumber = new Map();
+  cardsByPtcgoNumber = new Map();
 
   for (const card of cardsData as WesternCard[]) {
     westernCardMap.set(card.id, card);
@@ -98,6 +101,12 @@ function ensureWesternCardsLoaded(): void {
     const number = card.number.toLowerCase();
     const key = `${setName}|${number}`;
     cardsBySetNumber.set(key, card);
+
+    // Build lookup by ptcgoCode|number for PTCGO format support
+    if (card.ptcgoCode) {
+      const ptcgoKey = `${card.ptcgoCode.toLowerCase()}|${number}`;
+      cardsByPtcgoNumber.set(ptcgoKey, card);
+    }
   }
 
   // Patch missing rules text for cards that need it
@@ -147,6 +156,15 @@ function findCardBySetNumber(setName: string, number: string): WesternCard | und
   ensureWesternCardsLoaded();
   const key = `${setName.toLowerCase()}|${number.toLowerCase()}`;
   return cardsBySetNumber!.get(key);
+}
+
+/**
+ * Look up a card by PTCGO code and number.
+ */
+function findCardByPtcgoNumber(ptcgoCode: string, number: string): WesternCard | undefined {
+  ensureWesternCardsLoaded();
+  const key = `${ptcgoCode.toLowerCase()}|${number.toLowerCase()}`;
+  return cardsByPtcgoNumber!.get(key);
 }
 
 /**
@@ -314,6 +332,10 @@ export function parsePTCGODeck(ptcgoText: string, deckName?: string): PTCGOParse
 
       // Try direct lookup with set name
       card = findCardBySetNumber(potentialSetName, numberStr);
+      if (card) break;
+
+      // Try direct lookup with PTCGO code (e.g., "TEU", "SK", "SUM")
+      card = findCardByPtcgoNumber(potentialSetName, numberStr);
       if (card) break;
 
       // Try looking up set code from set-codes.json

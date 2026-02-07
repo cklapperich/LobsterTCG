@@ -348,7 +348,7 @@ function executeDraw<T extends CardTemplate>(
   if (!deck || !hand) return;
 
   for (let i = 0; i < action.count && deck.cards.length > 0; i++) {
-    const card = deck.cards.shift();
+    const card = deck.cards.pop();
     if (card) {
       card.visibility = zoneVisibility(handKey, hand.config);
       card.orientation = undefined;
@@ -378,9 +378,9 @@ function executeMoveCard<T extends CardTemplate>(
   if (toZone.config.canHaveCounters === false) clearCounters(card);
 
   if (action.position === 'top') {
-    toZone.cards.splice(0, 0, card);
-  } else if (action.position === 'bottom') {
     toZone.cards.push(card);
+  } else if (action.position === 'bottom') {
+    toZone.cards.splice(0, 0, card);
   } else if (typeof action.position === 'number' && action.position >= 0) {
     toZone.cards.splice(action.position, 0, card);
   } else {
@@ -413,9 +413,9 @@ function executeMoveCardStack<T extends CardTemplate>(
   }
 
   if (action.position === 'top') {
-    toZone.cards.splice(0, 0, ...cards);
-  } else if (action.position === 'bottom') {
     toZone.cards.push(...cards);
+  } else if (action.position === 'bottom') {
+    toZone.cards.splice(0, 0, ...cards);
   } else if (typeof action.position === 'number' && action.position >= 0) {
     toZone.cards.splice(action.position, 0, ...cards);
   } else {
@@ -449,9 +449,9 @@ function executePlaceOnZone<T extends CardTemplate>(
   }
 
   if (action.position === 'top') {
-    zone.cards.unshift(...cardsToPlace);
-  } else {
     zone.cards.push(...cardsToPlace);
+  } else {
+    zone.cards.unshift(...cardsToPlace);
   }
 
   consolidateCountersToTop(zone);
@@ -683,11 +683,11 @@ function executePeek<T extends CardTemplate>(
   const count = Math.min(action.count, zone.cards.length);
 
   if (action.fromPosition === 'top') {
-    for (let i = 0; i < count; i++) {
+    for (let i = zone.cards.length - count; i < zone.cards.length; i++) {
       cards.push(zone.cards[i]);
     }
   } else {
-    for (let i = zone.cards.length - count; i < zone.cards.length; i++) {
+    for (let i = 0; i < count; i++) {
       cards.push(zone.cards[i]);
     }
   }
@@ -724,7 +724,7 @@ function executeMulligan<T extends CardTemplate>(
 
   // Draw drawCount cards
   for (let i = 0; i < action.drawCount && deck.cards.length > 0; i++) {
-    const card = deck.cards.shift();
+    const card = deck.cards.pop();
     if (card) {
       card.visibility = zoneVisibility(handKey, hand.config);
       card.orientation = undefined;
@@ -837,6 +837,7 @@ function executeRevealHand<T extends CardTemplate>(
 
   const zoneName = zone.config.name ?? action.zoneKey;
   const revealedZones = [action.zoneKey];
+  const playerCardNames = zone.cards.map(c => c.template.name).join(', ');
 
   // Mutual mode: also reveal the opponent's equivalent zone
   if (action.mutual) {
@@ -850,8 +851,9 @@ function executeRevealHand<T extends CardTemplate>(
         card.visibility = VISIBILITY.PUBLIC;
       }
       revealedZones.push(opponentZoneKey);
-      const opponentZoneName = opponentZone.config.name ?? opponentZoneKey;
-      state.log.push(`Both hands revealed: ${zoneName} and ${opponentZoneName}`);
+      const opponentCardNames = opponentZone.cards.map(c => c.template.name).join(', ');
+      state.log.push(`Player ${action.player + 1} ${zoneName}: ${playerCardNames}`);
+      state.log.push(`Opponent ${zoneName}: ${opponentCardNames}`);
     }
   }
 

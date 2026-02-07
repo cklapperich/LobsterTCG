@@ -340,18 +340,18 @@ function warnEnergyOnTopOfPokemon(state: PokemonState, action: Action): PreHookR
   if (!template || !isEnergy(template)) return { outcome: 'continue' };
 
   // Array convention: index 0 = visual bottom, end of array = visual top.
-  // Energy at the visual bottom (position 0) is fine — it's underneath the Pokemon.
-  // Warn when energy would land on top: position undefined (append to end),
-  // position === 'bottom' (appends to end = visual top for field zones), or
+  // 'top' = end of array (visual top), 'bottom' = index 0 (visual bottom).
+  // Energy at the visual bottom (position 'bottom') is fine — it's underneath the Pokemon.
+  // Warn when energy would land on visual top: position undefined (append to end),
+  // position === 'top' (push to end = visual top), or
   // numeric position >= zone length (explicit top).
-  // position === 'top' means index 0 (visual bottom) — that's fine for energy.
   const zone = state.zones[toZone];
   if (zone && zone.cards.length > 0) {
-    const isTop = position === undefined || position === 'bottom' ||
+    const isTop = position === undefined || position === 'top' ||
       (typeof position === 'number' && position >= zone.cards.length);
     if (isTop) {
-      const zoneName = zone.config.name?.toLowerCase() ?? toZone;
-      return blockOrWarn(action, `Cannot place energy on top of Pokemon in ${zoneName}. Energy should be attached underneath. Set allowed_by_card_effect if a card effect permits this.`);
+      // Auto-correct: replace action with position 'bottom' (index 0 = underneath)
+      return { outcome: 'replace', action: { ...action, position: 'bottom' } as Action };
     }
   }
 
