@@ -27,13 +27,13 @@ Pre-hooks can block, warn, or replace actions. Post-hooks emit follow-up actions
 Actions carry an optional `source?: 'ui' | 'ai'` field. `PreHookResult` supports `warn` in addition to `block`/`replace`/`continue`. Warnings log to `state.log` but never prevent the action. The `blockOrWarn()` helper in `hooks.ts` returns `block` for AI actions and `warn` for UI actions — human players are never blocked by warnings. AI tools in `ai-tools.ts` automatically tag actions with `source: 'ai'`.
 
 ### Zone Keys
-Format: `player{1|2}_{zoneId}` (e.g., "player1_hand"). Zone keys are 1-indexed so Player 1 = `player1_*`, Player 2 = `player2_*`. Zone keys are the canonical identifier everywhere — readable state, AI tools, action factories, `state.zones`, warning hooks, and helper functions all use zone keys directly. Zone keys are constructed inline via template literals (e.g., `` `player${p + 1}_${ZONE_IDS.DECK}` ``). `ZONE_IDS` constants name zone *types* (bare IDs like `'deck'`, `'hand'`) used only in construction. Playmat JSON uses bare zone type names since zone definitions are player-agnostic templates.
+Per-player zones: `player{1|2}_{zoneId}` (e.g., "player1_hand"). Shared zones (`config.shared: true`): bare key matching the zone ID (e.g., `"stadium"`, `"staging"`). The engine creates one instance for shared zones, per-player copies for everything else. Zone keys are the canonical identifier everywhere — readable state, AI tools, action factories, `state.zones`, warning hooks, and helper functions all use zone keys directly. `ZONE_IDS` constants name zone *types* (bare IDs like `'deck'`, `'hand'`) used only in construction. Playmat JSON uses bare zone type names since zone definitions are player-agnostic templates.
 
 ### Card Array Order
 `zone.cards` array: **index 0 = visual bottom, end of array = visual top.** The last element is the card rendered on top with the highest z-index. `position: 0` inserts underneath all existing cards. `push()` / no position appends to the visual top. This convention is consistent across Zone.svelte drops, CardStack rendering, and warning hooks.
 
 ### Shared Zones & Opponent Interaction
-Zones with `config.shared: true` (e.g., stadium) can be interacted with by any player. Non-shared zones are protected by a core engine check (`checkOpponentZone` in engine.ts, enforced in both GameLoop and executeDrop) that warns UI / blocks AI when targeting an opponent's zone. Counter actions (add/remove/set counter) are exempt — placing damage on opponent Pokemon is normal gameplay. Card effects can bypass with `allowed_by_effect: true`.
+Zones with `config.shared: true` (e.g., stadium, staging) use bare keys and are created as a single instance by the engine. They can be interacted with by any player. Non-shared zones are protected by a core engine check (`checkOpponentZone` in engine.ts, enforced in both GameLoop and executeDrop) that warns UI / blocks AI when targeting an opponent's zone. Counter actions (add/remove/set counter) are exempt — placing damage on opponent Pokemon is normal gameplay. Card effects can bypass with `allowed_by_effect: true`. `PlaymatGrid.getZone()` tries bare key first (shared), then falls back to player-prefixed key.
 
 ### Playmat as JSON Config
 Playmats define visual grid layout separately from game logic. Zones are decoupled from visual slots.
@@ -73,6 +73,17 @@ All three AI trigger functions (`triggerAITurn`, `triggerAISetupTurn`, `triggerA
 ### Narrative State Formatting
 Plugins can register a `readableStateFormatter` that converts `ReadableGameState` into a compact text string for AI consumption. The Pokemon plugin's `formatNarrativeState()` produces a structured format: (1) **CARD REFERENCE** — full details for every visible unique card, printed once and deduplicated by name; (2) **GAME STATE** header — turn, phase, pending decision; (3) **YOUR BOARD / OPPONENT BOARD** — compact layout with instance state only (damage, status, attached energy) since card details are in the reference; (4) **STADIUM**, **ACTIONS THIS TURN**, **LOG** (last 15). Field zone Pokemon buried under evolution stacks are excluded from the reference (their attacks are irrelevant). `PluginManager.formatReadableState()` delegates to the registered formatter, falling back to `JSON.stringify` if none is set.
 
+### Zone Search
+Allows searching hidden zones (deck, prizes) to find and select specific cards — used for trainer card effects like Computer Search, Pokemon Trader, Ultra Ball, etc.
+
+**Human flow:** Right-click own hidden zone → "Search" → modal shows all cards face-up in wrap layout → click cards to toggle green selection highlight → "Confirm (N)" moves selected cards to staging → source zone auto-shuffled → log entry.
+
+**AI flow:** AI calls core `search_zone` tool (read-only, no action dispatched) → gets deduplicated card inventory with quantities → calls `move_card` for each pick (to staging) → calls `shuffle`. `search_zone` is hidden during setup phase and decision mini-turns. Card formatting uses `GamePlugin.formatCardForSearch()` if provided, falls back to JSON. `formatCardInventory()` in `readable.ts` handles deduplication and is reusable for prepending decklists to AI prompts.
+
+**Card modal `'search'` mode:** Reuses `ArrangeModal` with browse-style flex-wrap layout. `selectedIds: Set<string>` tracks selection. Cards get `.selected` CSS class (green glow + translateY lift). Footer shows Cancel + "Confirm (N)" button (disabled when 0 selected). `onSearchConfirm` callback returns original `CardInstance[]` with preserved visibility.
+
+**Context menu visibility:** "Search" menu item shown only for player1's non-public zones (`defaultVisibility` not `[true, true]`) when no pending decision and `cardCount > 0`.
+
 ### Counter Position Locking
 Counters are locked to the top card in a zone. When a card is removed from a zone, its counters transfer to the new top card (`transferCountersOnRemoval`). When cards are added or reordered, all counters consolidate to the top card (`consolidateCountersToTop`). This keeps damage counters visually attached to the Pokemon on top of the stack.
 
@@ -105,8 +116,8 @@ Tools extract SFX from Pokemon TCG GB ROM using PyBoy emulator. Memory addresses
 | `engine.ts` | Core game state operations: `createGameState()`, `executeAction()`, `getPlayerView()`, `loadDeck()`, `findCardInZones()`, `getCardName()`, `checkOpponentZone()`. Moving cards between zones auto-clears `card.orientation`. Decision executors: `executeCreateDecision`, `executeResolveDecision`, `executeRevealHand`. Counter position locking: `transferCountersOnRemoval()`, `consolidateCountersToTop()`. |
 | `game-loop.ts` | Turn sequencing with plugin integration. Manages action queues, validation, pre/post hooks, event emission, history tracking. |
 | `action.ts` | Factory functions for all action types: `draw()`, `moveCard()`, `shuffle()`, `addCounter()`, `coinFlip()`, `endTurn()`, `peek()`, `reveal()`, `createDecision()`, `resolveDecision()`, `revealHand()`, etc. |
-| `readable.ts` | Converts internal state to human-readable format. `toReadableState()`, `resolveCardName()`. Includes `pendingDecision` in readable output. `condenseCards()` deduplicates identical cards with a count. Types: `ReadableCard`, `ReadableZone`, `ReadableGameState`, `ReadableAction`, `ReadableTurn`. |
-| `ai-tools.ts` | `ToolContext` interface (includes `isDecisionResponse?: boolean`) and AI tool factory. `RunnableTool` interface: `{ name, description, parameters, execute }`. `createDefaultTools(ctx)` returns tools including `create_decision`, `resolve_decision`, `reveal_hand`. Tools accept zone keys directly (no parsing). Actions tagged with `source: 'ai'` by the context's execute callback. |
+| `readable.ts` | Converts internal state to human-readable format. `toReadableState()`, `resolveCardName()`, `formatCardInventory()`. Includes `pendingDecision` in readable output. `condenseCards()` deduplicates identical cards with a count. `formatCardInventory(templates, formatter?)` deduplicates cards by name with quantities, uses optional plugin formatter. Types: `ReadableCard`, `ReadableZone`, `ReadableGameState`, `ReadableAction`, `ReadableTurn`. |
+| `ai-tools.ts` | `ToolContext` interface (includes `isDecisionResponse?: boolean`, `formatCardForSearch?`) and AI tool factory. `RunnableTool` interface: `{ name, description, parameters, execute }`. `createDefaultTools(ctx)` returns tools including `search_zone` (read-only, uses `formatCardInventory`), `create_decision`, `resolve_decision`, `reveal_hand`. Tools accept zone keys directly (no parsing). Actions tagged with `source: 'ai'` by the context's execute callback. |
 | `playmat-loader.ts` | Fetches and parses playmat JSON files. `loadPlaymat()`, `parsePlaymat()`. |
 | `index.ts` | Barrel re-export of all core modules. |
 
@@ -120,7 +131,7 @@ Tools extract SFX from Pokemon TCG GB ROM using PyBoy emulator. Memory addresses
 | `game.ts` | `Decision`, `GameState` (includes `pendingDecision: Decision \| null`), `GameConfig`, `PlayerInfo`, `Turn`, `GameResult`. |
 | `playmat.ts` | `Playmat`, `PlaymatSlot`, `PlaymatZoneGroup`, `PlaymatLayout`, `PlaymatPosition`. |
 | `counter.ts` | `CounterDefinition` for counter metadata. |
-| `game-plugin.ts` | `GamePlugin` interface with optional `listTools(ctx: ToolContext)` for AI agent integration. |
+| `game-plugin.ts` | `GamePlugin` interface with optional `formatCardForSearch(template)` for rich search output and `listTools(ctx: ToolContext)` for AI agent integration. |
 | `deck.ts` | `DeckEntry`, `DeckList` types. |
 | `index.ts` | Barrel re-export of all types. |
 
@@ -136,7 +147,7 @@ Tools extract SFX from Pokemon TCG GB ROM using PyBoy emulator. Memory addresses
 
 | File | Purpose |
 |------|---------|
-| `Game.svelte` | Root game UI. Loads playmat, manages game state, handles drag/drop, context menus, shuffle animations, SFX playback. Decision system: `buildAIContext()` shared helper, `triggerAIDecisionTurn()`, blocking mechanism via `pendingDecisionResolve`, decision banner, button relabeling (END TURN ↔ RESOLVE DECISION), REQUEST ACTION button, reveal-hand auto-modal. |
+| `Game.svelte` | Root game UI. Loads playmat, manages game state, handles drag/drop, context menus, shuffle animations, SFX playback. Decision system: `buildAIContext()` shared helper, `triggerAIDecisionTurn()`, blocking mechanism via `pendingDecisionResolve`, decision banner, button relabeling (END TURN ↔ RESOLVE DECISION), REQUEST ACTION button, reveal-hand auto-modal. Search: `handleSearchZone()` opens search modal, `handleSearchConfirm()` moves selected cards to staging and shuffles source zone. |
 | `DeckSelect.svelte` | Pre-game deck selection screen. Loads deck files via Vite glob import, parses PTCGO format, lets each player pick a deck. |
 | `PlaymatGrid.svelte` | Renders CSS Grid based on playmat config. Maps slots to Zone components. |
 | `Zone.svelte` | Single zone view with label, card count, CardStack, context menu, drag-over highlighting. |
@@ -144,15 +155,15 @@ Tools extract SFX from Pokemon TCG GB ROM using PyBoy emulator. Memory addresses
 | `CardStack.svelte` | Renders cards with stack direction (none/down/right/fan). Handles shuffle animation. |
 | `CoinFlip.svelte` | Animated coin flip overlay with heads/tails result display and SFX. |
 | `CounterIcon.svelte` | Draggable counter badge with image and quantity. |
-| `ArrangeModal.svelte` | Modal for peeking/reordering cards from top/bottom of zone. |
+| `ArrangeModal.svelte` | Modal for peeking/reordering/searching cards from top/bottom of zone. Search mode (`mode: 'search'`): multi-select with green glow, `onSearchConfirm` callback. |
 | `DragOverlay.svelte` | Floating card following cursor during drag. |
 | `CounterDragOverlay.svelte` | Floating counter during counter drag. |
-| `ZoneContextMenu.svelte` | Right-click menu with peek/shuffle/arrange/status/reveal options. Status submenu (paralyzed/asleep/confused/clear) shown for field zones. "Reveal to Opponent" shown for own zones. |
+| `ZoneContextMenu.svelte` | Right-click menu with peek/shuffle/search/arrange/status/reveal options. Status submenu (paralyzed/asleep/confused/clear) shown for field zones. "Reveal to Opponent" shown for own zones. "Search" shown for own non-public zones. |
 | `CounterTray.svelte` | UI panel showing available counters to drag onto cards. |
 | `dragState.svelte.ts` | Svelte 5 rune store for card drag state. |
 | `counterDragState.svelte.ts` | Svelte 5 rune store for counter drag state. |
 | `gameLog.svelte.ts` | Svelte 5 rune store for game log entries. `addLogEntry()`, `clearLog()`, `resetLog()`. |
-| `cardModal.svelte.ts` | Svelte 5 rune store for peek/arrange modal state. `openCardModal()`, `closeCardModal()`. |
+| `cardModal.svelte.ts` | Svelte 5 rune store for peek/arrange/search modal state. `openCardModal()`, `closeCardModal()`. Mode union: `'peek' \| 'arrange' \| 'browse' \| 'search'`. |
 | `contextMenu.svelte.ts` | Svelte 5 rune store for zone context menu state. `openContextMenu()`, `closeContextMenu()`. |
 
 ### /src/ai/ - AI Agent
@@ -168,13 +179,13 @@ Tools extract SFX from Pokemon TCG GB ROM using PyBoy emulator. Memory addresses
 
 | File | Purpose |
 |------|---------|
-| `index.ts` | Main plugin: `startPokemonGame()`, `executeSetup()`, `initializeGame()`, `loadPlayerDeck()`, `getCounterDefinitions()`, `getCoinFront()`, `getCoinBack()`, `getCardInfo()`. Exports `plugin` object implementing `GamePlugin`. `listTools(ctx)` filters defaults and adds Pokemon-specific tools: `declare_attack` (with energy cost validation), `declare_retreat`, `declare_ability`, `set_status` (orientation wrapper for paralyzed/asleep/confused). Setup phase restricts tools to `move_card`, `move_card_stack`, `end_turn`/`end_phase`. Decision-aware tool filtering: normal turn hides `resolve_decision`; decision mini-turn hides `end_turn` + `create_decision`. `getActionPanels()` builds ATTACKS panel from active Pokemon template and MULLIGAN panel. `onActionPanelClick()` handles attack logging and mulligan (shuffle hand, redraw 7). |
-| `helpers.ts` | Pokemon card type helpers: `isBasicPokemon()`, `isEvolution()`, `isSupporter()`, `isStadium()`, `isEnergy()`, `isFieldZone()`, `isStadiumZone()`. Zone helpers accept zone keys (e.g., `isFieldZone('player1_active')` → true). |
+| `index.ts` | Main plugin: `startPokemonGame()`, `executeSetup()`, `initializeGame()`, `loadPlayerDeck()`, `getCounterDefinitions()`, `getCoinFront()`, `getCoinBack()`, `getCardInfo()`. Exports `plugin` object implementing `GamePlugin`. `formatCardForSearch` wraps `formatCardReference()` for rich narrative output in zone searches. `listTools(ctx)` filters defaults and adds Pokemon-specific tools: `declare_attack` (with energy cost validation), `declare_retreat`, `declare_ability`, `set_status` (orientation wrapper for paralyzed/asleep/confused). Setup phase restricts tools to `move_card`, `move_card_stack`, `end_turn`/`end_phase`. Decision-aware tool filtering: normal turn hides `resolve_decision`; decision mini-turn hides `end_turn` + `create_decision` + `search_zone`. `getActionPanels()` builds ATTACKS panel from active Pokemon template and MULLIGAN panel. `onActionPanelClick()` handles attack logging and mulligan (shuffle hand, redraw 7). |
+| `helpers.ts` | Pokemon card type helpers: `isBasicPokemon()`, `isEvolution()`, `isSupporter()`, `isStadium()`, `isEnergy()`, `isFieldZone()`, `isStadiumZone()`. Zone helpers accept zone keys (e.g., `isFieldZone('player1_active')` → true, `isStadiumZone('stadium')` → true). |
 | `cards.ts` | Card database backed by `cards-western.json`. `PokemonCardTemplate`, `PokemonAttack`, `PokemonAbility`, `POKEMON_TEMPLATE_MAP`, `getTemplate()`, `getCardBack()`, `parsePTCGODeck()`. |
 | `cards-western.json` | Western card database (all sets). Card data including names, images, attacks, abilities, HP, types. |
 | `set-codes.json` | Mapping of Pokemon TCG set names to set code prefixes for image lookup. |
 | `hooks.ts` | Pokemon hooks plugin (validation rules, post-hooks). Uses `blockOrWarn()` — blocks AI, warns UI. `modifyReadableState()` translates orientation→status field, computes totalDamage, converts retreatCost. Registers `readableStateFormatter: formatNarrativeState` for compact AI-friendly text output. Post-hook logs trainer card text on play. Post-hook `setupFaceDown` hides cards placed on field zones during setup phase. Exported as `pokemonHooksPlugin`. |
-| `narrative.ts` | Narrative state formatter for AI consumption. `formatNarrativeState()` converts `ReadableGameState` to structured text: CARD REFERENCE (deduplicated full card details), GAME STATE header, YOUR/OPPONENT BOARD (compact instance stats), STADIUM, ACTIONS, LOG. Skips evolved-from Pokemon buried in stacks. |
+| `narrative.ts` | Narrative state formatter for AI consumption. `formatNarrativeState()` converts `ReadableGameState` to structured text: CARD REFERENCE (deduplicated full card details), GAME STATE header, YOUR/OPPONENT BOARD (compact instance stats), STADIUM, ACTIONS, LOG. Skips evolved-from Pokemon buried in stacks. Exports `formatCardReference()` for reuse by `formatCardForSearch`. |
 | `hooks.test.ts` | Tests for Pokemon hooks plugin. |
 | `zones.ts` | Pokemon zone IDs: deck, hand, active, bench_1-5, discard, prizes, lost_zone, stadium. |
 | `decks/*.txt` | PTCGO-format deck lists (brushfire, overgrowth, raindance). |

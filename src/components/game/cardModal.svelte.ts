@@ -6,7 +6,7 @@ export interface CardModalState {
   zoneKey: string;
   zoneName: string;
   position: 'top' | 'bottom' | 'all';
-  mode: 'peek' | 'arrange' | 'browse';
+  mode: 'peek' | 'arrange' | 'browse' | 'search';
   isDecision?: boolean;
 }
 

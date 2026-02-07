@@ -42,5 +42,5 @@ export function isFieldZone(zoneKey: string): boolean {
 }
 
 export function isStadiumZone(zoneKey: string): boolean {
-  return zoneKey.endsWith('_stadium');
+  return zoneKey === 'stadium';
 }

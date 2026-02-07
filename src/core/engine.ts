@@ -43,18 +43,6 @@ import {
   UNLIMITED_CAPACITY,
 } from './types';
 
-// ============================================================================
-// Staging Zone Configuration
-// ============================================================================
-
-export const STAGING_ZONE_CONFIG: ZoneConfig = {
-  name: 'Staging',
-  ordered: false,
-  defaultVisibility: VISIBILITY.PUBLIC,
-  maxCards: UNLIMITED_CAPACITY,
-  ownerCanSeeContents: true,
-  opponentCanSeeCount: true,
-};
 
 // ============================================================================
 // Factory Functions
@@ -124,17 +112,21 @@ export function createGameState<T extends CardTemplate>(
 ): GameState<T> {
   const now = Date.now();
 
-  // Create flattened zones for all players
+  // Create shared zones (single instance, bare key)
   const zones: Record<string, Zone<T>> = {};
+  for (const [zoneId, zoneConfig] of Object.entries(config.zones)) {
+    if (zoneConfig.shared) {
+      zones[zoneId] = createZone(zoneConfig, 0 as PlayerIndex, zoneId);
+    }
+  }
+
+  // Create per-player zones
   for (let playerIndex = 0; playerIndex < config.playerCount; playerIndex++) {
     for (const [zoneId, zoneConfig] of Object.entries(config.zones)) {
+      if (zoneConfig.shared) continue;
       const key = `player${playerIndex + 1}_${zoneId}`;
       zones[key] = createZone(zoneConfig, playerIndex as PlayerIndex, key);
     }
-
-    // Inject staging zone for each player
-    const stagingKey = `player${playerIndex + 1}_staging`;
-    zones[stagingKey] = createZone(STAGING_ZONE_CONFIG, playerIndex as PlayerIndex, stagingKey);
   }
 
   return {

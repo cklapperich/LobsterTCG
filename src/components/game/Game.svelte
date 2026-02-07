@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { Playmat, CardInstance, CardTemplate, GameState, CounterDefinition, DeckList, ZoneConfig, Action } from '../../core';
-  import { executeAction, shuffle, VISIBILITY, flipCard, endTurn, loadDeck, getCardName, findCardInZones, toReadableState, PluginManager, setOrientation, createDecision, resolveDecision, revealHand, ACTION_TYPES, PHASES, ACTION_SOURCES } from '../../core';
+  import { executeAction, shuffle, moveCard, VISIBILITY, flipCard, endTurn, loadDeck, getCardName, findCardInZones, toReadableState, PluginManager, setOrientation, createDecision, resolveDecision, revealHand, ACTION_TYPES, PHASES, ACTION_SOURCES } from '../../core';
   import type { ToolContext } from '../../core/ai-tools';
   import { plugin, executeSetup, ZONE_IDS, pokemonHooksPlugin, autoMulligan, flipFieldCardsFaceUp, ensureCardInHand } from '../../plugins/pokemon';
   import { getTemplate } from '../../plugins/pokemon/cards';
@@ -370,6 +370,40 @@
     openCardModal({ cards: [...zoneCards], zoneKey, zoneName, position: 'all', mode: 'browse' });
   }
 
+  function handleSearchZone() {
+    if (!gameState || !contextMenu) return;
+    const zoneKey = contextMenu.zoneKey;
+    const zone = gameState.zones[zoneKey];
+    if (!zone || zone.cards.length === 0) return;
+    const zoneName = zone.config.name ?? zoneKey;
+    openCardModal({ cards: [...zone.cards], zoneKey, zoneName, position: 'all', mode: 'search' });
+  }
+
+  async function handleSearchConfirm(selectedCards: CardInstance<CardTemplate>[]) {
+    if (!gameState || !cardModal) return;
+    const fromZone = cardModal.zoneKey;
+    const playerIndex = fromZone.startsWith('player1_') ? 0 : 1;
+    const stagingKey = 'staging';
+
+    // Move each selected card to staging
+    for (const card of selectedCards) {
+      executeAction(gameState, moveCard(playerIndex as 0 | 1, card.instanceId, fromZone, stagingKey));
+    }
+
+    // Shuffle the source zone
+    playSfx('shuffle');
+    if (playmatGridRef) {
+      await playmatGridRef.shuffleZone(fromZone);
+    }
+    executeAction(gameState, shuffle(playerIndex as 0 | 1, fromZone));
+
+    const zoneName = gameState.zones[fromZone]?.config.name ?? fromZone;
+    const cardNames = selectedCards.map(c => c.template.name).join(', ');
+    gameState.log.push(`[Player ${playerIndex + 1}] Searched ${zoneName} — took ${cardNames} to staging`);
+    gameState = { ...gameState };
+    closeCardModalStore();
+  }
+
   function handleModalDragOut(card: CardInstance<CardTemplate>, fromZoneKey: string, mouseX: number, mouseY: number) {
     closeCardModalStore();
     startDrag(card, fromZoneKey, mouseX, mouseY);
@@ -489,6 +523,7 @@
     const ctx: ToolContext = {
       playerIndex: 1,
       isDecisionResponse: options?.isDecisionResponse,
+      formatCardForSearch: plugin.formatCardForSearch,
       getState: () => gameState!,
       getReadableState: () => {
         const modified = pluginManager.applyReadableStateModifier(toReadableState(gameState!, 1));
@@ -795,7 +830,7 @@
     const zoneKey = contextMenu.zoneKey;
 
     // Pull card effect text from staging zone (the card being resolved)
-    const stagingKey = `player1_staging`;
+    const stagingKey = 'staging';
     const stagingCard = gameState.zones[stagingKey]?.cards.at(-1);
     const template = stagingCard ? getTemplate(stagingCard.template.id) : undefined;
     const rules = (template as any)?.rules?.join(' ') ?? '';
@@ -869,98 +904,10 @@
   }
 </script>
 
-<div class="game-container font-retro bg-gbc-bg min-h-screen w-screen p-4 box-border relative overflow-auto">
+<div class="game-container font-retro bg-gbc-bg min-h-screen w-screen box-border relative overflow-auto">
   <div class="scanlines"></div>
 
   <div class="game-content">
-  <header class="gbc-panel mb-4 px-4 py-3">
-    <div class="flex items-center justify-between">
-      <!-- LEFT: Phase indicator -->
-      <div class="flex-1 flex justify-start">
-        <h1 class="text-xl max-sm:text-sm m-0 tracking-wide title-shadow font-retro phase-title">
-          {#if !gameState}
-            <span class="text-gbc-yellow">LOADING...</span>
-          {:else if gameState.phase === PHASES.SETUP}
-            <span class="text-gbc-yellow">SETUP PHASE</span>
-          {:else if aiThinking}
-            <span class="text-gbc-red animate-pulse">AI THINKING...</span>
-          {:else if decisionTargetsHuman}
-            <span class="text-gbc-red animate-pulse">RESOLVE DECISION</span>
-          {:else if gameState.pendingDecision?.targetPlayer === 1}
-            <span class="text-gbc-blue animate-pulse">WAITING FOR AI...</span>
-          {:else if gameState.activePlayer === 0}
-            <span class="text-gbc-green">YOUR TURN</span>
-          {:else}
-            <span class="text-gbc-blue">AI TURN</span>
-          {/if}
-        </h1>
-      </div>
-
-      <!-- CENTER: Turn counter -->
-      <div class="flex items-center gap-3 font-retro text-sm max-sm:text-[0.5rem] tracking-wide">
-        {#if gameState && gameState.phase !== PHASES.SETUP}
-          <span class="text-gbc-light">TURN</span>
-          <span class="text-gbc-yellow">{gameState.turnNumber}</span>
-        {/if}
-      </div>
-
-      <!-- RIGHT: Buttons -->
-      <div class="flex-1 flex justify-end gap-2">
-        {#if decisionTargetsHuman}
-          <button
-            class="gbc-btn text-[0.5rem] py-1 px-3"
-            onclick={handleResolveDecision}
-            disabled={!gameState}
-          >
-            RESOLVE DECISION
-          </button>
-        {:else}
-          <button
-            class="gbc-btn text-[0.5rem] py-1 px-3"
-            onclick={handleEndTurn}
-            disabled={!gameState || aiThinking}
-          >
-            {gameState?.phase === PHASES.SETUP ? 'END SETUP' : 'END TURN'}
-          </button>
-        {/if}
-        <button
-          class="gbc-btn text-[0.5rem] py-1 px-3"
-          onclick={handleRequestAction}
-          disabled={!gameState || aiThinking || !!gameState?.pendingDecision}
-        >
-          REQUEST ACTION
-        </button>
-        <button
-          class="gbc-btn text-[0.5rem] py-1 px-3"
-          onclick={() => coinFlipRef?.flip()}
-          disabled={coinFlipRef?.isFlipping()}
-        >
-          FLIP COIN
-        </button>
-        <button class="gbc-btn text-[0.5rem] py-1 px-3" onclick={handleDebug} disabled={!gameState}>
-          DEBUG
-        </button>
-        <button class="gbc-btn text-[0.5rem] py-1 px-3" onclick={resetGame}>
-          NEW GAME
-        </button>
-        {#if onBackToMenu}
-          <button class="gbc-btn text-[0.5rem] py-1 px-3" onclick={handleBackToMenu}>
-            MENU
-          </button>
-        {/if}
-      </div>
-    </div>
-
-    <!-- Decision message bar -->
-    {#if decisionTargetsHuman && gameState?.pendingDecision}
-      <div class="mt-2 pt-2 border-t-2 border-gbc-border text-center">
-        <span class="text-gbc-yellow text-sm max-sm:text-[0.5rem] font-retro tracking-wide">
-          {gameState.pendingDecision.message ?? 'Your opponent requests an action'}
-        </span>
-      </div>
-    {/if}
-  </header>
-
   {#if loading}
     <div class="gbc-panel text-center p-8">
       <div class="text-gbc-yellow text-[0.6rem]">LOADING...</div>
@@ -971,25 +918,42 @@
     </div>
   {:else if gameState && playmat}
     <div class="game-layout">
-      <div class="playmat-area">
-        <PlaymatGrid
-          bind:this={playmatGridRef}
-          {playmat}
-          {gameState}
-          {cardBack}
-          {counterDefinitions}
-          {attacksPanel}
-          onAttackClick={handleActionPanelClick}
-          onDrop={handleDrop}
-          onPreview={handlePreview}
-          onToggleVisibility={handleToggleVisibility}
-          onZoneContextMenu={handleZoneContextMenu}
-          onCounterDrop={handleCounterDrop}
-          onBrowse={handleBrowseZone}
-        />
-      </div>
-
       <div class="sidebar">
+        <!-- Phase indicator -->
+        <div class="gbc-panel phase-panel">
+          <h1 class="text-base max-sm:text-sm m-0 tracking-wide title-shadow font-retro phase-title text-center">
+            {#if gameState.phase === PHASES.SETUP}
+              <span class="text-gbc-yellow">SETUP</span>
+            {:else if aiThinking}
+              <span class="text-gbc-red animate-pulse">AI THINKING</span>
+            {:else if decisionTargetsHuman}
+              <span class="text-gbc-red animate-pulse">DECISION</span>
+            {:else if gameState.pendingDecision?.targetPlayer === 1}
+              <span class="text-gbc-blue animate-pulse">WAITING...</span>
+            {:else if gameState.activePlayer === 0}
+              <span class="text-gbc-green">YOUR TURN</span>
+            {:else}
+              <span class="text-gbc-blue">AI TURN</span>
+            {/if}
+          </h1>
+          {#if gameState.phase !== PHASES.SETUP}
+            <div class="text-center mt-1">
+              <span class="text-gbc-light text-[0.45rem]">TURN</span>
+              <span class="text-gbc-yellow text-[0.45rem]">{gameState.turnNumber}</span>
+            </div>
+          {/if}
+        </div>
+
+        <!-- Decision message -->
+        {#if decisionTargetsHuman && gameState.pendingDecision}
+          <div class="gbc-panel decision-msg">
+            <span class="text-gbc-yellow text-[0.45rem] font-retro tracking-wide">
+              {gameState.pendingDecision.message ?? 'Your opponent requests an action'}
+            </span>
+          </div>
+        {/if}
+
+        <!-- Preview -->
         <div class="gbc-panel preview-panel">
           <div class="text-gbc-yellow text-[0.5rem] text-center mb-3 py-1 px-2 bg-gbc-border">PREVIEW</div>
           {#if previewCard && previewCard.visibility[0]}
@@ -1004,6 +968,52 @@
             </div>
           {:else}
             <div class="preview-placeholder"></div>
+          {/if}
+        </div>
+
+        <!-- Buttons -->
+        <div class="sidebar-buttons">
+          {#if decisionTargetsHuman}
+            <button
+              class="gbc-btn sidebar-btn"
+              onclick={handleResolveDecision}
+              disabled={!gameState}
+            >
+              RESOLVE
+            </button>
+          {:else}
+            <button
+              class="gbc-btn sidebar-btn"
+              onclick={handleEndTurn}
+              disabled={!gameState || aiThinking}
+            >
+              {gameState.phase === PHASES.SETUP ? 'END SETUP' : 'END TURN'}
+            </button>
+          {/if}
+          <button
+            class="gbc-btn sidebar-btn"
+            onclick={handleRequestAction}
+            disabled={!gameState || aiThinking || !!gameState.pendingDecision}
+          >
+            REQUEST
+          </button>
+          <button
+            class="gbc-btn sidebar-btn"
+            onclick={() => coinFlipRef?.flip()}
+            disabled={coinFlipRef?.isFlipping()}
+          >
+            COIN
+          </button>
+          <button class="gbc-btn sidebar-btn" onclick={handleDebug} disabled={!gameState}>
+            DEBUG
+          </button>
+          <button class="gbc-btn sidebar-btn" onclick={resetGame}>
+            NEW
+          </button>
+          {#if onBackToMenu}
+            <button class="gbc-btn sidebar-btn" onclick={handleBackToMenu}>
+              MENU
+            </button>
           {/if}
         </div>
 
@@ -1043,6 +1053,24 @@
           </form>
         </div>
       </div>
+
+      <div class="playmat-area">
+        <PlaymatGrid
+          bind:this={playmatGridRef}
+          {playmat}
+          {gameState}
+          {cardBack}
+          {counterDefinitions}
+          {attacksPanel}
+          onAttackClick={handleActionPanelClick}
+          onDrop={handleDrop}
+          onPreview={handlePreview}
+          onToggleVisibility={handleToggleVisibility}
+          onZoneContextMenu={handleZoneContextMenu}
+          onCounterDrop={handleCounterDrop}
+          onBrowse={handleBrowseZone}
+        />
+      </div>
     </div>
   {/if}
   </div>
@@ -1067,6 +1095,7 @@
       onRevealToOpponent={contextMenu.zoneKey.startsWith('player1_') && !gameState?.pendingDecision ? handleRevealToOpponent : undefined}
       onRevealBothHands={contextMenu.zoneKey.startsWith('player1_') && contextMenu.zoneKey.includes('hand') && !gameState?.pendingDecision ? handleRevealBothHands : undefined}
       onMovePile={handleMovePile}
+      onSearch={contextMenu.zoneKey.startsWith('player1_') && !(contextMenu.zoneConfig.defaultVisibility[0] && contextMenu.zoneConfig.defaultVisibility[1]) && !gameState?.pendingDecision ? handleSearchZone : undefined}
       onClose={handleCloseContextMenu}
     />
   {/if}
@@ -1081,6 +1110,7 @@
       zoneKey={cardModal.zoneKey}
       {cardBack}
       onConfirm={handleCardModalConfirm}
+      onSearchConfirm={cardModal.mode === 'search' ? handleSearchConfirm : undefined}
       onDragOut={cardModal.mode === 'browse' ? handleModalDragOut : undefined}
       onResolveDecision={cardModal.isDecision ? handleModalResolveDecision : undefined}
       onClose={cardModal.isDecision ? handleModalResolveDecision : handleCloseCardModal}
@@ -1182,9 +1212,27 @@
   }
 
   .sidebar {
-    @apply flex flex-col gap-4 shrink-0;
+    @apply flex flex-col gap-3 shrink-0;
     width: 20rem;
     @apply max-lg:w-full max-lg:flex-row max-lg:flex-wrap max-lg:justify-center;
+  }
+
+  .phase-panel {
+    @apply py-2 px-3;
+  }
+
+  .decision-msg {
+    @apply py-2 px-3 text-center;
+  }
+
+  .sidebar-buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.25rem;
+  }
+
+  .sidebar-btn {
+    @apply text-[0.45rem] py-1.5 px-2 w-full;
   }
 
   .preview-panel {

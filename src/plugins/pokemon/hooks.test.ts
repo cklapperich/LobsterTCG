@@ -28,7 +28,7 @@ const POKEMON_ZONES: Record<string, ZoneConfig> = {
   bench_1: { name: 'Bench 1', ordered: false, defaultVisibility: VISIBILITY.PUBLIC, maxCards: -1, ownerCanSeeContents: true, opponentCanSeeCount: true },
   discard: { name: 'Discard', ordered: true, defaultVisibility: VISIBILITY.PUBLIC, maxCards: -1, ownerCanSeeContents: true, opponentCanSeeCount: true },
   stadium: { name: 'Stadium', ordered: false, defaultVisibility: VISIBILITY.PUBLIC, maxCards: -1, ownerCanSeeContents: true, opponentCanSeeCount: true, shared: true },
-  staging: { name: 'Staging', ordered: false, defaultVisibility: VISIBILITY.PUBLIC, maxCards: -1, ownerCanSeeContents: true, opponentCanSeeCount: true },
+  staging: { name: 'Staging', ordered: false, defaultVisibility: VISIBILITY.PUBLIC, maxCards: -1, ownerCanSeeContents: true, opponentCanSeeCount: true, shared: true },
 };
 
 // ---------------------------------------------------------------------------
@@ -85,7 +85,9 @@ function placeCard(
 ): string {
   const template = getTemplate(templateId)!;
   const instanceId = generateInstanceId();
-  const zone = state.zones[`player${playerIndex + 1}_${zoneId}`];
+  // Shared zones use bare key, per-player zones use player{N}_ prefix
+  const zoneKey = state.zones[zoneId] ? zoneId : `player${playerIndex + 1}_${zoneId}`;
+  const zone = state.zones[zoneKey];
   const card = createCardInstance(template, instanceId, zone.config.defaultVisibility);
   zone.cards.push(card);
   return instanceId;
@@ -100,12 +102,12 @@ describe('warnOneSupporter', () => {
     const { state, gameLoop, blocked } = setupGame();
 
     const tierno = placeCard(state, 0, 'hand', TIERNO);
-    gameLoop.submit({ ...moveCard(0, tierno, 'player1_hand', 'player1_staging'), source: ACTION_SOURCES.AI });
+    gameLoop.submit({ ...moveCard(0, tierno, 'player1_hand', 'staging'), source: ACTION_SOURCES.AI });
     gameLoop.processNext();
     expect(blocked).toHaveLength(0);
 
     const trevor = placeCard(state, 0, 'hand', TREVOR);
-    gameLoop.submit({ ...moveCard(0, trevor, 'player1_hand', 'player1_staging'), source: ACTION_SOURCES.AI });
+    gameLoop.submit({ ...moveCard(0, trevor, 'player1_hand', 'staging'), source: ACTION_SOURCES.AI });
     gameLoop.processNext();
     expect(blocked).toHaveLength(1);
     expect(blocked[0].reason).toContain('Already played a Supporter');
@@ -115,11 +117,11 @@ describe('warnOneSupporter', () => {
     const { state, gameLoop, blocked } = setupGame();
 
     const tierno = placeCard(state, 0, 'hand', TIERNO);
-    gameLoop.submit(moveCard(0, tierno, 'player1_hand', 'player1_staging'));
+    gameLoop.submit(moveCard(0, tierno, 'player1_hand', 'staging'));
     gameLoop.processNext();
 
     const trevor = placeCard(state, 0, 'hand', TREVOR);
-    gameLoop.submit(moveCard(0, trevor, 'player1_hand', 'player1_staging'));
+    gameLoop.submit(moveCard(0, trevor, 'player1_hand', 'staging'));
     gameLoop.processNext();
     expect(blocked).toHaveLength(0);
     expect(state.log.some(l => l.includes('Already played a Supporter'))).toBe(true);
@@ -129,11 +131,11 @@ describe('warnOneSupporter', () => {
     const { state, gameLoop, blocked } = setupGame();
 
     const tierno = placeCard(state, 0, 'hand', TIERNO);
-    gameLoop.submit(moveCard(0, tierno, 'player1_hand', 'player1_staging'));
+    gameLoop.submit(moveCard(0, tierno, 'player1_hand', 'staging'));
     gameLoop.processNext();
 
     const trevor = placeCard(state, 0, 'hand', TREVOR);
-    gameLoop.submit({ ...moveCard(0, trevor, 'player1_hand', 'player1_staging'), allowed_by_effect: true });
+    gameLoop.submit({ ...moveCard(0, trevor, 'player1_hand', 'staging'), allowed_by_effect: true });
     gameLoop.processNext();
     expect(blocked).toHaveLength(0);
   });
@@ -149,7 +151,7 @@ describe('warnOneSupporter', () => {
 
     // Now actually play a supporter to staging — should be allowed
     const trevor = placeCard(state, 0, 'hand', TREVOR);
-    gameLoop.submit({ ...moveCard(0, trevor, 'player1_hand', 'player1_staging'), source: ACTION_SOURCES.AI });
+    gameLoop.submit({ ...moveCard(0, trevor, 'player1_hand', 'staging'), source: ACTION_SOURCES.AI });
     gameLoop.processNext();
     expect(blocked).toHaveLength(0);
   });
@@ -405,7 +407,7 @@ describe('warnStadiumOnly', () => {
     const { state, gameLoop, blocked } = setupGame();
 
     const energy = placeCard(state, 0, 'hand', FAIRY_ENERGY);
-    gameLoop.submit({ ...moveCard(0, energy, 'player1_hand', 'player1_stadium'), source: ACTION_SOURCES.AI });
+    gameLoop.submit({ ...moveCard(0, energy, 'player1_hand', 'stadium'), source: ACTION_SOURCES.AI });
     gameLoop.processNext();
     expect(blocked).toHaveLength(1);
     expect(blocked[0].reason).toContain('Only Stadium cards');
@@ -415,7 +417,7 @@ describe('warnStadiumOnly', () => {
     const { state, gameLoop, blocked } = setupGame();
 
     const pidgey = placeCard(state, 0, 'hand', PIDGEY);
-    gameLoop.submit({ ...moveCard(0, pidgey, 'player1_hand', 'player1_stadium'), source: ACTION_SOURCES.AI });
+    gameLoop.submit({ ...moveCard(0, pidgey, 'player1_hand', 'stadium'), source: ACTION_SOURCES.AI });
     gameLoop.processNext();
     expect(blocked).toHaveLength(1);
     expect(blocked[0].reason).toContain('Only Stadium cards');
@@ -425,7 +427,7 @@ describe('warnStadiumOnly', () => {
     const { state, gameLoop, blocked } = setupGame();
 
     const potion = placeCard(state, 0, 'hand', POTION);
-    gameLoop.submit({ ...moveCardStack(0, [potion], 'player1_hand', 'player1_stadium'), source: ACTION_SOURCES.AI });
+    gameLoop.submit({ ...moveCardStack(0, [potion], 'player1_hand', 'stadium'), source: ACTION_SOURCES.AI });
     gameLoop.processNext();
     expect(blocked).toHaveLength(1);
     expect(blocked[0].reason).toContain('Only Stadium cards');
@@ -435,7 +437,7 @@ describe('warnStadiumOnly', () => {
     const { state, gameLoop, blocked } = setupGame();
 
     const stadium = placeCard(state, 0, 'hand', STADIUM_CARD);
-    gameLoop.submit(moveCard(0, stadium, 'player1_hand', 'player1_stadium'));
+    gameLoop.submit(moveCard(0, stadium, 'player1_hand', 'stadium'));
     gameLoop.processNext();
     expect(blocked).toHaveLength(0);
   });

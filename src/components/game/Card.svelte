@@ -256,12 +256,19 @@
   @reference "../../app.css";
 
   .card {
-    @apply w-card-w aspect-[5/7] rounded-lg overflow-hidden p-0 cursor-pointer;
+    width: calc(var(--spacing-card-w) * var(--zone-scale, 1));
+    aspect-ratio: 5 / 7;
+    @apply rounded-lg overflow-hidden p-0 cursor-pointer;
     @apply transition-all duration-200 border-4 border-gbc-border;
-    @apply max-sm:w-card-w-sm;
     box-shadow: 0.125rem 0.125rem 0 rgba(0,0,0,0.2);
     position: relative;
     user-select: none;
+  }
+
+  @media (max-width: 640px) {
+    .card {
+      width: calc(var(--spacing-card-w-sm) * var(--zone-scale, 1));
+    }
   }
 
   .card[data-orientation="90"] { transform: rotate(90deg); }

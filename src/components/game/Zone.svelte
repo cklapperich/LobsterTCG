@@ -45,6 +45,7 @@
   const stackDirection = $derived(slot.stackDirection ?? 'none');
   const label = $derived(slot.label ?? zone.config.name);
   const fixedSize = $derived(slot.fixedSize ?? false);
+  const scale = $derived(slot.scale ?? 1);
   const isFull = $derived(
     zone.config.maxCards !== -1 && zone.cards.length >= zone.config.maxCards
   );
@@ -144,6 +145,7 @@
         cards={displayCards}
         {stackDirection}
         {fixedSize}
+        {scale}
         zoneKey={zone.key}
         {cardBack}
         {counterDefinitions}
@@ -163,7 +165,7 @@
   @reference "../../app.css";
 
   .zone {
-    @apply bg-gbc-dark-green border-4 border-gbc-border p-2 rounded;
+    @apply bg-gbc-dark-green border-4 border-gbc-border px-2 pb-2 pt-0.5 rounded;
     box-shadow:
       inset 0.125rem 0.125rem 0 rgba(255,255,255,0.1),
       inset -0.125rem -0.125rem 0 rgba(0,0,0,0.2);
@@ -183,23 +185,30 @@
   }
 
   .zone-label {
-    @apply text-gbc-yellow text-[0.4rem] text-center mb-2 py-0.5 px-1 bg-gbc-border inline-block;
+    @apply text-gbc-yellow text-[0.4rem] text-center mb-1 py-0.5 px-1 bg-gbc-border inline-block;
     @apply relative left-1/2 -translate-x-1/2;
     cursor: context-menu;
   }
 
   .zone-content {
     @apply relative;
-    min-height: calc(var(--spacing-card-w) * 1.4);
+    min-height: calc(var(--spacing-card-w) * var(--zone-scale, 1) * 1.4);
   }
 
   .zone-content.fixed-size {
-    max-height: calc(var(--spacing-card-w) * 1.4);
+    max-height: calc(var(--spacing-card-w) * var(--zone-scale, 1) * 1.4);
     overflow: hidden;
   }
 
   .empty-zone {
-    @apply w-card-w aspect-[5/7] rounded-lg border-2 border-dashed border-gbc-light opacity-30;
-    @apply max-sm:w-card-w-sm;
+    width: calc(var(--spacing-card-w) * var(--zone-scale, 1));
+    aspect-ratio: 5 / 7;
+    @apply rounded-lg border-2 border-dashed border-gbc-light opacity-30;
+  }
+
+  @media (max-width: 640px) {
+    .empty-zone {
+      width: calc(var(--spacing-card-w-sm) * var(--zone-scale, 1));
+    }
   }
 </style>

@@ -4,40 +4,44 @@
   "gameType": "pokemon-tcg",
   "playerCount": 2,
   "layout": {
-    "rows": 4,
+    "rows": 5,
     "cols": 9,
+    "columnScales": [1.0, 1.5, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.5],
+    "rowHeights": ["auto", "auto", "0", "auto", "auto"],
     "slots": [
-      { "id": "p2_hand", "zoneId": "hand", "position": { "row": 0, "col": 0 }, "label": "Opp Hand", "stackDirection": "none" },
-      { "id": "p2_prizes", "zoneId": "prizes", "position": { "row": 0, "col": 1 }, "label": "Prizes", "stackDirection": "down" },
-      { "id": "p2_bench_1", "zoneId": "bench_1", "position": { "row": 0, "col": 2 }, "label": "Bench", "stackDirection": "down" },
-      { "id": "p2_bench_2", "zoneId": "bench_2", "position": { "row": 0, "col": 3 }, "label": "Bench", "stackDirection": "down" },
-      { "id": "p2_bench_3", "zoneId": "bench_3", "position": { "row": 0, "col": 4 }, "label": "Bench", "stackDirection": "down" },
-      { "id": "p2_bench_4", "zoneId": "bench_4", "position": { "row": 0, "col": 5 }, "label": "Bench", "stackDirection": "down" },
-      { "id": "p2_bench_5", "zoneId": "bench_5", "position": { "row": 0, "col": 6 }, "label": "Bench", "stackDirection": "down" },
-      { "id": "p2_deck", "zoneId": "deck", "position": { "row": 0, "col": 7 }, "label": "Deck", "stackDirection": "none" },
-      { "id": "p2_discard", "zoneId": "discard", "position": { "row": 0, "col": 8 }, "label": "Discard", "stackDirection": "none" },
+      { "id": "p2_hand", "zoneId": "hand", "position": { "row": 0, "col": 0, "colSpan": 9 }, "label": "Opp Hand", "stackDirection": "fan", "scale": 0.5 },
 
-      { "id": "p1_lost_zone", "zoneId": "lost_zone", "position": { "row": 1, "col": 0 }, "label": "Lost Zone", "stackDirection": "none" },
-      { "id": "p1_active", "zoneId": "active", "position": { "row": 1, "col": 3 }, "label": "Active", "stackDirection": "down" },
-      { "id": "stadium", "zoneId": "stadium", "position": { "row": 1, "col": 4 }, "label": "Stadium", "stackDirection": "none" },
-      { "id": "p2_active", "zoneId": "active", "position": { "row": 1, "col": 5 }, "label": "Active", "stackDirection": "down" },
-      { "id": "p2_lost_zone", "zoneId": "lost_zone", "position": { "row": 1, "col": 8 }, "label": "Lost Zone", "stackDirection": "none" },
+      { "id": "p2_prizes", "zoneId": "prizes", "position": { "row": 1, "col": 0 }, "label": "Prizes", "stackDirection": "none", "scale": 0.5 },
+      { "id": "p2_active", "zoneId": "active", "position": { "row": 1, "col": 1 }, "label": "Active", "stackDirection": "down", "scale": 1.5 },
+      { "id": "p2_bench_1", "zoneId": "bench_1", "position": { "row": 1, "col": 2 }, "label": "Bench", "stackDirection": "down" },
+      { "id": "p2_bench_2", "zoneId": "bench_2", "position": { "row": 1, "col": 3 }, "label": "Bench", "stackDirection": "down" },
+      { "id": "p2_bench_3", "zoneId": "bench_3", "position": { "row": 1, "col": 4 }, "label": "Bench", "stackDirection": "down" },
+      { "id": "p2_bench_4", "zoneId": "bench_4", "position": { "row": 1, "col": 5 }, "label": "Bench", "stackDirection": "down" },
+      { "id": "p2_bench_5", "zoneId": "bench_5", "position": { "row": 1, "col": 6 }, "label": "Bench", "stackDirection": "down" },
+      { "id": "p2_deck", "zoneId": "deck", "position": { "row": 1, "col": 7 }, "label": "Deck", "stackDirection": "none", "fixedSize": true },
+      { "id": "p2_discard", "zoneId": "discard", "position": { "row": 1, "col": 8 }, "label": "Discard", "stackDirection": "none", "scale": 0.5, "group": "p2_graveyard", "groupRow": 0, "groupCol": 0 },
+      { "id": "p2_lost_zone", "zoneId": "lost_zone", "position": { "row": 1, "col": 8 }, "label": "Lost Zone", "stackDirection": "none", "scale": 0.5, "group": "p2_graveyard", "groupRow": 1, "groupCol": 0 },
 
-      { "id": "p1_discard", "zoneId": "discard", "position": { "row": 2, "col": 0 }, "label": "Discard", "stackDirection": "none" },
-      { "id": "p1_deck", "zoneId": "deck", "position": { "row": 2, "col": 1 }, "label": "Deck", "stackDirection": "none" },
-      { "id": "p1_bench_1", "zoneId": "bench_1", "position": { "row": 2, "col": 2 }, "label": "Bench", "stackDirection": "down" },
-      { "id": "p1_bench_2", "zoneId": "bench_2", "position": { "row": 2, "col": 3 }, "label": "Bench", "stackDirection": "down" },
-      { "id": "p1_bench_3", "zoneId": "bench_3", "position": { "row": 2, "col": 4 }, "label": "Bench", "stackDirection": "down" },
-      { "id": "p1_bench_4", "zoneId": "bench_4", "position": { "row": 2, "col": 5 }, "label": "Bench", "stackDirection": "down" },
-      { "id": "p1_bench_5", "zoneId": "bench_5", "position": { "row": 2, "col": 6 }, "label": "Bench", "stackDirection": "down" },
-      { "id": "p1_prizes", "zoneId": "prizes", "position": { "row": 2, "col": 7 }, "label": "Prizes", "stackDirection": "down" },
+      { "id": "stadium", "zoneId": "stadium", "position": { "row": 2, "col": 4 }, "label": "Stadium", "stackDirection": "none", "scale": 0.7, "align": "center" },
+      { "id": "staging", "zoneId": "staging", "position": { "row": 2, "col": 3 }, "label": "Staging", "stackDirection": "down", "scale": 0.7, "align": "center" },
 
-      { "id": "p1_hand", "zoneId": "hand", "position": { "row": 3, "col": 0, "colSpan": 8 }, "label": "Hand", "stackDirection": "fan" }
+      { "id": "p1_prizes", "zoneId": "prizes", "position": { "row": 3, "col": 0 }, "label": "Prizes", "stackDirection": "none", "scale": 0.5 },
+      { "id": "p1_active", "zoneId": "active", "position": { "row": 3, "col": 1 }, "label": "Active", "stackDirection": "down", "scale": 1.5 },
+      { "id": "p1_bench_1", "zoneId": "bench_1", "position": { "row": 3, "col": 2 }, "label": "Bench", "stackDirection": "down" },
+      { "id": "p1_bench_2", "zoneId": "bench_2", "position": { "row": 3, "col": 3 }, "label": "Bench", "stackDirection": "down" },
+      { "id": "p1_bench_3", "zoneId": "bench_3", "position": { "row": 3, "col": 4 }, "label": "Bench", "stackDirection": "down" },
+      { "id": "p1_bench_4", "zoneId": "bench_4", "position": { "row": 3, "col": 5 }, "label": "Bench", "stackDirection": "down" },
+      { "id": "p1_bench_5", "zoneId": "bench_5", "position": { "row": 3, "col": 6 }, "label": "Bench", "stackDirection": "down" },
+      { "id": "p1_deck", "zoneId": "deck", "position": { "row": 3, "col": 7 }, "label": "Deck", "stackDirection": "none", "fixedSize": true },
+      { "id": "p1_lost_zone", "zoneId": "lost_zone", "position": { "row": 3, "col": 8 }, "label": "Lost Zone", "stackDirection": "none", "scale": 0.5, "group": "p1_graveyard", "groupRow": 0, "groupCol": 0 },
+      { "id": "p1_discard", "zoneId": "discard", "position": { "row": 3, "col": 8 }, "label": "Discard", "stackDirection": "none", "scale": 0.5, "group": "p1_graveyard", "groupRow": 1, "groupCol": 0 },
+
+      { "id": "p1_hand", "zoneId": "hand", "position": { "row": 4, "col": 0, "colSpan": 9 }, "label": "Hand", "stackDirection": "fan" }
     ],
     "groups": [
       { "id": "p1_field", "name": "Player 1 Field", "slotIds": ["p1_deck", "p1_discard", "p1_active", "p1_bench_1", "p1_bench_2", "p1_bench_3", "p1_bench_4", "p1_bench_5", "p1_lost_zone", "p1_prizes", "p1_hand"] },
       { "id": "p2_field", "name": "Player 2 Field", "slotIds": ["p2_deck", "p2_discard", "p2_active", "p2_bench_1", "p2_bench_2", "p2_bench_3", "p2_bench_4", "p2_bench_5", "p2_lost_zone", "p2_prizes", "p2_hand"] },
-      { "id": "shared", "name": "Shared", "slotIds": ["stadium"] }
+      { "id": "shared", "name": "Shared", "slotIds": ["stadium", "staging"] }
     ]
   },
   "zones": [
@@ -52,7 +56,8 @@
     { "id": "discard", "name": "Discard Pile", "ordered": true, "defaultVisibility": "public", "maxCards": -1, "ownerCanSeeContents": true, "opponentCanSeeCount": true, "canHaveCounters": false },
     { "id": "prizes", "name": "Prize Cards", "ordered": true, "defaultVisibility": "hidden", "maxCards": 6, "ownerCanSeeContents": false, "opponentCanSeeCount": true, "canHaveCounters": false },
     { "id": "lost_zone", "name": "Lost Zone", "ordered": true, "defaultVisibility": "public", "maxCards": -1, "ownerCanSeeContents": true, "opponentCanSeeCount": true, "canHaveCounters": false },
-    { "id": "stadium", "name": "Stadium", "ordered": true, "defaultVisibility": "public", "maxCards": 1, "ownerCanSeeContents": true, "opponentCanSeeCount": true, "shared": true, "canHaveCounters": false }
+    { "id": "stadium", "name": "Stadium", "ordered": true, "defaultVisibility": "public", "maxCards": 1, "ownerCanSeeContents": true, "opponentCanSeeCount": true, "shared": true, "canHaveCounters": false },
+    { "id": "staging", "name": "Staging", "ordered": false, "defaultVisibility": "public", "maxCards": -1, "ownerCanSeeContents": true, "opponentCanSeeCount": true, "shared": true, "canHaveCounters": false }
   ],
   "playerSlots": {
     "0": ["p1_deck", "p1_active", "p1_bench_1", "p1_bench_2", "p1_bench_3", "p1_bench_4", "p1_bench_5", "p1_discard", "p1_prizes", "p1_lost_zone", "p1_hand"],

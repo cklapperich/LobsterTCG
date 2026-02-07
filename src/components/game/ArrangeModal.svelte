@@ -9,11 +9,12 @@
     cards: CardInstance<CardTemplate>[];
     zoneName: string;
     position: 'top' | 'bottom' | 'all';
-    mode: 'peek' | 'arrange' | 'browse';
+    mode: 'peek' | 'arrange' | 'browse' | 'search';
     zoneKey?: string;
     renderFace?: (template: CardTemplate) => { rank?: string; suit?: string; color?: string };
     cardBack?: string;
     onConfirm?: (reorderedCards: CardInstance<CardTemplate>[]) => void;
+    onSearchConfirm?: (selectedCards: CardInstance<CardTemplate>[]) => void;
     onDragOut?: (card: CardInstance<CardTemplate>, zoneKey: string, mouseX: number, mouseY: number) => void;
     onResolveDecision?: () => void;
     onClose: () => void;
@@ -28,6 +29,7 @@
     renderFace,
     cardBack,
     onConfirm,
+    onSearchConfirm,
     onDragOut,
     onResolveDecision,
     onClose,
@@ -35,13 +37,40 @@
 
   const canReorder = $derived(mode === 'arrange');
   const isBrowse = $derived(mode === 'browse');
+  const isSearch = $derived(mode === 'search');
   const title = $derived.by(() => {
+    if (mode === 'search') return `Search ${zoneName} (${selectedIds.size} selected)`;
     if (mode === 'browse') return `Browse ${zoneName}`;
     if (position === 'all') {
       return mode === 'peek' ? `Viewing ${zoneName}` : `Arrange ${zoneName}`;
     }
     return mode === 'peek' ? `Peeking at ${position} of ${zoneName}` : `Arrange ${position} of ${zoneName}`;
   });
+
+  // Search mode selection state
+  let selectedIds = $state<Set<string>>(new Set());
+
+  function toggleSelection(instanceId: string) {
+    if (!isSearch) return;
+    const next = new Set(selectedIds);
+    if (next.has(instanceId)) {
+      next.delete(instanceId);
+    } else {
+      next.add(instanceId);
+    }
+    selectedIds = next;
+    playSfx('cursor');
+  }
+
+  function handleSearchConfirm() {
+    const selected = orderedCards.filter(c => selectedIds.has(c.instanceId));
+    // Map back to original cards (preserving original visibility)
+    const originals = selected.map(visibleCard => {
+      const original = originalCards.find(c => c.instanceId === visibleCard.instanceId);
+      return original ?? visibleCard;
+    });
+    onSearchConfirm?.(originals);
+  }
 
   // Create visible copies of cards for display (force face-up)
   function makeVisible(card: CardInstance<CardTemplate>): CardInstance<CardTemplate> {
@@ -59,8 +88,8 @@
   // Initialize ordered cards from props (runs once on mount), force visible
   $effect(() => {
     if (orderedCards.length === 0 && cards.length > 0) {
-      // Browse shows top-of-zone first (reverse array order)
-      const source = mode === 'browse' ? [...cards].reverse() : cards;
+      // Browse and search show top-of-zone first (reverse array order)
+      const source = (mode === 'browse' || mode === 'search') ? [...cards].reverse() : cards;
       orderedCards = source.map(makeVisible);
     }
   });
@@ -142,22 +171,24 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="modal-backdrop" onclick={handleBackdropClick} onkeydown={(e) => { if (e.key === 'Escape') { playSfx('cancel'); onClose(); } }} role="presentation">
-  <div class="modal gbc-panel">
+  <div class="modal gbc-panel" class:modal-search={isSearch}>
     <div class="modal-header">
       <span class="modal-title">{title}</span>
       <button class="close-btn" onclick={() => { playSfx('cancel'); onClose(); }}>×</button>
     </div>
 
-    <div class="modal-content" class:browse-content={isBrowse}>
-      <div class="card-row" class:card-row-browse={isBrowse}>
+    <div class="modal-content" class:browse-content={isBrowse || isSearch}>
+      <div class="card-row" class:card-row-browse={isBrowse || isSearch}>
         {#each orderedCards as card, i (card.instanceId)}
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
             class="card-slot"
             class:dragging={dragIndex === i}
             class:drag-over={dragOverIndex === i}
-            class:readonly={!canReorder && !isBrowse}
+            class:readonly={!canReorder && !isBrowse && !isSearch}
             class:browse={isBrowse}
+            class:search={isSearch}
+            class:selected={isSearch && selectedIds.has(card.instanceId)}
             draggable={canReorder}
             ondragstart={() => handleDragStart(i)}
             ondragover={(e) => handleDragOver(e, i)}
@@ -165,6 +196,7 @@
             ondrop={() => handleDrop(i)}
             ondragend={handleDragEnd}
             onmousedown={isBrowse ? (e: MouseEvent) => handleBrowseDragStart(e, card) : undefined}
+            onclick={isSearch ? () => toggleSelection(card.instanceId) : undefined}
           >
             <Card
               {card}
@@ -181,7 +213,10 @@
     </div>
 
     <div class="modal-footer">
-      {#if canReorder}
+      {#if isSearch}
+        <button class="gbc-btn secondary" onclick={() => { playSfx('cancel'); onClose(); }}>Cancel</button>
+        <button class="gbc-btn" onclick={handleSearchConfirm} disabled={selectedIds.size === 0}>Confirm ({selectedIds.size})</button>
+      {:else if canReorder}
         <button class="gbc-btn secondary" onclick={() => { playSfx('cancel'); onClose(); }}>Cancel</button>
         <button class="gbc-btn" onclick={handleConfirm}>Confirm</button>
       {:else if onResolveDecision}
@@ -207,6 +242,10 @@
 
   .modal {
     @apply max-w-[90vw] max-h-[80vh] flex flex-col;
+  }
+
+  .modal.modal-search {
+    @apply h-[95vh] max-h-[95vh];
   }
 
   .modal-header {
@@ -251,8 +290,29 @@
     @apply cursor-grab;
   }
 
+  .card-slot.search {
+    @apply cursor-pointer;
+    transform: scale(1.5);
+    transform-origin: top center;
+    margin: 1.5rem 1.5rem 4rem;
+  }
+
+  .card-slot.selected {
+    transform: translateY(-0.5rem);
+    box-shadow: 0 0 0.75rem var(--color-gbc-green);
+    border-radius: 0.5rem;
+  }
+
+  .card-slot.search.selected {
+    transform: scale(1.5) translateY(-0.5rem);
+  }
+
   .card-slot:hover {
     transform: translateY(-0.25rem);
+  }
+
+  .card-slot.search:hover {
+    transform: scale(1.5) translateY(-0.25rem);
   }
 
   .card-slot.readonly:hover {
