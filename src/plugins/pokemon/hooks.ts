@@ -236,78 +236,12 @@ function warnEvolutionTiming(state: PokemonState, action: Action): PreHookResult
     return blockOrWarn(action, 'Cannot evolve on the first turn or the turn a Pokemon was played. Set allowed_by_card_effect if a card effect permits this.');
   }
 
-  // Check if the target Pokemon was played this turn
+  // Check if the top Pokemon (the one being evolved from) was played/evolved this turn
   const zone = state.zones[toZone];
   if (zone) {
-    const targetHasPlayedFlag = zone.cards.some(
-      (card) => card.flags.includes(CARD_FLAGS.PLAYED_THIS_TURN)
-    );
-    if (targetHasPlayedFlag) {
-      return blockOrWarn(action, 'Cannot evolve on the first turn or the turn a Pokemon was played. Set allowed_by_card_effect if a card effect permits this.');
-    }
-  }
-
-  return { outcome: 'continue' };
-}
-
-// Warning 4b: Cannot evolve a Pokemon that already evolved this turn
-// Tracks by Pokemon identity (top card of target zone), not by zone —
-// so switching a freshly-evolved Pokemon away frees the zone for another evolution.
-function warnDoubleEvolution(state: PokemonState, action: Action): PreHookResult {
-  if (action.allowed_by_card_effect) return { outcome: 'continue' };
-
-  let cardInstanceId: string;
-  let toZone: string;
-
-  if (action.type === ACTION_TYPES.MOVE_CARD) {
-    const a = action as MoveCardAction;
-    cardInstanceId = a.cardInstanceId;
-    toZone = a.toZone;
-  } else if (action.type === ACTION_TYPES.MOVE_CARD_STACK) {
-    const a = action as MoveCardStackAction;
-    cardInstanceId = a.cardInstanceIds[0];
-    toZone = a.toZone;
-    if (!cardInstanceId) return { outcome: 'continue' };
-  } else {
-    return { outcome: 'continue' };
-  }
-
-  if (!isFieldZone(toZone)) return { outcome: 'continue' };
-
-  const template = getTemplateForCard(state, cardInstanceId);
-  if (!template || !isEvolution(template)) return { outcome: 'continue' };
-
-  // The top card of the target zone is the Pokemon we're evolving FROM.
-  // If that card was itself placed as an evolution this turn, this is a double evolution.
-  const zone = state.zones[toZone];
-  if (!zone || zone.cards.length === 0) return { outcome: 'continue' };
-
-  const topCard = zone.cards.at(-1);
-  if (!topCard) return { outcome: 'continue' };
-
-  // Collect all evolution card instance IDs placed this turn
-  for (const prev of state.currentTurn.actions) {
-    let prevCardId: string | undefined;
-    let prevToZone: string | undefined;
-
-    if (prev.type === ACTION_TYPES.MOVE_CARD) {
-      const m = prev as MoveCardAction;
-      prevCardId = m.cardInstanceId;
-      prevToZone = m.toZone;
-    } else if (prev.type === ACTION_TYPES.MOVE_CARD_STACK) {
-      const s = prev as MoveCardStackAction;
-      prevCardId = s.cardInstanceIds[0];
-      prevToZone = s.toZone;
-    }
-
-    if (!prevCardId || !prevToZone || !isFieldZone(prevToZone)) continue;
-
-    const prevTemplate = getTemplateForCard(state, prevCardId);
-    if (!prevTemplate || !isEvolution(prevTemplate)) continue;
-
-    // The top card we're evolving from was itself an evolution placed this turn
-    if (prevCardId === topCard.instanceId) {
-      return blockOrWarn(action, `Cannot evolve ${topCard.template.name} again — it already evolved this turn. Set allowed_by_card_effect if a card effect permits this.`);
+    const topCard = zone.cards.at(-1);
+    if (topCard?.flags.includes(CARD_FLAGS.PLAYED_THIS_TURN)) {
+      return blockOrWarn(action, 'Cannot evolve a Pokemon the same turn it was played or evolved. Set allowed_by_card_effect if a card effect permits this.');
     }
   }
 
@@ -401,9 +335,11 @@ function stampPlayedThisTurn(state: PokemonState, action: Action): PostHookResul
 
   for (const id of cardIds) {
     const card = zone.cards.find(c => c.instanceId === id);
-    if (card && !card.flags.includes(CARD_FLAGS.PLAYED_THIS_TURN)) {
-      card.flags.push(CARD_FLAGS.PLAYED_THIS_TURN);
-    }
+    if (!card || card.flags.includes(CARD_FLAGS.PLAYED_THIS_TURN)) continue;
+    // Only stamp Pokemon — energy/tools from hand shouldn't block evolution
+    const template = getTemplateForCard(state, card.instanceId);
+    if (template?.supertype !== SUPERTYPES.POKEMON) continue;
+    card.flags.push(CARD_FLAGS.PLAYED_THIS_TURN);
   }
 
   return {};
@@ -780,12 +716,14 @@ export const pokemonHooksPlugin: Plugin<PokemonCardTemplate> = {
       { hook: stampPlayedThisTurn, priority: 60 },
       { hook: logTrainerText, priority: 100 },
       { hook: reorderFieldZone, priority: 200 },
+      { hook: consolidateCountersAfterReorder, priority: 250 },
     ],
     [ACTION_TYPES.MOVE_CARD_STACK]: [
       { hook: setupFaceDown, priority: 50 },
       { hook: stampPlayedThisTurn, priority: 60 },
       { hook: logTrainerText, priority: 100 },
       { hook: reorderFieldZone, priority: 200 },
+      { hook: consolidateCountersAfterReorder, priority: 250 },
     ],
     [ACTION_TYPES.MULLIGAN]: [
       { hook: logMulliganMessage, priority: 100 },
@@ -798,7 +736,7 @@ export const pokemonHooksPlugin: Plugin<PokemonCardTemplate> = {
       { hook: warnOneEnergyAttachment, priority: 100 },
       { hook: warnEvolutionChain, priority: 100 },
       { hook: warnEvolutionTiming, priority: 110 },
-      { hook: warnDoubleEvolution, priority: 115 },
+
       { hook: warnNonBasicToEmptyField, priority: 90 },
       { hook: warnStadiumOnly, priority: 90 },
       { hook: warnTrainerToField, priority: 85 },
@@ -809,7 +747,7 @@ export const pokemonHooksPlugin: Plugin<PokemonCardTemplate> = {
       { hook: warnOneEnergyAttachment, priority: 100 },
       { hook: warnEvolutionChain, priority: 100 },
       { hook: warnEvolutionTiming, priority: 110 },
-      { hook: warnDoubleEvolution, priority: 115 },
+
       { hook: warnNonBasicToEmptyField, priority: 90 },
       { hook: warnStadiumOnly, priority: 90 },
       { hook: warnTrainerToField, priority: 85 },
