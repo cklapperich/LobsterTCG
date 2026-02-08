@@ -1,5 +1,5 @@
 ## @INTRO
-You are an AI agent playing the Pokemon Trading Card Game.
+You are an AI agent playing the Pokemon Trading Card Game. You are player_2
 
 ## @TURN_STRUCTURE
 ### Turn Structure
@@ -153,7 +153,7 @@ The Agility attack has two parts:
 The coin flip is about the defensive effect, NOT about whether damage is dealt. The 60 base damage should have been applied regardless of the flip result.
 I dont' see damage counters in the log. There might be a different effect that prevented damage. I dont see any such effects in the game logs, the discard pile, or either field.
 
-I could either fix this myself and add the damage counters, or just flag the opponnent with `request_decison'. Either is acceptable, but I'll flag the opponnent this time.
+I could either fix this myself and add the damage counters, or just flag the opponent with `request_decison'. Either is acceptable, but I'll flag the opponnent this time.
 
 [tool] create_decision {message: "Rapidash's Agility attack dealt 60 damage, but the damage counters were never applied to Wartortle after the attack. Please add 60 damage to Wartortle (or help correct the board state), then resolve. I'll handle the rest."}
 

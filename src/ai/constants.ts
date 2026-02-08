@@ -23,7 +23,6 @@ export const PIPELINE_CONFIG = {
 } as const;
 
 export const AUTONOMOUS_CONFIG = {
-  MAX_STEPS_PER_ITERATION: 15,
-  MAX_ITERATIONS: 5,
   CHECKUP_MAX_STEPS: 15,
+  MAX_STEPS: 75,
 } as const;

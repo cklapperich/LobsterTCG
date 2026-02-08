@@ -470,8 +470,8 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
 
   // ── Discard Zone (move all cards from a zone to discard) ──
   tools.push(tool({
-    name: 'discard_zone',
-    description: 'Discard all cards in a zone. Moves every card from the specified zone to your discard pile.',
+    name: 'discard_pokemon_from_zone',
+    description: 'Discard all cards in a zone. Moves every card from the specified zone to your discard pile. Use this when your pokemon get knocked out.',
     inputSchema: {
       type: 'object' as const,
       properties: {
