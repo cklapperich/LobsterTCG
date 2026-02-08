@@ -119,7 +119,6 @@
   // Re-load decks when game type changes
   $effect(() => {
     // Access gameType to make this effect reactive
-    const _type = gameType;
     loading = true;
     deckOptions = [];
     testFlags = {};

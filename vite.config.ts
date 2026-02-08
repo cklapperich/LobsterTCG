@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [svelte(), tailwindcss()],
   server: {
     watch: {
-      ignored: ['**/tools/poketcg/**'],
+      ignored: ['**/tools/poketcg/**', '**/*.md'],
     },
   },
 })
