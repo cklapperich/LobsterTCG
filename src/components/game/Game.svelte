@@ -14,6 +14,7 @@
   import ActionPanelView from './ActionPanelView.svelte';
   import { dragStore, startPileDrag, updateDragPosition, endDrag, executeDrop, executeStackDrop } from './dragState.svelte';
   import { DEFAULT_CONFIG, isLocal, isAI, localPlayerIndex, opponent, playerFromZoneKey, isLocalZone, type PlayerConfig, type PlayerController } from './player-config';
+  import { fromAIPerspective } from '../../plugins/pokemon/zone-perspective';
   import {
     counterDragStore,
     executeCounterDrop,
@@ -584,6 +585,7 @@
       playerIndex: aiPlayer,
       isDecisionResponse: options?.isDecisionResponse,
       formatCardForSearch: plugin.formatCardForSearch,
+      translateZoneKey: (key) => fromAIPerspective(key, aiPlayer),
       getState: () => gameState!,
       getReadableState: () => {
         // Snapshot strips Svelte 5 proxy so Object.entries() enumerates all template fields

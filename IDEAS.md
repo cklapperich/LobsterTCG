@@ -47,10 +47,7 @@ this requires a hook for pokemon specific stack logic?? ugh!
 
 12 when opponnent moves to a card to staging: show the card full screen same as when you left-click, no need to pause the game
 
-13 add a 'shuffle into deck' tool
-
-14 update readable.ts/narrative.ts to hide pre-evolved pokemon from context
-15 remove readable.ts and only have narrative.ts? one file for better support?
+13 add a 'shuffle into deck' tool (?? probably not needed)
 
 17. add a little buzzing noise for normally-illegal stuff, unless it comes from staging
 

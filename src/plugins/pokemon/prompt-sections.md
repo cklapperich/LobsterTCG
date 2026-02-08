@@ -8,7 +8,7 @@ Each turn follows this order:
 1. **Pokemon Check Up** — Apply burn or poison damage counters. Flip coin to wake up sleeping pokemon. Remove status conditions as needed.
 2. **Draw** — Draw 1 card from your deck (mandatory, do this first every turn). If opponent mulliganed, and its your first turn, draw 1 extra.
 3. **Main phase** — Do any of the following in any order:
-   - Play Basic Pokemon from hand to an empty bench slot (player2_bench_1 through player2_bench_5)
+   - Play Basic Pokemon from hand to an empty bench slot (your_bench_1 through your_bench_5)
    - Attach 1 Energy card from hand to a Pokemon (once per turn)
    - Evolve Pokemon (place Stage 1 on matching Basic, Stage 2 on matching Stage 1)
    - Play Trainer cards (Item cards, Supporter — only 1 Supporter per turn)
@@ -24,19 +24,19 @@ Each turn follows this order:
 
 ## @ZONE_LAYOUT
 ### Zone Layout
-Zone keys are shown in the readable state as `(zone: "...")`. ALWAYS copy the exact zone key from the state — never construct zone keys yourself.
+Zone keys use `your_` and `opponent_` prefixes. The full list of zone keys is shown at the bottom of the game state.
 
-Your zones (player2):
-- `player2_hand` — Your hand of cards
-- `player2_deck` — Your draw pile (face down)
-- `player2_active` — Your Active Pokemon (battler)
-- `player2_bench_1` through `player2_bench_5` — Your Bench Pokemon
-- `player2_discard` — Your discard pile
-- `player2_prizes_1` through `player2_prizes_6` — Your 6 prize cards (face down, 1 card each, take 1 when you KO an opponent Pokemon)
-- `player2_lost_zone` — Removed from game
+Your zones:
+- `your_hand` — Your hand of cards
+- `your_deck` — Your draw pile (face down)
+- `your_active` — Your Active Pokemon (battler)
+- `your_bench_1` through `your_bench_5` — Your Bench Pokemon
+- `your_discard` — Your discard pile
+- `your_prizes_1` through `your_prizes_6` — Your 6 prize cards (face down, 1 card each, take 1 when you KO an opponent Pokemon)
+- `your_lost_zone` — Removed from game
 
-Opponent zones (player1):
-- `player1_hand`, `player1_deck`, `player1_active`, `player1_bench_1` through `player1_bench_5`, `player1_discard`, `player1_prizes_1` through `player1_prizes_6`, `player1_lost_zone`
+Opponent zones:
+- `opponent_hand`, `opponent_deck`, `opponent_active`, `opponent_bench_1` through `opponent_bench_5`, `opponent_discard`, `opponent_prizes_1` through `opponent_prizes_6`, `opponent_lost_zone`
 
 Shared zones:
 - `stadium` — Shared stadium zone
@@ -100,7 +100,7 @@ ALWAYS do pokemon checkup at the start of your turn. Your opponent handles check
 - Use `swap_card_stacks` to swap active ↔ bench (retreat, promotion, switching effects). All attached cards move together automatically.
 - To discard a KO'd Pokemon (yours or opponent's), use multiple `move_card` calls to move each card in the zone to discard one by one.
 - Use `move_card` to play cards from hand to zones (Basic Pokemon to bench, Energy to field, Trainers to staging)
-- To take a prize card, use `move_card` with fromZone any non-empty prize zone (e.g. "player2_prizes_1") and toZone "player2_hand" (no cardName needed)
+- To take a prize card, use `move_card` with fromZone any non-empty prize zone (e.g. "your_prizes_1") and toZone "your_hand" (no cardName needed)
 - Use `add_counter` with counterType "10"/"50"/"100" for damage
 - Use `declare_attack` to log attack declarations
 - Use `declare_retreat` to log retreat declarations
@@ -149,7 +149,7 @@ Sometimes during a turn, one player needs the other to make a decision (e.g., af
 1. Check your hand for basic pokemon.
 2. If you have no basics, call the `mulligan` tool (shuffles hand into deck, draws 7). Repeat until you have a basic pokemon in hand.
 3. Draw 1 card for each time the opponent mulliganed.
-3. Move a basic pokemon from hand to `player2_active`, and optionally to bench slots (`player2_bench_1` through `player2_bench_5`).
+3. Move a basic pokemon from hand to `your_active`, and optionally to bench slots (`your_bench_1` through `your_bench_5`).
 4. Call `end_phase` when done.
 5. Do not play any cards except basic pokemon cards.
 

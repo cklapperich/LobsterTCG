@@ -2,6 +2,8 @@ import type { ReadableGameState, ReadableZone, ReadableCard, ReadableTurn } from
 import { ACTION_TYPES } from '../../core/types/constants';
 import { isFieldZone } from './helpers';
 import { SUPERTYPES, COUNTER_IDS, NARRATIVE } from './constants';
+import { toAIPerspective } from './zone-perspective';
+import type { PlayerIndex } from '../../core/types';
 
 /**
  * Convert a ReadableGameState into a compact narrative text format for AI consumption.
@@ -14,6 +16,9 @@ import { SUPERTYPES, COUNTER_IDS, NARRATIVE } from './constants';
  */
 export function formatNarrativeState(readable: ReadableGameState): string {
   const lines: string[] = [];
+  const aiIdx: PlayerIndex = readable.viewer ?? 1;
+  const aiPrefix = `player${aiIdx + 1}`;
+  const oppPrefix = `player${aiIdx === 0 ? 2 : 1}`;
 
   // Card reference (deduplicated, full details)
   const refCards = collectUniqueCards(readable);
@@ -38,20 +43,20 @@ export function formatNarrativeState(readable: ReadableGameState): string {
     lines.push(`GAME RESULT: ${JSON.stringify(readable.result)}`);
   }
 
-  // Player 2 board (AI = viewer)
+  // AI's board
   lines.push('');
   lines.push('--- YOUR BOARD ---');
   lines.push('');
-  lines.push(...formatBoard(readable, 'player2', 'Your'));
+  lines.push(...formatBoard(readable, aiPrefix, 'Your'));
 
-  // Player 1 board (opponent)
+  // Opponent's board
   lines.push('');
   lines.push('--- OPPONENT BOARD ---');
   lines.push('');
-  lines.push(...formatBoard(readable, 'player1', 'Opponent'));
+  lines.push(...formatBoard(readable, oppPrefix, 'Opponent'));
 
   // Combat notes (weakness/resistance matchup between actives)
-  const combatLines = formatCombatNotes(readable);
+  const combatLines = formatCombatNotes(readable, aiIdx);
   if (combatLines.length > 0) {
     lines.push('');
     lines.push('--- COMBAT NOTES ---');
@@ -82,6 +87,10 @@ export function formatNarrativeState(readable: ReadableGameState): string {
       lines.push(entry);
     }
   }
+
+  // Zone key reference (perspectivized)
+  lines.push('');
+  lines.push(...formatZoneList(readable.zones, aiIdx));
 
   return lines.join('\n');
 }
@@ -244,9 +253,9 @@ function formatBoard(readable: ReadableGameState, playerPrefix: string, owner: s
     if (zone.count === 0) continue;
 
     if (zone.cards.length === 0 && zone.count > 0) {
-      lines.push(`[${label}] (zone: "${zoneKey}") (${zone.count} face-down card${zone.count > 1 ? 's' : ''})`);
+      lines.push(`[${label}] (${zone.count} face-down card${zone.count > 1 ? 's' : ''})`);
     } else {
-      lines.push(...formatFieldZoneCompact(label, zoneKey, zone));
+      lines.push(...formatFieldZoneCompact(label, zone));
     }
   }
 
@@ -254,7 +263,7 @@ function formatBoard(readable: ReadableGameState, playerPrefix: string, owner: s
   const handKey = `${playerPrefix}_hand`;
   const hand = zones[handKey];
   if (hand) {
-    lines.push(formatHandLine(hand, handKey, owner));
+    lines.push(formatHandLine(hand, owner));
   }
 
   // Count line: Deck | Discard | Prizes
@@ -265,7 +274,7 @@ function formatBoard(readable: ReadableGameState, playerPrefix: string, owner: s
   const discard = zones[discardKey];
   if (discard && discard.cards.length > 0) {
     if (discard.cards.length <= NARRATIVE.DISCARD_DISPLAY_LIMIT) {
-      lines.push(`  ${owner} Discard (zone: "${discardKey}"): ${condenseNames(discard.cards)}`);
+      lines.push(`  ${owner} Discard: ${condenseNames(discard.cards)}`);
     }
   }
 
@@ -274,9 +283,9 @@ function formatBoard(readable: ReadableGameState, playerPrefix: string, owner: s
   const lost = zones[lostKey];
   if (lost && lost.count > 0) {
     if (lost.cards.length > 0) {
-      lines.push(`${owner} Lost Zone (zone: "${lostKey}") (${lost.count}): ${condenseNames(lost.cards)}`);
+      lines.push(`${owner} Lost Zone (${lost.count}): ${condenseNames(lost.cards)}`);
     } else {
-      lines.push(`${owner} Lost Zone (zone: "${lostKey}"): ${lost.count}`);
+      lines.push(`${owner} Lost Zone: ${lost.count}`);
     }
   }
 
@@ -285,9 +294,9 @@ function formatBoard(readable: ReadableGameState, playerPrefix: string, owner: s
     const staging = zones['staging'];
     if (staging && staging.count > 0) {
       if (staging.cards.length > 0) {
-        lines.push(`Staging (zone: "staging"): ${condenseNames(staging.cards)}`);
+        lines.push(`Staging: ${condenseNames(staging.cards)}`);
       } else {
-        lines.push(`Staging (zone: "staging"): ${staging.count}`);
+        lines.push(`Staging: ${staging.count}`);
       }
     }
   }
@@ -297,7 +306,7 @@ function formatBoard(readable: ReadableGameState, playerPrefix: string, owner: s
 
 // ── Compact field zone (instance state only, no attacks/abilities) ──
 
-function formatFieldZoneCompact(label: string, zoneKey: string, zone: ReadableZone): string[] {
+function formatFieldZoneCompact(label: string, zone: ReadableZone): string[] {
   const lines: string[] = [];
   const cards = zone.cards;
   if (cards.length === 0) return lines;
@@ -306,7 +315,7 @@ function formatFieldZoneCompact(label: string, zoneKey: string, zone: ReadableZo
   const pokemon = cards[cards.length - 1];
   const attached = cards.slice(0, -1);
 
-  lines.push(`[${label}] (zone: "${zoneKey}") ${formatInstanceStats(pokemon)}`);
+  lines.push(`[${label}] ${formatInstanceStats(pokemon)}`);
 
   if (attached.length > 0) {
     lines.push(`  Attached: ${condenseNames(attached)}`);
@@ -352,12 +361,12 @@ function formatInstanceStats(card: ReadableCard): string {
 
 // ── Hand formatting ──────────────────────────────────────────────
 
-function formatHandLine(zone: ReadableZone, zoneKey: string, owner: string): string {
+function formatHandLine(zone: ReadableZone, owner: string): string {
   const label = `${owner} Hand`;
-  if (zone.count === 0) return `${label} (zone: "${zoneKey}"): 0`;
+  if (zone.count === 0) return `${label}: 0`;
 
   if (zone.cards.length === 0) {
-    return `${label} (zone: "${zoneKey}"): ${zone.count} (hidden)`;
+    return `${label}: ${zone.count} (hidden)`;
   }
 
   // Sum actual visible card count from condensed entries (each may have count > 1)
@@ -366,9 +375,9 @@ function formatHandLine(zone: ReadableZone, zoneKey: string, owner: string): str
   const cardList = condenseNames(zone.cards);
 
   if (hiddenCount > 0) {
-    return `${label} (zone: "${zoneKey}") (${zone.count}): ${cardList}, [${hiddenCount} hidden]`;
+    return `${label} (${zone.count}): ${cardList}, [${hiddenCount} hidden]`;
   }
-  return `${label} (zone: "${zoneKey}") (${zone.count}): ${cardList}`;
+  return `${label} (${zone.count}): ${cardList}`;
 }
 
 // ── Shared helpers ───────────────────────────────────────────────
@@ -446,12 +455,13 @@ function formatAction(a: Record<string, unknown>): string {
 
 // ── Combat notes (weakness/resistance between actives) ──────────
 
-function formatCombatNotes(readable: ReadableGameState): string[] {
+function formatCombatNotes(readable: ReadableGameState, aiIdx: PlayerIndex = 1): string[] {
   const lines: string[] = [];
 
-  // AI is player2, opponent is player1
-  const myActive = getTopCard(readable.zones['player2_active']);
-  const oppActive = getTopCard(readable.zones['player1_active']);
+  const myPrefix = `player${aiIdx + 1}`;
+  const oppPrefix = `player${aiIdx === 0 ? 2 : 1}`;
+  const myActive = getTopCard(readable.zones[`${myPrefix}_active`]);
+  const oppActive = getTopCard(readable.zones[`${oppPrefix}_active`]);
 
   if (!myActive || !oppActive) return lines;
 
@@ -511,10 +521,40 @@ function formatStadium(zones: Record<string, ReadableZone>): string[] {
   const lines: string[] = [];
   const stadium = zones['stadium'];
   if (stadium && stadium.count > 0) {
-    lines.push(`(zone: "stadium")`);
     for (const card of stadium.cards) {
       lines.push(card.name);
     }
   }
+  return lines;
+}
+
+// ── Zone key reference ──────────────────────────────────────────
+
+function formatZoneList(zones: Record<string, ReadableZone>, aiIdx: PlayerIndex): string[] {
+  const lines: string[] = [];
+  const yourKeys: string[] = [];
+  const opponentKeys: string[] = [];
+  const sharedKeys: string[] = [];
+
+  for (const zoneKey of Object.keys(zones)) {
+    const perspective = toAIPerspective(zoneKey, aiIdx);
+    if (perspective.startsWith('your_')) {
+      yourKeys.push(perspective);
+    } else if (perspective.startsWith('opponent_')) {
+      opponentKeys.push(perspective);
+    } else {
+      sharedKeys.push(perspective);
+    }
+  }
+
+  lines.push('=== YOUR ZONES ===');
+  lines.push(yourKeys.join(', '));
+  lines.push('=== OPPONENT ZONES ===');
+  lines.push(opponentKeys.join(', '));
+  if (sharedKeys.length > 0) {
+    lines.push('=== SHARED ZONES ===');
+    lines.push(sharedKeys.join(', '));
+  }
+
   return lines;
 }
