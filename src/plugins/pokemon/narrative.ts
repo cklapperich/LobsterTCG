@@ -388,7 +388,7 @@ function condenseNames(cards: ReadableCard[]): string {
   return groups.map(g => g.count > 1 ? `${g.name} x${g.count}` : g.name).join(', ');
 }
 
-function formatCountLine(zones: Record<string, ReadableZone>, prefix: string): string {
+function formatCountLine(zones: Record<string, ReadableZone>, prefix: string, owner: string): string {
   const deckCount = zones[`${prefix}_deck`]?.count ?? 0;
   const discardCount = zones[`${prefix}_discard`]?.count ?? 0;
   // Sum across all 6 individual prize zones
@@ -396,7 +396,7 @@ function formatCountLine(zones: Record<string, ReadableZone>, prefix: string): s
   for (let i = 1; i <= 6; i++) {
     prizesCount += zones[`${prefix}_prizes_${i}`]?.count ?? 0;
   }
-  return `Deck: ${deckCount} | Discard: ${discardCount} | Prizes: ${prizesCount}`;
+  return `${owner} Deck: ${deckCount} | ${owner} Discard: ${discardCount} | ${owner} Prizes: ${prizesCount}`;
 }
 
 // ── Actions formatting ───────────────────────────────────────────
