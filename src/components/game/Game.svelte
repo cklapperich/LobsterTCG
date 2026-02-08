@@ -176,7 +176,6 @@
       ? `--- Turn ${gameState.turnNumber}: ${player}'s Turn ---`
       : `--- ${player}'s Turn (Setup) ---`;
     gameState.log.push(turnLabel);
-    gameState = { ...gameState };
   }
 
   // Auto-open browse modal when a reveal decision targets the human player
