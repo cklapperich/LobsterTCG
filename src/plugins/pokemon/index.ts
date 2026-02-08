@@ -7,6 +7,7 @@ import {
   loadPlaymat,
   shuffle as shuffleAction,
   moveCard,
+  moveCardStack,
   draw as drawAction,
   concede as concedeAction,
   executeAction,
@@ -268,6 +269,7 @@ export function flipFieldCardsFaceUp(state: GameState<CardTemplate>): void {
  * - flip_card: visibility is managed by zones, not manual flips
  * - declare_victory: victory is determined by prize cards, deck-out, or bench-out
  * - place_on_zone: not a standard Pokemon action for AI
+ * - move_card_stack: AI misuses this (dumps entire hand onto field). Use swap_card_stacks instead.
  */
 const HIDDEN_DEFAULT_TOOLS: Set<string> = new Set([
   ACTION_TYPES.DICE_ROLL,
@@ -275,6 +277,7 @@ const HIDDEN_DEFAULT_TOOLS: Set<string> = new Set([
   ACTION_TYPES.DECLARE_VICTORY,
   ACTION_TYPES.PLACE_ON_ZONE,
   ACTION_TYPES.SET_ORIENTATION,
+  ACTION_TYPES.MOVE_CARD_STACK,
 ]);
 
 /** Local tool factory matching RunnableTool shape. */
@@ -345,7 +348,6 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
       ACTION_TYPES.SET_COUNTER,
       ACTION_TYPES.COIN_FLIP,
       ACTION_TYPES.DRAW,
-      ACTION_TYPES.MOVE_CARD_STACK,
       ACTION_TYPES.SWAP_CARD_STACKS,
       ACTION_TYPES.CONCEDE,
     ]);
@@ -363,9 +365,9 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
     t => !HIDDEN_DEFAULT_TOOLS.has(t.name)
   );
 
-  // Setup phase: only allow move_card, move_card_stack, end_turn
+  // Setup phase: only allow move_card, swap_card_stacks, end_turn, mulligan
   if (ctx.getState().phase === PHASES.SETUP) {
-    let setupTools = tools.filter(t => ([ACTION_TYPES.MOVE_CARD, ACTION_TYPES.MOVE_CARD_STACK, ACTION_TYPES.SWAP_CARD_STACKS, ACTION_TYPES.END_TURN, ACTION_TYPES.MULLIGAN] as string[]).includes(t.name));
+    let setupTools = tools.filter(t => ([ACTION_TYPES.MOVE_CARD, ACTION_TYPES.SWAP_CARD_STACKS, ACTION_TYPES.END_TURN, ACTION_TYPES.MULLIGAN] as string[]).includes(t.name));
     // Add end_phase alias (prompt-sections.md references it)
     const endTurnTool = setupTools.find(t => t.name === ACTION_TYPES.END_TURN);
     if (endTurnTool) {

@@ -1,4 +1,4 @@
-import type { Action, GameState, MoveCardAction, MoveCardStackAction, AddCounterAction, Position } from '../../core/types';
+import type { Action, GameState, MoveCardAction, MoveCardStackAction, AddCounterAction } from '../../core/types';
 import { VISIBILITY, ACTION_TYPES, PHASES, CARD_FLAGS, ACTION_SOURCES } from '../../core/types';
 import type { PreHookResult, PostHookResult, Plugin } from '../../core/plugin/types';
 import type { PokemonCardTemplate } from './cards';
@@ -9,7 +9,10 @@ import {
   isEnergy,
   isEvolution,
   isBasicPokemon,
+  isStage1,
+  isStage2,
   isStadium,
+  isTool,
   isFieldZone,
   isStadiumZone,
 } from './helpers';
@@ -305,58 +308,6 @@ function warnNonBasicToEmptyField(state: PokemonState, action: Action): PreHookR
   return { outcome: 'continue' };
 }
 
-// Warning 7: Energy should not be placed on top of a Pokemon in a field zone
-function warnEnergyOnTopOfPokemon(state: PokemonState, action: Action): PreHookResult {
-  if (action.allowed_by_card_effect) return { outcome: 'continue' };
-
-  let cardInstanceId: string;
-  let toZone: string;
-  let fromZone: string | undefined;
-  let position: number | Position | undefined;
-
-  if (action.type === ACTION_TYPES.MOVE_CARD) {
-    const moveAction = action as MoveCardAction;
-    cardInstanceId = moveAction.cardInstanceId;
-    toZone = moveAction.toZone;
-    fromZone = moveAction.fromZone;
-    position = moveAction.position;
-  } else if (action.type === ACTION_TYPES.MOVE_CARD_STACK) {
-    const stackAction = action as MoveCardStackAction;
-    cardInstanceId = stackAction.cardInstanceIds[0];
-    toZone = stackAction.toZone;
-    fromZone = stackAction.fromZone;
-    position = stackAction.position;
-    if (!cardInstanceId) return { outcome: 'continue' };
-  } else {
-    return { outcome: 'continue' };
-  }
-
-  // Same-zone rearrangement is not a new attachment
-  if (fromZone && fromZone === toZone) return { outcome: 'continue' };
-
-  if (!isFieldZone(toZone)) return { outcome: 'continue' };
-
-  const template = getTemplateForCard(state, cardInstanceId);
-  if (!template || !isEnergy(template)) return { outcome: 'continue' };
-
-  // Array convention: index 0 = visual bottom, end of array = visual top.
-  // 'top' = end of array (visual top), 'bottom' = index 0 (visual bottom).
-  // Energy at the visual bottom (position 'bottom') is fine — it's underneath the Pokemon.
-  // Warn when energy would land on visual top: position undefined (append to end),
-  // position === 'top' (push to end = visual top), or
-  // numeric position >= zone length (explicit top).
-  const zone = state.zones[toZone];
-  if (zone && zone.cards.length > 0) {
-    const isTop = position === undefined || position === 'top' ||
-      (typeof position === 'number' && position >= zone.cards.length);
-    if (isTop) {
-      // Auto-correct: replace action with position 'bottom' (index 0 = underneath)
-      return { outcome: 'replace', action: { ...action, position: 'bottom' } as Action };
-    }
-  }
-
-  return { outcome: 'continue' };
-}
 
 // Post-hook: During setup, cards placed on field zones are face-down (hidden from both players)
 function setupFaceDown(state: PokemonState, action: Action): PostHookResult {
@@ -420,6 +371,40 @@ function logTrainerText(state: PokemonState, action: Action): PostHookResult {
     const text = template.rules.join(' ');
     (state as GameState<PokemonCardTemplate>).log.push(`${header} ${text}`);
   }
+
+  return {};
+}
+
+// Post-hook: Re-arrange cards in field zones to maintain proper stacking order.
+// Visual bottom (index 0) → top (end): Tools, Energy, Basic, Stage 1, Stage 2.
+function reorderFieldZone(state: PokemonState, action: Action): PostHookResult {
+  let toZone: string | undefined;
+
+  if (action.type === ACTION_TYPES.MOVE_CARD) {
+    toZone = (action as MoveCardAction).toZone;
+  } else if (action.type === ACTION_TYPES.MOVE_CARD_STACK) {
+    toZone = (action as MoveCardStackAction).toZone;
+  }
+
+  if (!toZone || !isFieldZone(toZone)) return {};
+
+  const mutableState = state as GameState<PokemonCardTemplate>;
+  const zone = mutableState.zones[toZone];
+  if (!zone || zone.cards.length <= 1) return {};
+
+  // Assign sort weight: lower = closer to visual bottom (index 0)
+  function sortWeight(card: { template: PokemonCardTemplate }): number {
+    const t = getTemplate(card.template.id);
+    if (!t) return 2; // unknown → treat as basic-level
+    if (isTool(t)) return 0;
+    if (isEnergy(t)) return 1;
+    if (isBasicPokemon(t)) return 2;
+    if (isStage1(t)) return 3;
+    if (isStage2(t)) return 4;
+    return 2; // fallback (other pokemon variants, etc.)
+  }
+
+  zone.cards.sort((a, b) => sortWeight(a) - sortWeight(b));
 
   return {};
 }
@@ -673,10 +658,12 @@ export const pokemonHooksPlugin: Plugin<PokemonCardTemplate> = {
     [ACTION_TYPES.MOVE_CARD]: [
       { hook: setupFaceDown, priority: 50 },
       { hook: logTrainerText, priority: 100 },
+      { hook: reorderFieldZone, priority: 200 },
     ],
     [ACTION_TYPES.MOVE_CARD_STACK]: [
       { hook: setupFaceDown, priority: 50 },
       { hook: logTrainerText, priority: 100 },
+      { hook: reorderFieldZone, priority: 200 },
     ],
     [ACTION_TYPES.MULLIGAN]: [
       { hook: logMulliganMessage, priority: 100 },
@@ -690,7 +677,6 @@ export const pokemonHooksPlugin: Plugin<PokemonCardTemplate> = {
       { hook: warnEvolutionChain, priority: 100 },
       { hook: warnEvolutionTiming, priority: 110 },
       { hook: warnNonBasicToEmptyField, priority: 90 },
-      { hook: warnEnergyOnTopOfPokemon, priority: 90 },
       { hook: warnStadiumOnly, priority: 90 },
       { hook: warnTrainerToField, priority: 85 },
     ],
@@ -701,7 +687,6 @@ export const pokemonHooksPlugin: Plugin<PokemonCardTemplate> = {
       { hook: warnEvolutionChain, priority: 100 },
       { hook: warnEvolutionTiming, priority: 110 },
       { hook: warnNonBasicToEmptyField, priority: 90 },
-      { hook: warnEnergyOnTopOfPokemon, priority: 90 },
       { hook: warnStadiumOnly, priority: 90 },
       { hook: warnTrainerToField, priority: 85 },
     ],

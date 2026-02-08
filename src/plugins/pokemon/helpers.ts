@@ -37,6 +37,10 @@ export function isEnergy(t: PokemonCardTemplate): boolean {
   return t.supertype === SUPERTYPES.ENERGY;
 }
 
+export function isTool(t: PokemonCardTemplate): boolean {
+  return t.supertype === SUPERTYPES.TRAINER && hasSubtype(t, 'Pokemon Tool');
+}
+
 export function isFieldZone(zoneKey: string): boolean {
   return zoneKey.endsWith('_active') || /_bench_\d+$/.test(zoneKey);
 }

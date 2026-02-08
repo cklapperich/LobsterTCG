@@ -153,15 +153,14 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
     // ── Move Card ──────────────────────────────────────────────────
     tool({
       name: 'move_card',
-      description: 'Move a card from one zone to another. Use cardName for visible cards. Omit cardName to take from top of zone (e.g. prize cards).',
+      description: 'Move a card from one zone to another. Always specify cardName for visible cards. Omit cardName only for face-down cards (takes from top of zone).',
       inputSchema: {
         type: 'object' as const,
         properties: {
-          cardName: { type: 'string', description: 'Name of the card to move (optional — omit for face-down cards)' },
+          cardName: { type: 'string', description: 'Name of the card to move. Always provide for visible cards. Omit only for face-down cards (takes top card).' },
           fromZone: { type: 'string', description: 'Zone key (e.g. "player2_hand")' },
           toZone: { type: 'string', description: 'Zone key to move the card to (e.g. "player2_active")' },
           toPosition: { type: 'string', enum: ['top', 'bottom'], description: '"top" = top of zone (default), "bottom" = bottom of zone' },
-          fromPosition: { type: 'string', description: 'Position to pick from when cardName is omitted: "top" (default), "bottom", or numeric index' },
           allowed_by_card_effect: { type: 'boolean', description: 'Set true when a card effect permits bypassing normal rules (e.g. extra energy attachment, evolution on first turn)' },
         },
         required: ['fromZone', 'toZone'],
@@ -170,7 +169,7 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
         return ctx.execute((state) => {
           const cardId = input.cardName
             ? resolveCard(state, input.cardName, input.fromZone)
-            : resolveCardByPosition(state, input.fromZone, input.fromPosition);
+            : resolveCardByPosition(state, input.fromZone);
           return {
             ...moveCard(p, cardId, input.fromZone, input.toZone, input.toPosition ?? 'top'),
             ...(input.allowed_by_card_effect && { allowed_by_card_effect: true }),
