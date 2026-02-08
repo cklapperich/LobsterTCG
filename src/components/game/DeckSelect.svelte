@@ -3,6 +3,7 @@
   import type { DeckList } from '../../core';
   import { parsePTCGODeck } from '../../plugins/pokemon/cards';
   import { playSfx } from '../../lib/audio.svelte';
+  import SettingsModal from './SettingsModal.svelte';
   import { MODEL_OPTIONS } from '../../ai';
   import { DEFAULT_CONFIG, type PlayerConfig } from './player-config';
   import GbcDropdown from './GbcDropdown.svelte';
@@ -45,6 +46,7 @@
   let playmatImage = $state<string>('');
   let aiModel = $state<string>('kimi-k2p5');
   let aiMode = $state<string>('autonomous');
+  let showSettings = $state(false);
 
   const gameConfig = $derived(GAME_TYPES[gameType]);
 
@@ -170,7 +172,16 @@
 <div class="deck-select-container font-retro bg-gbc-bg min-h-screen w-screen flex flex-col items-center justify-center p-4 box-border relative">
   <div class="scanlines"></div>
 
-  <div class="gbc-panel-lg max-w-2xl w-full">
+  <div class="gbc-panel-lg max-w-2xl w-full relative">
+    <button
+      class="settings-btn"
+      onclick={() => { showSettings = true; playSfx('cursor'); }}
+      title="Settings"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+        <path fill-rule="evenodd" d="M11.078 2.25c-.917 0-1.699.663-1.85 1.567L9.05 4.889c-.02.12-.115.26-.297.348a7.463 7.463 0 0 0-.986.57c-.166.115-.334.126-.45.083L6.3 5.508a1.875 1.875 0 0 0-2.282.819l-.922 1.597a1.875 1.875 0 0 0 .432 2.385l.84.692c.095.078.17.229.154.43a7.598 7.598 0 0 0 0 1.139c.015.2-.059.352-.153.43l-.841.692a1.875 1.875 0 0 0-.432 2.385l.922 1.597a1.875 1.875 0 0 0 2.282.818l1.019-.382c.115-.043.283-.031.45.082.312.214.641.405.985.57.182.088.277.228.297.35l.178 1.071c.151.904.933 1.567 1.85 1.567h1.844c.916 0 1.699-.663 1.85-1.567l.178-1.072c.02-.12.114-.26.297-.349.344-.165.673-.356.985-.57.167-.114.335-.125.45-.082l1.02.382a1.875 1.875 0 0 0 2.28-.819l.923-1.597a1.875 1.875 0 0 0-.432-2.385l-.84-.692c-.095-.078-.17-.229-.154-.43a7.614 7.614 0 0 0 0-1.139c-.016-.2.059-.352.153-.43l.84-.692c.708-.582.891-1.59.433-2.385l-.922-1.597a1.875 1.875 0 0 0-2.282-.818l-1.02.382c-.114.043-.282.031-.449-.083a7.49 7.49 0 0 0-.985-.57c-.183-.087-.277-.227-.297-.348l-.179-1.072a1.875 1.875 0 0 0-1.85-1.567h-1.843ZM12 15.75a3.75 3.75 0 1 0 0-7.5 3.75 3.75 0 0 0 0 7.5Z" clip-rule="evenodd"/>
+      </svg>
+    </button>
     <h1 class="text-gbc-yellow text-xl text-center mb-8 tracking-wide title-shadow">
       {gameConfig?.name ?? 'LOBSTER TCG'}
     </h1>
@@ -289,6 +300,10 @@
   <div class="credits text-gbc-border text-[0.4rem] mt-8 opacity-70">
     LOBSTER TCG
   </div>
+
+  {#if showSettings}
+    <SettingsModal onClose={() => { showSettings = false; playSfx('cancel'); }} />
+  {/if}
 </div>
 
 <style>
@@ -323,6 +338,13 @@
   .gbc-checkbox input[type="checkbox"]:checked {
     @apply bg-gbc-green;
     box-shadow: inset 0.125rem 0.125rem 0 rgba(0, 0, 0, 0.2);
+  }
+
+  .settings-btn {
+    @apply absolute top-3 right-3 p-1.5 rounded-sm cursor-pointer;
+    @apply text-gbc-light/60 hover:text-gbc-light;
+    @apply bg-transparent border-none outline-none;
+    transition: color 0.1s;
   }
 
   .start-btn {

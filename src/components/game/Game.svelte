@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Playmat, CardInstance, CardTemplate, GameState, CounterDefinition, DeckList, ZoneConfig, Action } from '../../core';
+  import type { Playmat, CardInstance, CardTemplate, GameState, CounterDefinition, DeckList, ZoneConfig, Action, SetupCompleteUtils } from '../../core';
   import { executeAction, shuffle, moveCard, VISIBILITY, flipCard, endTurn, loadDeck, getCardName, findCardInZones, toReadableState, PluginManager, setOrientation, createDecision, resolveDecision, revealHand, mulligan as mulliganAction, ACTION_TYPES, PHASES, ACTION_SOURCES } from '../../core';
   import type { ToolContext } from '../../core/ai-tools';
   import { GAME_TYPES } from '../../game-types';
@@ -22,6 +22,8 @@
     clearZoneCounters,
   } from './counterDragState.svelte';
   import { playSfx, playBgm, stopBgm, toggleMute, audioSettings } from '../../lib/audio.svelte';
+  import { settings } from '../../lib/settings.svelte';
+  import SettingsModal from './SettingsModal.svelte';
   import { runAITurn, runAIPipeline, runAutonomousAgent, MODEL_OPTIONS } from '../../ai';
   const ACTION_DELAY_MS = 500;
   // gameLog store no longer used - log lives in gameState.log
@@ -68,6 +70,7 @@
   let loading = $state(true);
   let error = $state<string | null>(null);
   let aiThinking = $state(false);
+  let setupTransitioning = $state(false);
   let pendingDecisionResolve: (() => void) | null = $state(null);
 
   // Player controllers — polymorphic turn dispatch
@@ -160,7 +163,7 @@
   // ensures this doesn't fire mid-AI-execution.
   let lastAnnouncedKey = '';
   $effect(() => {
-    if (!gameState || aiThinking || gameState.pendingDecision) return;
+    if (!gameState || aiThinking || gameState.pendingDecision || setupTransitioning) return;
     const key = `${gameState.phase}-${gameState.turnNumber}-${gameState.activePlayer}`;
     if (key !== lastAnnouncedKey) {
       lastAnnouncedKey = key;
@@ -176,6 +179,27 @@
       ? `--- Turn ${gameState.turnNumber}: ${player}'s Turn ---`
       : `--- ${player}'s Turn (Setup) ---`;
     gameState.log.push(turnLabel);
+  }
+
+  async function handleSetupToPlayingTransition() {
+    if (!gameState) return;
+    setupTransitioning = true;
+
+    const utils: SetupCompleteUtils = {
+      flipCoin: async () => {
+        const isHeads = Math.random() < 0.5;
+        await coinFlipRef?.flip(isHeads);
+        return isHeads;
+      },
+      log: (msg: string) => { gameState!.log.push(msg); },
+    };
+
+    await gameConfig.onSetupComplete?.(gameState, utils);
+    gameState = { ...gameState };
+
+    setupTransitioning = false;
+    // Dispatch to whoever goes first (plugin may have changed activePlayer)
+    controllers[gameState.activePlayer].takeTurn();
   }
 
   // Auto-open browse modal when a reveal decision targets the human player
@@ -473,11 +497,14 @@
     const fromZone = cardModal.zoneKey;
     const shouldShuffle = cardModal.shuffleOnConfirm;
     const playerIndex = playerFromZoneKey(fromZone);
-    const stagingKey = 'staging';
+    // Search operations (shuffleOnConfirm=true) respect the search-to-hand setting
+    const destZone = (settings.searchToHand && shouldShuffle)
+      ? `player${playerIndex + 1}_hand`
+      : 'staging';
 
-    // Move each selected card to staging
+    // Move each selected card to destination
     for (const card of selectedCards) {
-      executeAction(gameState, moveCard(playerIndex as 0 | 1, card.instanceId, fromZone, stagingKey));
+      executeAction(gameState, moveCard(playerIndex as 0 | 1, card.instanceId, fromZone, destZone));
     }
 
     // Close modal first so shuffle animation is visible on the zone
@@ -493,8 +520,9 @@
     }
 
     const zoneName = gameState.zones[fromZone]?.config.name ?? fromZone;
+    const destName = destZone === 'staging' ? 'staging' : 'hand';
     const cardNames = selectedCards.map(c => c.template.name).join(', ');
-    gameState.log.push(`[Player ${playerIndex + 1}] Took ${cardNames} from ${zoneName} to staging`);
+    gameState.log.push(`[Player ${playerIndex + 1}] Took ${cardNames} from ${zoneName} to ${destName}`);
     gameState = { ...gameState };
   }
 
@@ -551,6 +579,9 @@
     playSfx('cancel');
     onBackToMenu?.();
   }
+
+  // Settings modal
+  let showSettings = $state(false);
 
   // Debug modal
   let showDebugModal = $state(false);
@@ -760,8 +791,9 @@
 
     // After AI setup turn, check if phase transitioned to playing
     if (gameState && gameState.phase === PHASES.PLAYING && gameState.turnNumber === 1) {
-      gameConfig.onSetupComplete?.(gameState);
-      gameState = { ...gameState };
+      aiThinking = false;
+      await handleSetupToPlayingTransition();
+      return;
     }
 
     aiThinking = false;
@@ -836,7 +868,7 @@
     executeEndTurnInner();
   }
 
-  function executeEndTurnInner() {
+  async function executeEndTurnInner() {
     if (!gameState) return;
     const currentPlayer = gameState.activePlayer;
     const wasSetup = gameState.phase === PHASES.SETUP;
@@ -853,10 +885,8 @@
 
     // Check if setup just transitioned to playing
     if (wasSetup && gameState.phase === PHASES.PLAYING && gameState.turnNumber === 1) {
-      gameConfig.onSetupComplete?.(gameState);
-      gameState = { ...gameState };
-  
-      return; // Human's turn 1 — no AI trigger
+      await handleSetupToPlayingTransition();
+      return;
     }
 
     // During setup, dispatch to the next player's controller
@@ -1112,6 +1142,15 @@
                   <path d="M15.932 7.757a.75.75 0 0 1 1.061 0 6 6 0 0 1 0 8.486.75.75 0 0 1-1.06-1.061 4.5 4.5 0 0 0 0-6.364.75.75 0 0 1 0-1.06Z"/>
                 </svg>
               {/if}
+            </button>
+            <button
+              class="mute-btn"
+              onclick={() => { showSettings = true; playSfx('cursor'); }}
+              title="Settings"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+                <path fill-rule="evenodd" d="M11.078 2.25c-.917 0-1.699.663-1.85 1.567L9.05 4.889c-.02.12-.115.26-.297.348a7.463 7.463 0 0 0-.986.57c-.166.115-.334.126-.45.083L6.3 5.508a1.875 1.875 0 0 0-2.282.819l-.922 1.597a1.875 1.875 0 0 0 .432 2.385l.84.692c.095.078.17.229.154.43a7.598 7.598 0 0 0 0 1.139c.015.2-.059.352-.153.43l-.841.692a1.875 1.875 0 0 0-.432 2.385l.922 1.597a1.875 1.875 0 0 0 2.282.818l1.019-.382c.115-.043.283-.031.45.082.312.214.641.405.985.57.182.088.277.228.297.35l.178 1.071c.151.904.933 1.567 1.85 1.567h1.844c.916 0 1.699-.663 1.85-1.567l.178-1.072c.02-.12.114-.26.297-.349.344-.165.673-.356.985-.57.167-.114.335-.125.45-.082l1.02.382a1.875 1.875 0 0 0 2.28-.819l.923-1.597a1.875 1.875 0 0 0-.432-2.385l-.84-.692c-.095-.078-.17-.229-.154-.43a7.614 7.614 0 0 0 0-1.139c-.016-.2.059-.352.153-.43l.84-.692c.708-.582.891-1.59.433-2.385l-.922-1.597a1.875 1.875 0 0 0-2.282-.818l-1.02.382c-.114.043-.282.031-.449-.083a7.49 7.49 0 0 0-.985-.57c-.183-.087-.277-.227-.297-.348l-.179-1.072a1.875 1.875 0 0 0-1.85-1.567h-1.843ZM12 15.75a3.75 3.75 0 1 0 0-7.5 3.75 3.75 0 0 0 0 7.5Z" clip-rule="evenodd"/>
+              </svg>
             </button>
           </div>
           {#if gameState.phase !== PHASES.SETUP}
@@ -1390,6 +1429,11 @@
         <pre class="debug-json">{debugTab === 'narrative' ? debugNarrative : debugJson}</pre>
       </div>
     </div>
+  {/if}
+
+  <!-- Settings Modal -->
+  {#if showSettings}
+    <SettingsModal onClose={() => { showSettings = false; playSfx('cancel'); }} />
   {/if}
 </div>
 

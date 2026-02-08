@@ -1,3 +1,5 @@
+import { settings } from './settings.svelte';
+
 // Sound effect paths mapping
 const SFX_PATHS = {
   cursor: '/sfx/cursor.mp3',
@@ -45,7 +47,7 @@ function preload(key: SfxKey): HTMLAudioElement {
 export function playSfx(key: SfxKey): void {
   const cached = preload(key);
   const audio = cached.cloneNode() as HTMLAudioElement;
-  audio.volume = audioSettings.volume;
+  audio.volume = settings.sfxVolume;
   if (!audioSettings.muted) {
     audio.play().catch(() => {
       // Ignore autoplay errors (user hasn't interacted yet)
@@ -72,7 +74,7 @@ export function playBgm(): void {
 
 function startTheme(index: number): void {
   bgmAudio = new Audio(BATTLE_THEMES[index]);
-  bgmAudio.volume = audioSettings.volume * 0.4; // BGM quieter than SFX
+  bgmAudio.volume = settings.bgmVolume;
   bgmAudio.addEventListener('ended', () => {
     currentThemeIndex = pickNextTheme();
     startTheme(currentThemeIndex);
@@ -98,17 +100,25 @@ export function toggleMute(): void {
     if (audioSettings.bgmMuted) {
       bgmAudio.pause();
     } else {
-      bgmAudio.volume = audioSettings.volume * 0.4;
+      bgmAudio.volume = settings.bgmVolume;
       bgmAudio.play().catch(() => {});
     }
   }
 }
 
-// Audio settings state
+// Audio settings state (mute toggles only — volume lives in settings store)
 export const audioSettings = $state({
   muted: false,
   bgmMuted: false,
-  volume: 0.5,
+});
+
+// Live-update BGM volume when settings change
+$effect.root(() => {
+  $effect(() => {
+    if (bgmAudio && !audioSettings.bgmMuted) {
+      bgmAudio.volume = settings.bgmVolume;
+    }
+  });
 });
 
 // Preload common sounds on module load

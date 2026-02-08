@@ -90,7 +90,7 @@ export type {
 export type { GamePlugin } from './game-plugin';
 
 // Game type config
-export type { GameTypeConfig } from './game-type-config';
+export type { GameTypeConfig, SetupCompleteUtils } from './game-type-config';
 
 // Counter types
 export type { CounterDefinition } from './counter';
