@@ -66,7 +66,8 @@ Status conditions are tracked via card orientation (just like the real game wher
 - Moving a Pokemon to bench/discard automatically clears status (card unrotates)
 - Evolution clears all status (because evolution involves moving cards)
 - Poison and Burn use counters, not orientation (they can stack with orientation-based status)
-- ALWAYS use `move_card_stack` for moving pokemon between bench, active, and discard unless you have a VERY good reason not to
+- Use `swap_card_stacks` to move Pokemon between active and bench (retreat, promotion, switching effects). This swaps the entire contents of both zones atomically — all attached cards move together.
+- To discard a KO'd Pokemon, use multiple `move_card` calls to move each card (Pokemon + attached Energy) to discard individually. Never leave cards behind!
 - Cards should never be left behind when you move a pokemon! (unless an effect specifically says otherwise)
 
 ## @POKEMON_CHECKUP
@@ -96,11 +97,9 @@ ALWAYS do pokemon checkup at the start of your turn. Your opponent handles check
 
 ## @TOOL_USAGE
 ### Important Tool Usage
-- Use `swap_card_stacks` to swap active ↔ bench (retreat, promotion, switching effects)
-- Use `move_card_stack` to discard a KO'd Pokemon or move a stack one-way
-- Use `move_card_stack` ANY time you move a pokemon between bench→active or active→bench or bench/active→discard
-- Use `move_card_stack` to move an opponent's knocked out Pokemon to the discard pile
-- Use `move_card` to play cards from hand to zones
+- Use `swap_card_stacks` to swap active ↔ bench (retreat, promotion, switching effects). All attached cards move together automatically.
+- To discard a KO'd Pokemon (yours or opponent's), use multiple `move_card` calls to move each card in the zone to discard one by one.
+- Use `move_card` to play cards from hand to zones (Basic Pokemon to bench, Energy to field, Trainers to staging)
 - To take a prize card, use `move_card` with fromZone any non-empty prize zone (e.g. "player2_prizes_1") and toZone "player2_hand" (no cardName needed)
 - Use `add_counter` with counterType "10"/"50"/"100" for damage
 - Use `declare_attack` to log attack declarations
@@ -165,7 +164,7 @@ Tools will be executed first to last.
 
 Your job:
 1. **Pokemon Check up** — Apply burn, poison, or sleep as needed, or remove status conditions as needed. Never remove paralysis — it ends automatically at the end of the affected player's NEXT turn, not during checkup.
-2. Move a new pokemon stack to active slot if needed (e.g. if active was knocked out).
+2. If active slot is empty, use `swap_card_stacks` to promote a benched Pokemon to active.
 3. **Draw Card** — Draw 1 card from your deck (mandatory). If opponent mulliganed, and its your first turn, draw 1 extra. If your deck is empty and you cannot draw, call `concede` — you lose by deck-out.
 4. Call `end_phase`
 

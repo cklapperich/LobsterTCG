@@ -27,6 +27,13 @@ export const MODEL_OPTIONS: ModelOption[] = [
     apiKeyEnv: 'VITE_FIREWORKS_API_KEY',
   },
   {
+    id: 'glm-4p7',
+    label: 'GLM 4p7',
+    provider: 'fireworks',
+    modelId: 'accounts/fireworks/models/glm-4p7',
+    apiKeyEnv: 'VITE_FIREWORKS_API_KEY',
+  },
+  {
     id: 'sonnet-4.5',
     label: 'Sonnet 4.5',
     provider: 'anthropic',
