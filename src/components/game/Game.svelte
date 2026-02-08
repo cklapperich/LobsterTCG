@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Playmat, CardInstance, CardTemplate, GameState, CounterDefinition, DeckList, ZoneConfig, Action, SetupCompleteUtils } from '../../core';
+  import type { Playmat, CardInstance, CardTemplate, GameState, CounterDefinition, DeckList, ZoneConfig, Action } from '../../core';
   import { executeAction, shuffle, moveCard, VISIBILITY, flipCard, endTurn, loadDeck, getCardName, findCardInZones, toReadableState, PluginManager, setOrientation, createDecision, resolveDecision, revealHand, mulligan as mulliganAction, ACTION_TYPES, PHASES, ACTION_SOURCES } from '../../core';
   import type { ToolContext } from '../../core/ai-tools';
   import { GAME_TYPES } from '../../game-types';
@@ -70,7 +70,6 @@
   let loading = $state(true);
   let error = $state<string | null>(null);
   let aiThinking = $state(false);
-  let setupTransitioning = $state(false);
   let pendingDecisionResolve: (() => void) | null = $state(null);
 
   // Player controllers — polymorphic turn dispatch
@@ -163,7 +162,7 @@
   // ensures this doesn't fire mid-AI-execution.
   let lastAnnouncedKey = '';
   $effect(() => {
-    if (!gameState || aiThinking || gameState.pendingDecision || setupTransitioning) return;
+    if (!gameState || aiThinking || gameState.pendingDecision) return;
     const key = `${gameState.phase}-${gameState.turnNumber}-${gameState.activePlayer}`;
     if (key !== lastAnnouncedKey) {
       lastAnnouncedKey = key;
@@ -179,27 +178,6 @@
       ? `--- Turn ${gameState.turnNumber}: ${player}'s Turn ---`
       : `--- ${player}'s Turn (Setup) ---`;
     gameState.log.push(turnLabel);
-  }
-
-  async function handleSetupToPlayingTransition() {
-    if (!gameState) return;
-    setupTransitioning = true;
-
-    const utils: SetupCompleteUtils = {
-      flipCoin: async () => {
-        const isHeads = Math.random() < 0.5;
-        await coinFlipRef?.flip(isHeads);
-        return isHeads;
-      },
-      log: (msg: string) => { gameState!.log.push(msg); },
-    };
-
-    await gameConfig.onSetupComplete?.(gameState, utils);
-    gameState = { ...gameState };
-
-    setupTransitioning = false;
-    // Dispatch to whoever goes first (plugin may have changed activePlayer)
-    controllers[gameState.activePlayer].takeTurn();
   }
 
   // Auto-open browse modal when a reveal decision targets the human player
@@ -337,7 +315,7 @@
       case ACTION_TYPES.COIN_FLIP:
       case ACTION_TYPES.SEARCH_ZONE:
         return null;
-      case 'declare_attack':
+      case ACTION_TYPES.DECLARE_ACTION:
         return `[AI] ${(action as any).attackName} declared`;
       default:
         return null;
@@ -790,9 +768,8 @@
 
     // After AI setup turn, check if phase transitioned to playing
     if (gameState && gameState.phase === PHASES.PLAYING && gameState.turnNumber === 1) {
-      aiThinking = false;
-      await handleSetupToPlayingTransition();
-      return;
+      gameConfig.onSetupComplete?.(gameState);
+      gameState = { ...gameState };
     }
 
     aiThinking = false;
@@ -867,7 +844,7 @@
     executeEndTurnInner();
   }
 
-  async function executeEndTurnInner() {
+  function executeEndTurnInner() {
     if (!gameState) return;
     const currentPlayer = gameState.activePlayer;
     const wasSetup = gameState.phase === PHASES.SETUP;
@@ -884,8 +861,9 @@
 
     // Check if setup just transitioned to playing
     if (wasSetup && gameState.phase === PHASES.PLAYING && gameState.turnNumber === 1) {
-      await handleSetupToPlayingTransition();
-      return;
+      gameConfig.onSetupComplete?.(gameState);
+      gameState = { ...gameState };
+      return; // Human's turn 1 — no AI trigger
     }
 
     // During setup, dispatch to the next player's controller

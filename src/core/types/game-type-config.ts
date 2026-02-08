@@ -4,13 +4,6 @@ import type { CardTemplate, PlayerIndex } from './card';
 import type { GameState } from './game';
 import type { DeckList } from './deck';
 
-export interface SetupCompleteUtils {
-  /** Flip a coin with visual animation. Returns true for heads, false for tails. */
-  flipCoin: () => Promise<boolean>;
-  /** Log a message to the game log. */
-  log: (message: string) => void;
-}
-
 export interface GameTypeConfig {
   id: string;
   name: string;
@@ -26,8 +19,8 @@ export interface GameTypeConfig {
   needsDeckSelection: boolean;
   needsAIModel: boolean;
   testOptions?: { id: string; label: string }[];
-  /** Called after setup phase transitions to playing. E.g. Pokemon flips field cards face-up, flips coin for first player. */
-  onSetupComplete?: (state: GameState, utils: SetupCompleteUtils) => Promise<void> | void;
+  /** Called after setup phase transitions to playing. E.g. Pokemon flips field cards face-up. */
+  onSetupComplete?: (state: GameState) => void;
   /** Called to inject test cards into the game state during init. */
   injectTestCards?: (state: GameState, testId: string, playerIndex: PlayerIndex) => void;
 }

@@ -1,4 +1,4 @@
-import type { GameTypeConfig, SetupCompleteUtils } from '../../core/types/game-type-config';
+import type { GameTypeConfig } from '../../core/types/game-type-config';
 import type { GameState } from '../../core/types/game';
 import type { PlayerIndex } from '../../core/types/card';
 import { plugin, executeSetup, pokemonHooksPlugin, flipFieldCardsFaceUp } from './index';
@@ -25,16 +25,8 @@ export const pokemonConfig: GameTypeConfig = {
   executeSetup: (state: GameState, playerIndex: PlayerIndex) => {
     executeSetup(state, playerIndex);
   },
-  onSetupComplete: async (state: GameState, { flipCoin, log }: SetupCompleteUtils) => {
+  onSetupComplete: (state: GameState) => {
     flipFieldCardsFaceUp(state);
-
-    log('Flipping coin to determine who goes first...');
-    const isHeads = await flipCoin();
-    const firstPlayer = isHeads ? 0 : 1;
-    log(`Coin flip: ${isHeads ? 'HEADS' : 'TAILS'} — Player ${firstPlayer + 1} goes first!`);
-
-    state.activePlayer = firstPlayer as PlayerIndex;
-    state.currentTurn = { number: 1, activePlayer: firstPlayer as PlayerIndex, actions: [], ended: false };
   },
 
   prompts: {
