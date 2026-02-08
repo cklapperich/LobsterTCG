@@ -82,10 +82,11 @@ export const FIRST_EVOLUTION_TURN = 2;
 // First turn where supporters are blocked (only the player who goes first)
 export const FIRST_SUPPORTER_TURN = 1;
 
-// Pokemon-specific action types (custom actions, not in core Action union)
-export const POKEMON_ACTION_TYPES = {
-  DECLARE_ATTACK: 'declare_attack',
-  DECLARE_ABILITY: 'declare_ability',
+// Pokemon declaration subtypes (used as DeclareAction.declarationType values)
+export const POKEMON_DECLARATION_TYPES = {
+  ATTACK: 'attack',
+  ABILITY: 'ability',
+  RETREAT: 'retreat',
 } as const;
 
 // Narrative display limits

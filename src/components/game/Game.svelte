@@ -26,7 +26,6 @@
   import SettingsModal from './SettingsModal.svelte';
   import { runAITurn, runAIPipeline, runAutonomousAgent, MODEL_OPTIONS } from '../../ai';
   const ACTION_DELAY_MS = 500;
-  // gameLog store no longer used - log lives in gameState.log
   import { contextMenuStore, openContextMenu, closeContextMenu as closeContextMenuStore } from './contextMenu.svelte';
   import { cardModalStore, openCardModal, closeCardModal as closeCardModalStore } from './cardModal.svelte';
 
@@ -46,8 +45,8 @@
   let { gameType, player1Deck, player2Deck, testFlags = {}, playmatImage, aiModel, aiMode, playerConfig = DEFAULT_CONFIG, onBackToMenu }: Props = $props();
 
   // Resolve game type config
-  const gameConfig = GAME_TYPES[gameType];
-  const { plugin } = gameConfig;
+  const gameConfig = $derived(GAME_TYPES[gameType]);
+  const plugin = $derived(gameConfig.plugin);
 
   // Derived local player index from config
   const local = $derived(localPlayerIndex(playerConfig));
@@ -236,16 +235,10 @@
       gameState.log.push(`Warning: ${preResult.reason}`);
     }
 
-    // Check for custom executor (plugin actions like declare_attack) before built-in
-    const customExecutor = pluginManager.getCustomExecutor(action.type);
-    if (customExecutor) {
-      customExecutor(gameState, action);
-    } else {
-      const blocked = executeAction(gameState, action);
-      if (blocked) {
-        gameState = { ...gameState };
-        return blocked;
-      }
+    const blocked = executeAction(gameState, action);
+    if (blocked) {
+      gameState = { ...gameState };
+      return blocked;
     }
 
     // Run post-hooks (e.g., setup face-down, trainer text logging)
@@ -316,7 +309,7 @@
       case ACTION_TYPES.SEARCH_ZONE:
         return null;
       case ACTION_TYPES.DECLARE_ACTION:
-        return `[AI] ${(action as any).attackName} declared`;
+        return `[AI] ${action.message ?? `${action.name} declared`}`;
       default:
         return null;
     }

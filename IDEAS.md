@@ -61,6 +61,13 @@ this requires a hook for pokemon specific stack logic?? ugh!
 
 19. remove fastball test and lass test
 
+20. double-check evolution timing hooks: '[AI] Moved Gogoat from hand to bench_1
+Action blocked: Already attached an Energy this turn. Set allowed_by_card_effect if a card effect permits this.'
+
+21. Evolution hook: cant play a basic on a basic! 
+
+22. Ensure the AI can see counters on its own pokemon!
+
 to active
 [Professor Kukui] Draw 2 cards. During this turn, your Pokémon’s attacks do 20 more damage to your opponent’s Active Pokémon (before applying Weakness and Resistance).
 [AI] Moved Professor Kukui from hand to

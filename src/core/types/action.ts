@@ -162,6 +162,15 @@ export interface SwapCardStacksAction extends BaseAction {
   zone2: string;
 }
 
+// Generic Declaration Action (plugin-defined subtypes via declarationType)
+export interface DeclareAction extends BaseAction {
+  type: typeof ACTION_TYPES.DECLARE_ACTION;
+  declarationType: string;              // plugin-defined: 'attack', 'ability', 'retreat'
+  name: string;                         // "Thunder Bolt", "Rain Dance"
+  metadata?: Record<string, unknown>;   // plugin-specific extras
+  message?: string;                     // log message (auto-gen if omitted)
+}
+
 // Union of all action types
 export type Action =
   | DrawAction
@@ -186,4 +195,5 @@ export type Action =
   | RevealAction
   | PeekAction
   | MulliganAction
-  | SwapCardStacksAction;
+  | SwapCardStacksAction
+  | DeclareAction;
