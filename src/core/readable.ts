@@ -52,6 +52,7 @@ export interface ReadableGameState {
   phase: Phase;
   turnNumber: number;
   activePlayer: 0 | 1;
+  viewer: PlayerIndex;
   zones: Record<string, ReadableZone>;
   players: [PlayerInfo, PlayerInfo];
   currentTurn: ReadableTurn;
@@ -84,6 +85,7 @@ export function toReadableState<T extends CardTemplate>(
     phase: state.phase,
     turnNumber: state.turnNumber,
     activePlayer: state.activePlayer,
+    viewer: playerIndex,
     zones: readableZones,
     players: state.players.map(p => {
       const rp: Record<string, unknown> = { ...p };

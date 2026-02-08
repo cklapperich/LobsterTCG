@@ -671,7 +671,7 @@ function warnAttackEnergyCost(state: PokemonState, action: Action): PreHookResul
 export function modifyReadableState(
   readable: ReadableGameState,
 ): ReadableGameState {
-  for (const zone of Object.values(readable.zones)) {
+  for (const [zoneKey, zone] of Object.entries(readable.zones)) {
     for (const card of zone.cards) {
       // Auto-count total damage from damage counters
       const counters = card.counters as Record<string, number> | undefined;
@@ -695,6 +695,17 @@ export function modifyReadableState(
       }
       // Remove raw orientation — AI should use 'status' field instead
       delete card.orientation;
+    }
+
+    // Strip pre-evolved Pokemon from field zones — they're evolution stages
+    // buried under the top Pokemon, irrelevant to AI decision-making.
+    // Keeps top card (active Pokemon) and non-Pokemon (energy, tools).
+    if (isFieldZone(zoneKey) && zone.cards.length > 1) {
+      const topIdx = zone.cards.length - 1;
+      zone.cards = zone.cards.filter((card, i) =>
+        i === topIdx || card.supertype !== SUPERTYPES.POKEMON
+      );
+      zone.count = zone.cards.length;
     }
   }
   return readable;

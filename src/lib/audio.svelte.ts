@@ -8,7 +8,7 @@ const SFX_PATHS = {
   coinToss: '/sfx/coin_toss.mp3',
   coinHeads: '/sfx/coin_toss_heads.mp3',
   coinTails: '/sfx/coin_toss_tails.mp3',
-  turnStart: '/sfx/receive_card_pop.mp3',
+  turnStart: '/sfx/unused_05.mp3',
   decisionRequested: '/sfx/question_mark.mp3',
 } as const;
 

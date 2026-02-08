@@ -295,6 +295,11 @@ function tool(options: {
   };
 }
 
+/** Translate an AI-perspective zone key using the context's translator. */
+function tzp(ctx: ToolContext, key: string): string {
+  return ctx.translateZoneKey ? ctx.translateZoneKey(key) : key;
+}
+
 /** Reusable set_status tool factory (used by both checkup and executor roles). */
 function createSetStatusTool(ctx: ToolContext): RunnableTool {
   const p = ctx.playerIndex;
@@ -305,16 +310,17 @@ function createSetStatusTool(ctx: ToolContext): RunnableTool {
       type: 'object' as const,
       properties: {
         cardName: { type: 'string', description: 'Name of the Pokemon' },
-        zone: { type: 'string', description: 'Zone key the card is in' },
+        zone: { type: 'string', description: 'Zone key the card is in (e.g. "your_active")' },
         status: { type: 'string', enum: [STATUS_CONDITIONS.NORMAL, STATUS_CONDITIONS.PARALYZED, STATUS_CONDITIONS.ASLEEP, STATUS_CONDITIONS.CONFUSED], description: 'Status condition to apply, or "normal" to clear' },
       },
       required: ['cardName', 'zone', 'status'],
     },
     async run(input) {
+      const zone = tzp(ctx, input.zone);
       return ctx.execute((state) => {
         const cardId = input.cardName.startsWith(INSTANCE_ID_PREFIX)
           ? input.cardName
-          : resolveCardName(state, input.cardName, input.zone);
+          : resolveCardName(state, input.cardName, zone);
         const degrees = STATUS_TO_DEGREES[input.status] ?? STATUS_TO_DEGREES[STATUS_CONDITIONS.NORMAL];
         return setOrientation(p, cardId, degrees);
       });
@@ -470,18 +476,19 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
     inputSchema: {
       type: 'object' as const,
       properties: {
-        zone: { type: 'string', description: 'Zone key to discard all cards from (e.g. "player2_active", "player2_bench_1")' },
+        zone: { type: 'string', description: 'Zone key to discard all cards from (e.g. "your_active", "your_bench_1")' },
       },
       required: ['zone'],
     },
     async run(input) {
+      const zoneKey = tzp(ctx, input.zone);
       return ctx.execute((state) => {
-        const zone = state.zones[input.zone];
+        const zone = state.zones[zoneKey];
         if (!zone) throw new Error(`Zone "${input.zone}" not found`);
         if (zone.cards.length === 0) throw new Error(`Zone "${input.zone}" is empty`);
         const cardIds = zone.cards.map(c => c.instanceId);
         const discardKey = `player${p + 1}_${ZONE_IDS.DISCARD}`;
-        return moveCardStack(p, cardIds, input.zone, discardKey);
+        return moveCardStack(p, cardIds, zoneKey, discardKey);
       });
     },
   }));

@@ -52,6 +52,8 @@ export interface ToolContext {
   agentRole?: 'checkup' | 'planner' | 'executor';
   /** Set by request_replan tool — signals the executor wants to bail back to the planner. */
   replanReason?: string;
+  /** Translate AI-perspective zone keys (your_hand, opponent_active) to internal keys (player2_hand, player1_active). */
+  translateZoneKey?: (key: string) => string;
 }
 
 /**
@@ -117,12 +119,20 @@ export function resolveCardByPosition(
 }
 
 /**
+ * Translate a zone key from AI perspective to internal format.
+ * If ctx.translateZoneKey is not set, returns the key unchanged.
+ */
+function tz(ctx: ToolContext, key: string): string {
+  return ctx.translateZoneKey ? ctx.translateZoneKey(key) : key;
+}
+
+/**
  * Create default tools for all built-in action types.
  * Each tool calls ctx.execute() which is provided by the caller.
  *
- * All zone parameters accept zone keys (e.g. "player2_hand") — the same
- * format returned by readable state. Zone keys are passed directly to
- * action factories.
+ * All zone parameters accept zone keys (e.g. "your_hand", "opponent_active").
+ * Zone keys are translated from AI perspective to internal format before
+ * being passed to action factories.
  *
  * Plugins can call this, filter out tools they don't want, and append
  * custom tools before returning from listTools().
@@ -156,20 +166,22 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
         type: 'object' as const,
         properties: {
           cardName: { type: 'string', description: 'Name of the card to move. Always provide for visible cards. Omit only for face-down cards (takes top card).' },
-          fromZone: { type: 'string', description: 'Zone key (e.g. "player2_hand")' },
-          toZone: { type: 'string', description: 'Zone key to move the card to (e.g. "player2_active")' },
+          fromZone: { type: 'string', description: 'Zone key (e.g. "your_hand")' },
+          toZone: { type: 'string', description: 'Zone key to move the card to (e.g. "your_active")' },
           toPosition: { type: 'string', enum: ['top', 'bottom'], description: '"top" = top of zone (default), "bottom" = bottom of zone' },
           allowed_by_card_effect: { type: 'boolean', description: 'Set true when a card effect permits bypassing normal rules (e.g. extra energy attachment, evolution on first turn)' },
         },
         required: ['fromZone', 'toZone'],
       },
       async run(input) {
+        const fromZone = tz(ctx, input.fromZone);
+        const toZone = tz(ctx, input.toZone);
         return ctx.execute((state) => {
           const cardId = input.cardName
-            ? resolveCard(state, input.cardName, input.fromZone)
-            : resolveCardByPosition(state, input.fromZone);
+            ? resolveCard(state, input.cardName, fromZone)
+            : resolveCardByPosition(state, fromZone);
           return {
-            ...moveCard(p, cardId, input.fromZone, input.toZone, input.toPosition ?? 'top'),
+            ...moveCard(p, cardId, fromZone, toZone, input.toPosition ?? 'top'),
             ...(input.allowed_by_card_effect && { allowed_by_card_effect: true }),
           };
         });
@@ -183,20 +195,22 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
       inputSchema: {
         type: 'object' as const,
         properties: {
-          fromZone: { type: 'string', description: 'Zone key to move all cards from (e.g. "player2_active")' },
-          toZone: { type: 'string', description: 'Zone key to move the cards to (e.g. "player2_discard")' },
+          fromZone: { type: 'string', description: 'Zone key to move all cards from (e.g. "your_active")' },
+          toZone: { type: 'string', description: 'Zone key to move the cards to (e.g. "your_discard")' },
           toPosition: { type: 'string', enum: ['top', 'bottom'], description: '"top" = top of zone (default), "bottom" = bottom of zone' },
           allowed_by_card_effect: { type: 'boolean', description: 'Set true when a card effect permits bypassing normal rules' },
         },
         required: ['fromZone', 'toZone'],
       },
       async run(input) {
-        const zone = ctx.getState().zones[input.fromZone];
+        const fromZone = tz(ctx, input.fromZone);
+        const toZone = tz(ctx, input.toZone);
+        const zone = ctx.getState().zones[fromZone];
         if (!zone) return `Error: zone "${input.fromZone}" not found`;
         if (zone.cards.length === 0) return `Error: zone "${input.fromZone}" is empty`;
         const cardIds = zone.cards.map(c => c.instanceId);
         return ctx.execute({
-          ...moveCardStack(p, cardIds, input.fromZone, input.toZone, input.toPosition ?? 'top'),
+          ...moveCardStack(p, cardIds, fromZone, toZone, input.toPosition ?? 'top'),
           ...(input.allowed_by_card_effect && { allowed_by_card_effect: true }),
         });
       },
@@ -209,13 +223,13 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
       inputSchema: {
         type: 'object' as const,
         properties: {
-          zone1: { type: 'string', description: 'First zone key (e.g. "player2_active")' },
-          zone2: { type: 'string', description: 'Second zone key (e.g. "player2_bench_1")' },
+          zone1: { type: 'string', description: 'First zone key (e.g. "your_active")' },
+          zone2: { type: 'string', description: 'Second zone key (e.g. "your_bench_1")' },
         },
         required: ['zone1', 'zone2'],
       },
       async run(input) {
-        return ctx.execute(swapCardStacks(p, input.zone1, input.zone2));
+        return ctx.execute(swapCardStacks(p, tz(ctx, input.zone1), tz(ctx, input.zone2)));
       },
     }),
 
@@ -231,13 +245,14 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
             items: { type: 'string' },
             description: 'Names of the cards to place',
           },
-          zone: { type: 'string', description: 'Target zone key (e.g. "player2_deck")' },
+          zone: { type: 'string', description: 'Target zone key (e.g. "your_deck")' },
           position: { type: 'string', enum: [POSITIONS.TOP, POSITIONS.BOTTOM], description: 'Place on top or bottom of the zone' },
           allowed_by_card_effect: { type: 'boolean', description: 'Set true when a card effect permits bypassing normal rules' },
         },
         required: ['cardNames', 'zone', 'position'],
       },
       async run(input) {
+        const zone = tz(ctx, input.zone);
         return ctx.execute((state) => {
           const cardIds = input.cardNames.map((name: string) => {
             if (name.startsWith(INSTANCE_ID_PREFIX)) return name;
@@ -249,7 +264,7 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
             throw new Error(`Card "${name}" not found in any zone`);
           });
           return {
-            ...placeOnZone(p, cardIds, input.zone, input.position),
+            ...placeOnZone(p, cardIds, zone, input.position),
             ...(input.allowed_by_card_effect && { allowed_by_card_effect: true }),
           };
         });
@@ -263,12 +278,12 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
       inputSchema: {
         type: 'object' as const,
         properties: {
-          zone: { type: 'string', description: 'Zone key to shuffle (e.g. "player2_deck")' },
+          zone: { type: 'string', description: 'Zone key to shuffle (e.g. "your_deck")' },
         },
         required: ['zone'],
       },
       async run(input) {
-        return ctx.execute(shuffle(p, input.zone));
+        return ctx.execute(shuffle(p, tz(ctx, input.zone)));
       },
     }),
 
@@ -279,30 +294,31 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
       inputSchema: {
         type: 'object' as const,
         properties: {
-          zone: { type: 'string', description: 'Zone key to search (e.g. "player2_deck")' },
+          zone: { type: 'string', description: 'Zone key to search (e.g. "your_deck")' },
         },
         required: ['zone'],
       },
       run(input) {
         const state = ctx.getState();
-        const zoneKey = input.zone;
+        const zoneKey = tz(ctx, input.zone);
+        const displayKey = input.zone; // keep AI-facing key for instructions
         const zone = state.zones[zoneKey];
-        if (!zone) return `Error: zone "${zoneKey}" not found`;
-        if (zone.cards.length === 0) return `Zone "${zoneKey}" is empty`;
+        if (!zone) return `Error: zone "${displayKey}" not found`;
+        if (zone.cards.length === 0) return `Zone "${displayKey}" is empty`;
 
         const templates = zone.cards.map(c => c.template);
         const inventory = formatCardInventory(templates, ctx.formatCardForSearch);
         const uniqueCount = new Set(templates.map(t => t.name)).size;
 
         const lines: string[] = [
-          `=== SEARCH: ${zone.config.name ?? zoneKey} (${zone.cards.length} cards, ${uniqueCount} unique) ===`,
+          `=== SEARCH: ${zone.config.name ?? displayKey} (${zone.cards.length} cards, ${uniqueCount} unique) ===`,
           '',
           inventory,
           '',
           '---',
           `You are resolving a zone search. Review the cards above and select which to take.`,
-          `Use move_card with fromZone="${zoneKey}" and cardName="<name>" to move cards to your hand or the appropriate zone based on the card effect.`,
-          `Then call shuffle with zone="${zoneKey}" to shuffle the zone.`,
+          `Use move_card with fromZone="${displayKey}" and cardName="<name>" to move cards to your hand or the appropriate zone based on the card effect.`,
+          `Then call shuffle with zone="${displayKey}" to shuffle the zone.`,
         ];
 
         return lines.join('\n');
@@ -327,8 +343,9 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
         required: ['cardName', 'zone', 'visibility'],
       },
       async run(input) {
+        const zone = tz(ctx, input.zone);
         return ctx.execute((state) => {
-          const cardId = resolveCard(state, input.cardName, input.zone);
+          const cardId = resolveCard(state, input.cardName, zone);
           const visMap: Record<string, Visibility> = {
             public: [true, true],
             hidden: [false, false],
@@ -354,8 +371,9 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
         required: ['cardName', 'zone', 'orientation'],
       },
       async run(input) {
+        const zone = tz(ctx, input.zone);
         return ctx.execute((state) => {
-          const cardId = resolveCard(state, input.cardName, input.zone);
+          const cardId = resolveCard(state, input.cardName, zone);
           return setOrientation(p, cardId, input.orientation);
         });
       },
@@ -369,7 +387,7 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
         type: 'object' as const,
         properties: {
           cardName: { type: 'string', description: 'Name of the card' },
-          zone: { type: 'string', description: 'Zone key the card is in (e.g. "player1_active")' },
+          zone: { type: 'string', description: 'Zone key the card is in (e.g. "opponent_active")' },
           counterType: { type: 'string', description: 'Counter type (e.g. "10" for 10-damage counter, "poison")' },
           amount: { type: 'number', description: 'Number of counters to add (default 1)' },
           allowed_by_card_effect: { type: 'boolean', description: 'Set true when a card effect permits bypassing normal rules' },
@@ -377,8 +395,9 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
         required: ['cardName', 'zone', 'counterType'],
       },
       async run(input) {
+        const zone = tz(ctx, input.zone);
         return ctx.execute((state) => {
-          const cardId = resolveCard(state, input.cardName, input.zone);
+          const cardId = resolveCard(state, input.cardName, zone);
           const amount = input.amount ?? 1;
           return {
             ...addCounter(p, cardId, input.counterType, amount),
@@ -403,8 +422,9 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
         required: ['cardName', 'zone', 'counterType'],
       },
       async run(input) {
+        const zone = tz(ctx, input.zone);
         return ctx.execute((state) => {
-          const cardId = resolveCard(state, input.cardName, input.zone);
+          const cardId = resolveCard(state, input.cardName, zone);
           const amount = input.amount ?? 1;
           return removeCounter(p, cardId, input.counterType, amount);
         });
@@ -426,8 +446,9 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
         required: ['cardName', 'zone', 'counterType', 'value'],
       },
       async run(input) {
+        const zone = tz(ctx, input.zone);
         return ctx.execute((state) => {
-          const cardId = resolveCard(state, input.cardName, input.zone);
+          const cardId = resolveCard(state, input.cardName, zone);
           return setCounter(p, cardId, input.counterType, input.value);
         });
       },
@@ -476,7 +497,7 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
       inputSchema: {
         type: 'object' as const,
         properties: {
-          zone: { type: 'string', description: 'Zone key to peek at (e.g. "player2_deck")' },
+          zone: { type: 'string', description: 'Zone key to peek at (e.g. "your_deck")' },
           count: { type: 'number', description: 'Number of cards to peek at (default 1)' },
           fromPosition: { type: 'string', enum: [POSITIONS.TOP, POSITIONS.BOTTOM], description: 'Peek from top or bottom (default "top")' },
         },
@@ -485,7 +506,7 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
       async run(input) {
         const count = input.count ?? 1;
         const from = input.fromPosition ?? 'top';
-        return ctx.execute(peek(p, input.zone, count, from));
+        return ctx.execute(peek(p, tz(ctx, input.zone), count, from));
       },
     }),
 
@@ -507,9 +528,10 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
         required: ['cardNames', 'zone'],
       },
       async run(input) {
+        const zone = tz(ctx, input.zone);
         return ctx.execute((state) => {
           const cardIds = input.cardNames.map((name: string) =>
-            resolveCard(state, name, input.zone)
+            resolveCard(state, name, zone)
           );
           const to = input.to ?? 'both';
           return reveal(p, cardIds, to);
@@ -568,14 +590,14 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
       inputSchema: {
         type: 'object' as const,
         properties: {
-          zone: { type: 'string', description: 'Zone key to reveal (e.g. "player2_hand")' },
+          zone: { type: 'string', description: 'Zone key to reveal (e.g. "your_hand")' },
           mutual: { type: 'boolean', description: 'If true, reveals both your zone and the opponent\'s equivalent zone' },
           message: { type: 'string', description: 'Custom decision message describing what the opponent should do' },
         },
         required: ['zone'],
       },
       async run(input) {
-        return ctx.execute(revealHand(p, input.zone, input.mutual, input.message));
+        return ctx.execute(revealHand(p, tz(ctx, input.zone), input.mutual, input.message));
       },
     }),
 
