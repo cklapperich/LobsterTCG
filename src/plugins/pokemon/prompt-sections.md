@@ -45,7 +45,7 @@ Shared zones:
 ## @KEY_RULES
 ### Key Rules
 - Only Basic Pokemon can be placed on empty field zones (active, bench slots)
-- Energy attaches underneath the Pokemon (position 0), not on top
+- Energy attaches underneath the Pokemon automatically
 - Evolution cannot happen on the first turn of the game or the turn a Pokemon was played
 - When your Active Pokemon is knocked out, promote a Benched Pokemon to Active
 - Retreat costs energy: discard the required number of attached Energy cards
@@ -107,7 +107,7 @@ ALWAYS do pokemon checkup at the start of your turn. Your opponent handles check
 - Use `declare_ability` to log ability usage
 - Use `coin_flip` when an attack or ability requires a coin flip
 - Use `end_turn` when your turn is complete
-- Cards in readable state show their names — use those names in tool calls
+- **Always use cardName** to identify cards in tool calls — use the exact name shown in readable state. Only omit cardName for face-down cards (prizes, deck top).
 
 ## @DECISIONS
 ### Decisions (Mini-Turns)
