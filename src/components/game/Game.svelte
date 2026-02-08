@@ -1,8 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Playmat, CardInstance, CardTemplate, GameState, CounterDefinition, DeckList, ZoneConfig, Action } from '../../core';
-  import { executeAction, shuffle, moveCard, VISIBILITY, flipCard, endTurn, loadDeck, getCardName, findCardInZones, toReadableState, PluginManager, setOrientation, createDecision, resolveDecision, revealHand, mulligan as mulliganAction, ACTION_TYPES, PHASES, ACTION_SOURCES } from '../../core';
-  import type { ToolContext } from '../../core/ai-tools';
+  import type { Playmat, CardInstance, CardTemplate, GameState, CounterDefinition, DeckList, ZoneConfig, Action, ActionExecutor } from '../../core';
+  import { executeAction, shuffle, moveCard, VISIBILITY, flipCard, endTurn, loadDeck, getCardName, findCardInZones, toReadableState, PluginManager, setOrientation, createDecision, resolveDecision, revealHand, mulligan as mulliganAction, PHASES, ACTION_TYPES } from '../../core';
   import { GAME_TYPES } from '../../game-types';
   import PlaymatGrid from './PlaymatGrid.svelte';
   import ZoneContextMenu from './ZoneContextMenu.svelte';
@@ -21,11 +20,12 @@
     executeCounterReturn,
     clearZoneCounters,
   } from './counterDragState.svelte';
+  import { describeAction, type CounterNameResolver } from './describe-action';
+  import { createToolContext, type ToolContextDeps } from './create-tool-context';
   import { playSfx, playBgm, stopBgm, toggleMute, audioSettings } from '../../lib/audio.svelte';
   import { settings } from '../../lib/settings.svelte';
   import SettingsModal from './SettingsModal.svelte';
   import { runAITurn, runAIPipeline, runAutonomousAgent, MODEL_OPTIONS } from '../../ai';
-  const ACTION_DELAY_MS = 500;
   import { contextMenuStore, openContextMenu, closeContextMenu as closeContextMenuStore } from './contextMenu.svelte';
   import { cardModalStore, openCardModal, closeCardModal as closeCardModalStore } from './cardModal.svelte';
 
@@ -253,67 +253,52 @@
     addLog(`${label} Coin flip: ${result === 'heads' ? 'HEADS' : 'TAILS'}`);
   }
 
-  // Convert an Action to a log string for the game log panel. Returns null for silent actions.
-  function describeAction(state: GameState<CardTemplate>, action: Action): string | null {
-    const zoneId = (key: string) => key.split('_').slice(1).join('_');
-    const cardName = (id: string) => getCardName(state, id);
-    const counterName = (id: string) => getCounterById(id)?.name ?? id;
+  function createExecutor(): ActionExecutor {
+    const sfxMap: Record<string, string> = {
+      [ACTION_TYPES.DRAW]: 'cardDrop',
+      [ACTION_TYPES.MOVE_CARD]: 'cardDrop',
+      [ACTION_TYPES.MOVE_CARD_STACK]: 'cardDrop',
+      [ACTION_TYPES.SHUFFLE]: 'shuffle',
+      [ACTION_TYPES.MULLIGAN]: 'shuffle',
+      [ACTION_TYPES.END_TURN]: 'confirm',
+      [ACTION_TYPES.RESOLVE_DECISION]: 'confirm',
+      [ACTION_TYPES.CREATE_DECISION]: 'confirm',
+      [ACTION_TYPES.SET_ORIENTATION]: 'confirm',
+      [ACTION_TYPES.REVEAL_HAND]: 'confirm',
+      [ACTION_TYPES.DECLARE_ACTION]: 'confirm',
+      [ACTION_TYPES.ADD_COUNTER]: 'cursor',
+      [ACTION_TYPES.REMOVE_COUNTER]: 'cursor',
+      [ACTION_TYPES.SET_COUNTER]: 'cursor',
+    };
 
-    switch (action.type) {
-      case ACTION_TYPES.DRAW:
-        return `[AI] Drew ${action.count} card(s)`;
-      case ACTION_TYPES.MOVE_CARD:
-        return `[AI] Moved ${cardName(action.cardInstanceId)} from ${zoneId(action.fromZone)} to ${zoneId(action.toZone)}`;
-      case ACTION_TYPES.MOVE_CARD_STACK:
-        return `[AI] Moved ${action.cardInstanceIds.length} cards from ${zoneId(action.fromZone)} to ${zoneId(action.toZone)}`;
-      case ACTION_TYPES.PLACE_ON_ZONE:
-        return `[AI] Placed ${action.cardInstanceIds.length} card(s) on ${action.position} of ${zoneId(action.zoneId)}`;
-      case ACTION_TYPES.SHUFFLE:
-        return `[AI] Shuffled ${zoneId(action.zoneId)}`;
-      case ACTION_TYPES.FLIP_CARD:
-        return `[AI] Flipped ${cardName(action.cardInstanceId)} ${action.newVisibility[0] ? 'face up' : 'face down'}`;
-      case ACTION_TYPES.SET_ORIENTATION:
-        return action.orientation === '0'
-          ? `[AI] ${cardName(action.cardInstanceId)} rotation cleared`
-          : `[AI] ${cardName(action.cardInstanceId)} rotated to ${action.orientation}°`;
-      case ACTION_TYPES.ADD_COUNTER:
-        return `[AI] Added ${action.amount}x ${counterName(action.counterType)} to ${cardName(action.cardInstanceId)}`;
-      case ACTION_TYPES.REMOVE_COUNTER:
-        return `[AI] Removed ${action.amount}x ${counterName(action.counterType)} from ${cardName(action.cardInstanceId)}`;
-      case ACTION_TYPES.SET_COUNTER:
-        return `[AI] Set ${counterName(action.counterType)} on ${cardName(action.cardInstanceId)} to ${action.value}`;
-      case ACTION_TYPES.DICE_ROLL:
-        return `[AI] Rolled ${action.count}d${action.sides}`;
-      case ACTION_TYPES.END_TURN:
-        return `[AI] Ended turn`;
-      case ACTION_TYPES.CONCEDE:
-        return `[AI] Conceded`;
-      case ACTION_TYPES.DECLARE_VICTORY:
-        return `[AI] Declared victory: ${action.reason ?? 'unknown'}`;
-      case ACTION_TYPES.REVEAL:
-        return `[AI] Revealed ${action.cardInstanceIds.map(id => cardName(id)).join(', ')}`;
-      case ACTION_TYPES.PEEK:
-        return `[AI] Peeked at ${action.count} cards from ${action.fromPosition} of ${zoneId(action.zoneId)}`;
-      case ACTION_TYPES.REVEAL_HAND: {
-        const rhZone = state.zones[action.zoneKey];
-        const rhNames = rhZone?.cards.map(c => c.template.name).join(', ') ?? '';
-        return `[AI] Revealed ${zoneId(action.zoneKey)}: ${rhNames}`;
-      }
-      case ACTION_TYPES.CREATE_DECISION:
-        return `[AI] Requested decision: ${action.message ?? 'Action needed'}`;
-      case ACTION_TYPES.RESOLVE_DECISION:
-        return `[AI] Resolved decision`;
-      case ACTION_TYPES.MULLIGAN:
-        return `[AI] Mulliganed (drew ${action.drawCount})`;
-      case ACTION_TYPES.COIN_FLIP:
-      case ACTION_TYPES.SEARCH_ZONE:
-        return null;
-      case ACTION_TYPES.DECLARE_ACTION:
-        return `[AI] ${action.message ?? `${action.name} declared`}`;
-      default:
-        return null;
-    }
+    return {
+      tryAction: (action: Action) => {
+        const blocked = tryAction(action);
+        if (!blocked) {
+          const sfx = sfxMap[action.type];
+          if (sfx) playSfx(sfx as any);
+        }
+        return blocked;
+      },
+      flipCoin: async () => {
+        const isHeads = Math.random() < 0.5;
+        if (coinFlipRef) await coinFlipRef.flip(isHeads);
+        return isHeads;
+      },
+      playSfx: (key: string) => playSfx(key as any),
+      shuffleZone: async (playerIndex, zoneKey) => {
+        if (!gameState) return;
+        playSfx('shuffle');
+        if (playmatGridRef) await playmatGridRef.shuffleZone(zoneKey);
+        executeAction(gameState, shuffle(playerIndex, zoneKey));
+        gameState = { ...gameState };
+      },
+      addLog: (message: string) => addLog(message),
+    };
   }
+
+  // Counter name resolver for describeAction
+  const counterNameResolver: CounterNameResolver = (id: string) => getCounterById(id)?.name ?? id;
 
   onMount(async () => {
     try {
@@ -368,9 +353,10 @@
       gameState = updatedState;
       if (fromZoneKey !== toZoneKey) {
         const toZoneName = gameState.zones[toZoneKey]?.config.name ?? toZoneKey;
-        gameState.log.push(`[Player ${gameState.activePlayer + 1}] Moved ${cardName} from ${fromZoneName} to ${toZoneName}`);
+        addLog(`[Player ${gameState.activePlayer + 1}] Moved ${cardName} from ${fromZoneName} to ${toZoneName}`);
+      } else {
+        gameState = { ...gameState };
       }
-      gameState = { ...gameState };
     }
   }
 
@@ -391,8 +377,7 @@
     const activePlayer = gameState.activePlayer;
     executeAction(gameState, flipCard(activePlayer, cardInstanceId, newVisibility));
     const flipDirection = newVisibility === VISIBILITY.PUBLIC ? 'face up' : 'face down';
-    gameState.log.push(`[Player ${activePlayer + 1}] Flipped ${card.template.name} ${flipDirection}`);
-    gameState = { ...gameState };
+    addLog(`[Player ${activePlayer + 1}] Flipped ${card.template.name} ${flipDirection}`);
   }
 
   // Context menu handlers
@@ -406,24 +391,14 @@
   }
 
   async function handleShuffle() {
-    if (!gameState || !contextMenu || !playmatGridRef) return;
+    if (!gameState || !contextMenu) return;
 
     const zoneKey = contextMenu.zoneKey;
     const zone = gameState.zones[zoneKey];
     if (!zone || zone.cards.length < 2) return;
 
-    // Play shuffle sound
-    playSfx('shuffle');
-
-    // Run animation via PlaymatGrid
-    await playmatGridRef.shuffleZone(zoneKey);
-
-    // Execute actual shuffle after animation completes
-    const action = shuffle(playerFromZoneKey(zoneKey), zoneKey);
-    executeAction(gameState, action);
-    const zoneName = gameState.zones[zoneKey]?.config.name ?? zoneKey;
-    gameState.log.push(`[Player ${gameState.activePlayer + 1}] Shuffled ${zoneName}`);
-    gameState = { ...gameState };
+    await createExecutor().shuffleZone(playerFromZoneKey(zoneKey), zoneKey);
+    addLog(`[Player ${gameState!.activePlayer + 1}] Shuffled ${gameState!.zones[zoneKey]?.config.name ?? zoneKey}`);
   }
 
   function handlePeekTop(count: number) {
@@ -482,18 +457,13 @@
 
     // Shuffle the source zone if flagged
     if (shouldShuffle) {
-      playSfx('shuffle');
-      if (playmatGridRef) {
-        await playmatGridRef.shuffleZone(fromZone);
-      }
-      executeAction(gameState, shuffle(playerIndex as 0 | 1, fromZone));
+      await createExecutor().shuffleZone(playerIndex as 0 | 1, fromZone);
     }
 
-    const zoneName = gameState.zones[fromZone]?.config.name ?? fromZone;
+    const zoneName = gameState!.zones[fromZone]?.config.name ?? fromZone;
     const destName = destZone === 'staging' ? 'staging' : 'hand';
     const cardNames = selectedCards.map(c => c.template.name).join(', ');
-    gameState.log.push(`[Player ${playerIndex + 1}] Took ${cardNames} from ${zoneName} to ${destName}`);
-    gameState = { ...gameState };
+    addLog(`[Player ${playerIndex + 1}] Took ${cardNames} from ${zoneName} to ${destName}`);
   }
 
   function handleCloseCardModal() {
@@ -573,106 +543,24 @@
     showDebugModal = true;
   }
 
-  /**
-   * Build a ToolContext for the AI player with serialized execution,
-   * visual feedback, and decision blocking support.
-   */
-  function buildAIContext(options?: { isDecisionResponse?: boolean }): { ctx: ToolContext; waitForQueue: () => Promise<void> } {
-    let queue: Promise<void> = Promise.resolve();
-
-    const aiPlayer = gameState!.activePlayer;
-    const ctx: ToolContext = {
-      playerIndex: aiPlayer,
-      isDecisionResponse: options?.isDecisionResponse,
-      formatCardForSearch: plugin.formatCardForSearch,
-      translateZoneKey: (key) => fromAIPerspective(key, aiPlayer),
+  function getToolContextDeps(): ToolContextDeps {
+    return {
       getState: () => gameState!,
-      getReadableState: () => {
+      getReadableState: (playerIndex) => {
         // Snapshot strips Svelte 5 proxy so Object.entries() enumerates all template fields
         const snapshot = $state.snapshot(gameState!);
-        const modified = pluginManager.applyReadableStateModifier(toReadableState(snapshot, aiPlayer));
+        const modified = pluginManager.applyReadableStateModifier(toReadableState(snapshot, playerIndex as 0 | 1));
         return pluginManager.formatReadableState(modified);
       },
-      execute: (actionOrFactory) => {
-        const result = queue.then(async () => {
-          const action = typeof actionOrFactory === 'function'
-            ? actionOrFactory(gameState!)
-            : actionOrFactory;
-          action.source = ACTION_SOURCES.AI;
-
-          // Block AI from ending turn with cards in staging
-          if (action.type === ACTION_TYPES.END_TURN && gameState) {
-            const staging = gameState.zones['staging'];
-            if (staging && staging.cards.length > 0) {
-              const names = staging.cards.map(c => c.template.name).join(', ');
-              return `Action blocked: Cannot end turn with cards in staging (${names}). Move them to the appropriate zone first.`;
-            }
-          }
-
-          // Special case: coin_flip uses visual CoinFlip animation
-          if (action.type === ACTION_TYPES.COIN_FLIP && coinFlipRef) {
-            const results: boolean[] = [];
-            for (let i = 0; i < action.count; i++) {
-              const isHeads = Math.random() < 0.5;
-              results.push(isHeads);
-              await coinFlipRef.flip(isHeads);
-            }
-            action.results = results;
-            tryAction(action);
-            const resultStr = results.map(r => r ? 'HEADS' : 'TAILS').join(', ');
-            return `Coin flip results: ${resultStr}\n\n${ctx.getReadableState()}`;
-          }
-
-          // Resolve log message BEFORE action executes (card names may change post-move)
-          const logMessage = gameState ? describeAction(gameState, action) : null;
-
-          const blocked = tryAction(action);
-          if (blocked) return `Action blocked: ${blocked}`;
-
-          // Log the action
-          if (logMessage) addLog(logMessage);
-
-          // Auto-preview card when opponent moves it to staging
-          if (action.type === ACTION_TYPES.MOVE_CARD && action.toZone === 'staging' && gameState) {
-            const card = gameState.zones['staging']?.cards.find(c => c.instanceId === action.cardInstanceId);
-            if (card && card.visibility[local] && card.template.imageUrl) {
-              previewCard = card;
-            }
-          }
-
-          // SFX based on action type
-          const sfxMap: Record<string, Parameters<typeof playSfx>[0]> = {
-            [ACTION_TYPES.DRAW]: 'cardDrop',
-            [ACTION_TYPES.MOVE_CARD]: 'cardDrop',
-            [ACTION_TYPES.MOVE_CARD_STACK]: 'cardDrop',
-            [ACTION_TYPES.SHUFFLE]: 'shuffle',
-            [ACTION_TYPES.END_TURN]: 'confirm',
-            [ACTION_TYPES.ADD_COUNTER]: 'cursor',
-            [ACTION_TYPES.REMOVE_COUNTER]: 'cursor',
-            [ACTION_TYPES.SET_COUNTER]: 'cursor',
-          };
-          const sfx = sfxMap[action.type];
-          if (sfx) playSfx(sfx);
-
-          // If AI created a decision targeting a local player, block until they resolve.
-          if ((action.type === ACTION_TYPES.CREATE_DECISION || action.type === ACTION_TYPES.REVEAL_HAND) && gameState?.pendingDecision) {
-            const target = gameState.pendingDecision.targetPlayer;
-            if (isLocal(playerConfig, target)) {
-              playSfx('decisionRequested');
-              await controllers[target].awaitDecisionResolution();
-            }
-          }
-
-          // Delay for visual feedback
-          await new Promise(r => setTimeout(r, ACTION_DELAY_MS));
-          return ctx.getReadableState();
-        });
-        queue = result.then(() => {}, () => {});
-        return result;
-      },
+      createExecutor,
+      controllers,
+      localPlayerIndex: local,
+      isLocal: (idx) => isLocal(playerConfig, idx as 0 | 1),
+      formatCardForSearch: plugin.formatCardForSearch,
+      translateZoneKey: (key, aiIdx) => fromAIPerspective(key, aiIdx as 0 | 1),
+      describeAction: (state, action) => describeAction(state, action, counterNameResolver),
+      onPreviewCard: (card) => { previewCard = card; },
     };
-
-    return { ctx, waitForQueue: () => queue };
   }
 
   async function triggerAITurn() {
@@ -683,7 +571,7 @@
     aiThinking = true;
     addLog('[AI] Thinking...');
 
-    const { ctx } = buildAIContext();
+    const { ctx } = createToolContext(getToolContextDeps());
 
     try {
       if (aiMode === 'autonomous') {
@@ -735,7 +623,7 @@
     aiThinking = true;
     addLog('[AI] Setting up...');
 
-    const { ctx } = buildAIContext();
+    const { ctx } = createToolContext(getToolContextDeps());
 
     try {
       await runAITurn({
@@ -761,7 +649,7 @@
 
     // After AI setup turn, check if phase transitioned to playing
     if (gameState && gameState.phase === PHASES.PLAYING && gameState.turnNumber === 1) {
-      gameConfig.onSetupComplete?.(gameState);
+      await gameConfig.onSetupComplete?.(gameState, createExecutor());
       gameState = { ...gameState };
     }
 
@@ -780,13 +668,13 @@
     aiThinking = true;
     addLog('[AI] Responding to decision...');
 
-    const { ctx } = buildAIContext({ isDecisionResponse: true });
+    const { ctx } = createToolContext(getToolContextDeps(), { isDecisionResponse: true });
 
     try {
       await runAITurn({
         context: ctx,
         plugin,
-        heuristics: gameConfig.prompts?.fullTurn ?? '',
+        heuristics: gameConfig.prompts?.decisionTurn ?? '',
         apiKey,
         model: selectedModel.modelId,
         provider: selectedModel.provider,
@@ -811,11 +699,9 @@
   function handleMulligan() {
     if (!gameState || aiThinking) return;
     const action = mulliganAction(gameState.activePlayer);
-    const blocked = tryAction(action);
+    const blocked = createExecutor().tryAction(action);
     if (!blocked) {
-      gameState.log.push(`[Player ${gameState.activePlayer + 1}] Mulliganed`);
-      gameState = { ...gameState };
-      playSfx('shuffle');
+      addLog(`[Player ${gameState.activePlayer + 1}] Mulliganed`);
     }
   }
 
@@ -837,24 +723,22 @@
     executeEndTurnInner();
   }
 
-  function executeEndTurnInner() {
+  async function executeEndTurnInner() {
     if (!gameState) return;
     const currentPlayer = gameState.activePlayer;
     const wasSetup = gameState.phase === PHASES.SETUP;
     const action = endTurn(currentPlayer);
     executeAction(gameState, action);
 
-    if (wasSetup) {
-      gameState.log.push(`[Player ${currentPlayer + 1}] Ended setup`);
-    } else {
-      gameState.log.push(`[Player ${currentPlayer + 1}] Ended turn`);
-    }
-    gameState = { ...gameState };
+    const logMsg = wasSetup
+      ? `[Player ${currentPlayer + 1}] Ended setup`
+      : `[Player ${currentPlayer + 1}] Ended turn`;
+    addLog(logMsg);
     playSfx('confirm');
 
     // Check if setup just transitioned to playing
     if (wasSetup && gameState.phase === PHASES.PLAYING && gameState.turnNumber === 1) {
-      gameConfig.onSetupComplete?.(gameState);
+      await gameConfig.onSetupComplete?.(gameState, createExecutor());
       gameState = { ...gameState };
       return; // Human's turn 1 — no AI trigger
     }
@@ -874,8 +758,7 @@
   function handleResolveDecision() {
     if (!gameState || !gameState.pendingDecision) return;
     executeAction(gameState, resolveDecision(local));
-    gameState.log.push(`[Player ${local + 1}] Resolved decision`);
-    gameState = { ...gameState };
+    addLog(`[Player ${local + 1}] Resolved decision`);
     playSfx('confirm');
 
     // Unblock the AI's tool call if it was waiting
@@ -919,8 +802,7 @@
       gameState = updatedState;
       const cardName = getCardName(gameState, cardInstanceId);
       const counter = getCounterById(counterId);
-      gameState.log.push(`Added ${counter?.name ?? counterId} to ${cardName}`);
-      gameState = { ...gameState };
+      addLog(`Added ${counter?.name ?? counterId} to ${cardName}`);
     }
   }
 
@@ -933,8 +815,7 @@
       gameState = updatedState;
       const cardName = getCardName(gameState, sourceCardId);
       const counter = getCounterById(counterId ?? '');
-      gameState.log.push(`Removed ${counter?.name ?? counterId} from ${cardName}`);
-      gameState = { ...gameState };
+      addLog(`Removed ${counter?.name ?? counterId} from ${cardName}`);
     }
   }
 
@@ -943,8 +824,7 @@
     const zoneKey = contextMenu.zoneKey;
     const zoneName = contextMenu.zoneName;
     gameState = clearZoneCounters(zoneKey, gameState);
-    gameState.log.push(`Cleared all counters from ${zoneName}`);
-    gameState = { ...gameState };
+    addLog(`Cleared all counters from ${zoneName}`);
     playSfx('confirm');
   }
 
@@ -955,8 +835,7 @@
     const card = zone.cards.at(-1)!;
     executeAction(gameState, setOrientation(gameState.activePlayer, card.instanceId, degrees));
     const label = degrees === '0' ? 'rotation cleared' : `rotated to ${degrees}°`;
-    gameState.log.push(`[Player ${gameState.activePlayer + 1}] ${card.template.name} ${label}`);
-    gameState = { ...gameState };
+    addLog(`[Player ${gameState.activePlayer + 1}] ${card.template.name} ${label}`);
     playSfx('confirm');
   }
 
@@ -967,8 +846,7 @@
     const cardNames = zone?.cards.map(c => c.template.name).join(', ') ?? '';
     const zoneName = zone?.config.name ?? zoneKey;
     executeAction(gameState, revealHand(local, zoneKey));
-    gameState.log.push(`[Player ${local + 1}] Revealed ${zoneName}: ${cardNames}`);
-    gameState = { ...gameState };
+    addLog(`[Player ${local + 1}] Revealed ${zoneName}: ${cardNames}`);
     playSfx('confirm');
 
     // Dispatch to the decision target's controller
@@ -1053,8 +931,7 @@
         if (updatedState) {
           gameState = updatedState;
           const toZoneName = gameState.zones[toZoneKey]?.config.name ?? toZoneKey;
-          gameState.log.push(`[Player ${gameState.activePlayer + 1}] Moved ${cards.length} cards from ${zoneName} to ${toZoneName}`);
-          gameState = { ...gameState };
+          addLog(`[Player ${gameState.activePlayer + 1}] Moved ${cards.length} cards from ${zoneName} to ${toZoneName}`);
         }
       }
       endDrag();

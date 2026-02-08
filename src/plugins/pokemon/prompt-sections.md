@@ -131,7 +131,7 @@ Sometimes during a turn, one player needs the other to make a decision (e.g., af
 - During a decision mini-turn, you do NOT have access to `end_turn` — use `resolve_decision` instead
 - If you have nothing to do for a decision, just call `resolve_decision` immediately
 
-## @OPPONNENT_MISTAKES
+## @OPPONENT_MISTAKES
 
 ### Correcting Opponnnt Mistakes with `request_decision`
 
@@ -177,7 +177,7 @@ I could either fix this myself and add the damage counters, or just flag the opp
 - If you believe you were following the Pokemon rules, please first explain why in chat by just outputting text, then call 'request decision' with a note to read your output. The human will read, fix state, and hit resolve
 - You can also ask human to fix state with request decision, explaining what you intended to happen in the message field of request decision.
 
-## @Kindness
+## @KINDNESS
 ### Kindness and Undo redo mistakes
 - Be kind to yourself! Everyone makes mistakes. If you notice a card fails to resolve properly, if you make a placement error or forgot to do a required action, just do the action out of order.
 - Self-correct

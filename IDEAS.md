@@ -21,8 +21,6 @@ Errors from tools calls must be 'bubbled' up.
 
 # JIRA TICKETS
 
-1 Settings menu
-
 2 'narrative' combat logs!
 
 3 double-click should be hook-able: for pokemon its appropriate to flip and for yugioh, for MTG You'd need to tap
@@ -45,8 +43,6 @@ this requires a hook for pokemon specific stack logic?? ugh!
 
 11 double-click should be hook-able: for pokemon its appropriate to flip and for yugioh, for MTG You'd need to tap
 
-12 when opponnent moves to a card to staging: show the card full screen same as when you left-click, no need to pause the game
-
 13 add a 'shuffle into deck' tool (?? probably not needed)
 
 14. Really big Pop-up with pretty text, a sound effect, and the card text description whenever oponnent declares an attack
@@ -66,7 +62,7 @@ Action blocked: Already attached an Energy this turn. Set allowed_by_card_effect
 
 21. Evolution hook: cant play a basic on a basic! 
 
-22. Ensure the AI can see counters on its own pokemon!
+22. Clear past search/peek results from AI context history, its just noise
 
 to active
 [Professor Kukui] Draw 2 cards. During this turn, your Pokémon’s attacks do 20 more damage to your opponent’s Active Pokémon (before applying Weakness and Resistance).

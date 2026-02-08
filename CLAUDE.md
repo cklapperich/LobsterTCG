@@ -1,6 +1,10 @@
 # LobsterTCG
 
 Generic trading card game simulator with plugin architecture. Svelte 5 + TypeScript + Vite + Tailwind CSS + Supabase.
+ 
+# Testing
+
+Do NOT run tests unless you were messing with hooks.ts relating to evolution timing, energy attachement, or other thigns the tests look for.
 
 ## Philosophy
 
