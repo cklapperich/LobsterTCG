@@ -44,6 +44,9 @@ export type { ReadableCard, ReadableZone, ReadableGameState, ReadableAction, Rea
 export { createDefaultTools } from './ai-tools';
 export type { RunnableTool, ToolContext } from './ai-tools';
 
+// Re-export action executor interface
+export type { ActionExecutor } from './action-executor';
+
 // Re-export playmat loader
 export { loadPlaymat, parsePlaymat } from './playmat-loader';
 

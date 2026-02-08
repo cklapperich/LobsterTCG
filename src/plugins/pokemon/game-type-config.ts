@@ -1,6 +1,7 @@
 import type { GameTypeConfig } from '../../core/types/game-type-config';
 import type { GameState } from '../../core/types/game';
 import type { PlayerIndex } from '../../core/types/card';
+import type { ActionExecutor } from '../../core/action-executor';
 import { plugin, executeSetup, pokemonHooksPlugin, flipFieldCardsFaceUp } from './index';
 import { getTemplate } from './cards';
 import {
@@ -25,13 +26,13 @@ export const pokemonConfig: GameTypeConfig = {
   executeSetup: (state: GameState, playerIndex: PlayerIndex) => {
     executeSetup(state, playerIndex);
   },
-  onSetupComplete: (state: GameState) => {
+  onSetupComplete: (state: GameState, executor: ActionExecutor) => {
     flipFieldCardsFaceUp(state);
   },
 
   prompts: {
     setup: PROMPT_SETUP,
-    fullTurn: PROMPT_FULL_TURN,
+    decisionTurn: PROMPT_FULL_TURN,
     startOfTurn: PROMPT_START_OF_TURN,
     planner: PROMPT_PLANNER,
     executor: PROMPT_EXECUTOR,
