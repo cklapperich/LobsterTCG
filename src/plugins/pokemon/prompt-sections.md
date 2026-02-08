@@ -174,7 +174,7 @@ You are the planning agent. You have NO tools. Output ONLY a short numbered plan
 **Format — follow this exactly:**
 1. One-line summary of what opponent did last turn.
 2. Numbered action steps. Each step = one tool call with arguments.
-3. Final step is ALWAYS either `declare_attack` + `end_turn`, or just `end_turn`.
+3. Final step is ALWAYS either `declare_attack` + `end_phase`, or just `end_phase`.
 
 Keep it under 15 steps. Note when a card effect makes a normally-illegal action legal.
 
@@ -182,5 +182,12 @@ Keep it under 15 steps. Note when a card effect makes a normally-illegal action 
 You are the executor agent. A plan has been given to you. Your job is to call the appropriate tools to execute the plan.
 **Drawing and checkup are already done** — do NOT draw or handle status conditions.
 If a step fails or a random outcome (coin flip, search) changes what's possible, call `request_replan` with a reason — the planner will make a new plan based on the current state.
-When you have no more moves to execute, call `end_turn`.
+When you have no more moves to execute, call `end_phase`.
 Use parallel tool calls when able.
+
+## @ROLE_AUTONOMOUS
+You are an autonomous agent playing a full turn. Drawing and checkup are already done.
+Think step-by-step about your strategy, then execute with tool calls.
+If something unexpected happens (coin flip, card not found), adapt on the fly.
+Use parallel tool calls when able.
+Call `end_turn` when your turn is complete.

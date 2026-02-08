@@ -3,8 +3,7 @@
   import type { Playmat, CardInstance, CardTemplate, GameState, CounterDefinition, DeckList, ZoneConfig, Action } from '../../core';
   import { executeAction, shuffle, moveCard, VISIBILITY, flipCard, endTurn, loadDeck, getCardName, findCardInZones, toReadableState, PluginManager, setOrientation, createDecision, resolveDecision, revealHand, mulligan as mulliganAction, ACTION_TYPES, PHASES, ACTION_SOURCES } from '../../core';
   import type { ToolContext } from '../../core/ai-tools';
-  import { plugin, executeSetup, ZONE_IDS, pokemonHooksPlugin, flipFieldCardsFaceUp, ensureCardInHand } from '../../plugins/pokemon';
-  import { getTemplate } from '../../plugins/pokemon/cards';
+  import { GAME_TYPES } from '../../game-types';
   import PlaymatGrid from './PlaymatGrid.svelte';
   import ZoneContextMenu from './ZoneContextMenu.svelte';
   import ArrangeModal from './ArrangeModal.svelte';
@@ -14,6 +13,7 @@
   import CoinFlip from './CoinFlip.svelte';
   import ActionPanelView from './ActionPanelView.svelte';
   import { dragStore, startPileDrag, updateDragPosition, endDrag, executeDrop, executeStackDrop } from './dragState.svelte';
+  import { DEFAULT_CONFIG, isLocal, isAI, localPlayerIndex, opponent, playerFromZoneKey, isLocalZone, type PlayerConfig, type PlayerController } from './player-config';
   import {
     counterDragStore,
     executeCounterDrop,
@@ -21,8 +21,7 @@
     clearZoneCounters,
   } from './counterDragState.svelte';
   import { playSfx, playBgm, stopBgm, toggleMute, audioSettings } from '../../lib/audio.svelte';
-  import { runAITurn, runAIPipeline, MODEL_OPTIONS } from '../../ai';
-  import { PROMPT_FULL_TURN, PROMPT_SETUP, PROMPT_START_OF_TURN, PROMPT_PLANNER, PROMPT_EXECUTOR } from '../../plugins/pokemon/prompt-builder';
+  import { runAITurn, runAIPipeline, runAutonomousAgent, MODEL_OPTIONS } from '../../ai';
   const ACTION_DELAY_MS = 500;
   // gameLog store no longer used - log lives in gameState.log
   import { contextMenuStore, openContextMenu, closeContextMenu as closeContextMenuStore } from './contextMenu.svelte';
@@ -30,23 +29,37 @@
 
   // Props
   interface Props {
-    player1Deck: DeckList;
-    player2Deck: DeckList;
-    lassTest?: boolean;
-    fastBallTest?: boolean;
+    gameType: string;
+    player1Deck?: DeckList;
+    player2Deck?: DeckList;
+    testFlags?: Record<string, boolean>;
     playmatImage?: string;
     aiModel?: string;
+    aiMode?: string;
+    playerConfig?: PlayerConfig;
     onBackToMenu?: () => void;
   }
 
-  let { player1Deck, player2Deck, lassTest, fastBallTest, playmatImage, aiModel, onBackToMenu }: Props = $props();
+  let { gameType, player1Deck, player2Deck, testFlags = {}, playmatImage, aiModel, aiMode, playerConfig = DEFAULT_CONFIG, onBackToMenu }: Props = $props();
+
+  // Resolve game type config
+  const gameConfig = GAME_TYPES[gameType];
+  const { plugin } = gameConfig;
+
+  // Derived local player index from config
+  const local = $derived(localPlayerIndex(playerConfig));
 
   // Resolve model config from selected model ID
   const selectedModel = $derived(MODEL_OPTIONS.find(m => m.id === aiModel) ?? MODEL_OPTIONS[0]);
 
   // Plugin manager for warnings/hooks
   const pluginManager = new PluginManager<CardTemplate>();
-  pluginManager.register(pokemonHooksPlugin as any);
+  if (gameConfig.hooksPlugin) {
+    pluginManager.register(gameConfig.hooksPlugin as any);
+  }
+
+  // Whether this game type has AI
+  const hasAI = gameConfig.needsAIModel;
 
   // Game state
   let gameState = $state<GameState<CardTemplate> | null>(null);
@@ -56,9 +69,32 @@
   let aiThinking = $state(false);
   let pendingDecisionResolve: (() => void) | null = $state(null);
 
-  // Derived: is a decision targeting the human player?
+  // Player controllers — polymorphic turn dispatch
+  function buildControllers(): [PlayerController, PlayerController] {
+    const localCtrl: PlayerController = {
+      takeTurn: async () => {},
+      takeSetupTurn: async () => {},
+      handleDecision: async () => {},
+      awaitDecisionResolution: () => new Promise<void>(r => { pendingDecisionResolve = r; }),
+    };
+    const aiCtrl: PlayerController = {
+      takeTurn: () => triggerAITurn(),
+      takeSetupTurn: () => triggerAISetupTurn(),
+      handleDecision: () => triggerAIDecisionTurn(),
+      awaitDecisionResolution: async () => {},
+    };
+    const builders: Record<string, () => PlayerController> = {
+      local: () => localCtrl,
+      ai: () => aiCtrl,
+      remote: () => localCtrl,
+    };
+    return [builders[playerConfig.player0](), builders[playerConfig.player1]()];
+  }
+  const controllers = buildControllers();
+
+  // Derived: is a decision targeting the local player?
   const decisionTargetsHuman = $derived(
-    gameState?.pendingDecision?.targetPlayer === 0 ?? false
+    gameState?.pendingDecision != null && isLocal(playerConfig, gameState.pendingDecision.targetPlayer)
   );
 
   // Reactive drag state from external module
@@ -68,9 +104,9 @@
   // Counter definitions from plugin
   const counterDefinitions = $derived<CounterDefinition[]>(plugin.getCounterDefinitions?.() ?? []);
 
-  // Action panels from plugin (for human player 0)
+  // Action panels from plugin (for local player)
   const actionPanels = $derived(
-    gameState && plugin.getActionPanels ? plugin.getActionPanels(gameState, 0) : []
+    gameState && plugin.getActionPanels ? plugin.getActionPanels(gameState, local) : []
   );
 
   // Grid panels (attacks + abilities) vs sidebar panels
@@ -80,7 +116,7 @@
 
   function handleActionPanelClick(panelId: string, buttonId: string) {
     if (!gameState || !plugin.onActionPanelClick) return;
-    const action = plugin.onActionPanelClick(gameState, 0, panelId, buttonId);
+    const action = plugin.onActionPanelClick(gameState, local, panelId, buttonId);
     if (action) {
       tryAction(action);
     } else {
@@ -145,7 +181,7 @@
   // Auto-open browse modal when a reveal decision targets the human player
   $effect(() => {
     const decision = gameState?.pendingDecision;
-    if (decision?.targetPlayer === 0 && decision.revealedZones.length > 0 && gameState) {
+    if (decision && isLocal(playerConfig, decision.targetPlayer) && decision.revealedZones.length > 0 && gameState) {
       const zoneKey = decision.revealedZones[0];
       const zone = gameState.zones[zoneKey];
       if (zone && zone.cards.length > 0) {
@@ -166,6 +202,9 @@
 
   // Card back from plugin
   const cardBack = plugin.getCardBack?.() ?? '';
+
+  // renderFace from game config (for playing cards without images)
+  const renderFace = gameConfig.renderFace;
 
   // CoinFlip component reference
   let coinFlipRef: CoinFlip | undefined = $state();
@@ -286,28 +325,37 @@
       playmat = await plugin.getPlaymat();
       gameState = await plugin.startGame();
 
-      // Load player decks (replace the default deck)
-      loadDeck(gameState, 0, `player1_${ZONE_IDS.DECK}`, player1Deck, getTemplate, false);
-      loadDeck(gameState, 1, `player2_${ZONE_IDS.DECK}`, player2Deck, getTemplate, false);
+      // Load deck(s): use getDeck() for fixed-deck games, props for selectable
+      const deck1 = player1Deck ?? gameConfig.getDeck?.();
+      if (deck1 && gameConfig.getTemplate) {
+        loadDeck(gameState, 0, `player1_${gameConfig.deckZoneId}`, deck1, gameConfig.getTemplate, false);
+      }
+      if (gameConfig.playerCount === 2 && player2Deck && gameConfig.getTemplate) {
+        loadDeck(gameState, 1, `player2_${gameConfig.deckZoneId}`, player2Deck, gameConfig.getTemplate, false);
+      }
 
-      // Execute setup for both players (shuffle, draw 7, set prizes)
-      executeSetup(gameState, 0);
-      executeSetup(gameState, 1);
+      // Execute setup
+      gameConfig.executeSetup(gameState, 0);
+      if (gameConfig.playerCount === 2) {
+        gameConfig.executeSetup(gameState, 1);
+      }
 
       // Test card injection
-      if (lassTest) {
-        ensureCardInHand(gameState, 0, 'base1-75');
-        ensureCardInHand(gameState, 1, 'base1-75');
-      }
-      if (fastBallTest) {
-        ensureCardInHand(gameState, 0, 'ecard3-124');
-        ensureCardInHand(gameState, 1, 'ecard3-124');
+      if (gameConfig.injectTestCards) {
+        for (const [testId, enabled] of Object.entries(testFlags)) {
+          if (enabled) {
+            gameConfig.injectTestCards(gameState, testId, 0);
+            if (gameConfig.playerCount === 2) {
+              gameConfig.injectTestCards(gameState, testId, 1);
+            }
+          }
+        }
       }
 
       gameState.log = ['Game started — Setup Phase'];
       gameState = { ...gameState };
       loading = false;
-      playBgm();
+      if (hasAI) playBgm();
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to load game';
       loading = false;
@@ -332,7 +380,7 @@
   }
 
   function handlePreview(card: CardInstance<CardTemplate>) {
-    if (card.visibility[0]) {
+    if (card.visibility[local]) {
       previewCard = card;
     }
   }
@@ -344,7 +392,7 @@
     if (!result) return;
 
     const { card } = result;
-    const newVisibility = card.visibility[0] ? VISIBILITY.HIDDEN : VISIBILITY.PUBLIC;
+    const newVisibility = card.visibility[local] ? VISIBILITY.HIDDEN : VISIBILITY.PUBLIC;
     const activePlayer = gameState.activePlayer;
     executeAction(gameState, flipCard(activePlayer, cardInstanceId, newVisibility));
     const flipDirection = newVisibility === VISIBILITY.PUBLIC ? 'face up' : 'face down';
@@ -376,8 +424,7 @@
     await playmatGridRef.shuffleZone(zoneKey);
 
     // Execute actual shuffle after animation completes
-    const playerIndex = zoneKey.startsWith('player1_') ? 0 : 1;
-    const action = shuffle(playerIndex, zoneKey);
+    const action = shuffle(playerFromZoneKey(zoneKey), zoneKey);
     executeAction(gameState, action);
     const zoneName = gameState.zones[zoneKey]?.config.name ?? zoneKey;
     gameState.log.push(`[Player ${gameState.activePlayer + 1}] Shuffled ${zoneName}`);
@@ -425,7 +472,7 @@
     if (!gameState || !cardModal) return;
     const fromZone = cardModal.zoneKey;
     const shouldShuffle = cardModal.shuffleOnConfirm;
-    const playerIndex = fromZone.startsWith('player1_') ? 0 : 1;
+    const playerIndex = playerFromZoneKey(fromZone);
     const stagingKey = 'staging';
 
     // Move each selected card to staging
@@ -463,22 +510,31 @@
 
   function resetGame() {
     plugin.startGame().then((state) => {
-      // Load player decks
-      loadDeck(state, 0, `player1_${ZONE_IDS.DECK}`, player1Deck, getTemplate, false);
-      loadDeck(state, 1, `player2_${ZONE_IDS.DECK}`, player2Deck, getTemplate, false);
+      // Load deck(s)
+      const deck1 = player1Deck ?? gameConfig.getDeck?.();
+      if (deck1 && gameConfig.getTemplate) {
+        loadDeck(state, 0, `player1_${gameConfig.deckZoneId}`, deck1, gameConfig.getTemplate, false);
+      }
+      if (gameConfig.playerCount === 2 && player2Deck && gameConfig.getTemplate) {
+        loadDeck(state, 1, `player2_${gameConfig.deckZoneId}`, player2Deck, gameConfig.getTemplate, false);
+      }
 
-      // Execute setup for both players
-      executeSetup(state, 0);
-      executeSetup(state, 1);
+      // Execute setup
+      gameConfig.executeSetup(state, 0);
+      if (gameConfig.playerCount === 2) {
+        gameConfig.executeSetup(state, 1);
+      }
 
       // Test card injection
-      if (lassTest) {
-        ensureCardInHand(state, 0, 'base1-75');
-        ensureCardInHand(state, 1, 'base1-75');
-      }
-      if (fastBallTest) {
-        ensureCardInHand(state, 0, 'ecard3-124');
-        ensureCardInHand(state, 1, 'ecard3-124');
+      if (gameConfig.injectTestCards) {
+        for (const [testId, enabled] of Object.entries(testFlags)) {
+          if (enabled) {
+            gameConfig.injectTestCards(state, testId, 0);
+            if (gameConfig.playerCount === 2) {
+              gameConfig.injectTestCards(state, testId, 1);
+            }
+          }
+        }
       }
 
       state.log = ['Game started — Setup Phase'];
@@ -486,7 +542,7 @@
       previewCard = null;
       closeContextMenuStore();
       closeCardModalStore();
-      playBgm();
+      if (hasAI) playBgm();
     });
   }
 
@@ -507,8 +563,8 @@
     // Snapshot strips Svelte 5 proxy — Object.entries() on proxied templates
     // may not enumerate all keys (e.g. rules[] on trainer cards).
     const snapshot = $state.snapshot(gameState);
-    // Narrative: always show AI (Player 1) perspective to match hardcoded labels
-    const aiReadable = pluginManager.applyReadableStateModifier(toReadableState(snapshot, 1));
+    // Narrative: show AI perspective (opponent of local player)
+    const aiReadable = pluginManager.applyReadableStateModifier(toReadableState(snapshot, opponent(local)));
     debugNarrative = pluginManager.formatReadableState(aiReadable);
     // JSON: show active player's perspective
     const jsonReadable = pluginManager.applyReadableStateModifier(toReadableState(snapshot, snapshot.activePlayer));
@@ -523,15 +579,16 @@
   function buildAIContext(options?: { isDecisionResponse?: boolean }): { ctx: ToolContext; waitForQueue: () => Promise<void> } {
     let queue: Promise<void> = Promise.resolve();
 
+    const aiPlayer = gameState!.activePlayer;
     const ctx: ToolContext = {
-      playerIndex: 1,
+      playerIndex: aiPlayer,
       isDecisionResponse: options?.isDecisionResponse,
       formatCardForSearch: plugin.formatCardForSearch,
       getState: () => gameState!,
       getReadableState: () => {
         // Snapshot strips Svelte 5 proxy so Object.entries() enumerates all template fields
         const snapshot = $state.snapshot(gameState!);
-        const modified = pluginManager.applyReadableStateModifier(toReadableState(snapshot, 1));
+        const modified = pluginManager.applyReadableStateModifier(toReadableState(snapshot, aiPlayer));
         return pluginManager.formatReadableState(modified);
       },
       execute: (actionOrFactory) => {
@@ -576,7 +633,7 @@
           // Auto-preview card when opponent moves it to staging
           if (action.type === ACTION_TYPES.MOVE_CARD && action.toZone === 'staging' && gameState) {
             const card = gameState.zones['staging']?.cards.find(c => c.instanceId === action.cardInstanceId);
-            if (card && card.visibility[0] && card.template.imageUrl) {
+            if (card && card.visibility[local] && card.template.imageUrl) {
               previewCard = card;
             }
           }
@@ -595,12 +652,13 @@
           const sfx = sfxMap[action.type];
           if (sfx) playSfx(sfx);
 
-          // If AI created a decision targeting human (player 0), block until human resolves.
-          if ((action.type === ACTION_TYPES.CREATE_DECISION || action.type === ACTION_TYPES.REVEAL_HAND) && gameState?.pendingDecision?.targetPlayer === 0) {
-            playSfx('decisionRequested');
-            await new Promise<void>(resolve => {
-              pendingDecisionResolve = resolve;
-            });
+          // If AI created a decision targeting a local player, block until they resolve.
+          if ((action.type === ACTION_TYPES.CREATE_DECISION || action.type === ACTION_TYPES.REVEAL_HAND) && gameState?.pendingDecision) {
+            const target = gameState.pendingDecision.targetPlayer;
+            if (isLocal(playerConfig, target)) {
+              playSfx('decisionRequested');
+              await controllers[target].awaitDecisionResolution();
+            }
           }
 
           // Delay for visual feedback
@@ -616,7 +674,8 @@
   }
 
   async function triggerAITurn() {
-    if (!gameState || gameState.activePlayer !== 1 || aiThinking) return;
+    if (!gameState || aiThinking || !hasAI) return;
+    const currentPlayer = gameState.activePlayer;
     const apiKey = import.meta.env[selectedModel.apiKeyEnv];
     if (!apiKey) return;
     aiThinking = true;
@@ -625,24 +684,37 @@
     const { ctx } = buildAIContext();
 
     try {
-      await runAIPipeline({
-        context: ctx,
-        plugin,
-        checkupPrompt: PROMPT_START_OF_TURN,
-        plannerPrompt: PROMPT_PLANNER,
-        executorPrompt: PROMPT_EXECUTOR,
-        apiKey,
-        model: selectedModel.modelId,
-        provider: selectedModel.provider,
-        logging: true,
-      });
+      if (aiMode === 'autonomous') {
+        await runAutonomousAgent({
+          context: ctx,
+          plugin,
+          systemPrompt: gameConfig.prompts?.autonomous ?? '',
+          checkupPrompt: gameConfig.prompts?.startOfTurn ?? '',
+          apiKey,
+          model: selectedModel.modelId,
+          provider: selectedModel.provider,
+          logging: true,
+        });
+      } else {
+        await runAIPipeline({
+          context: ctx,
+          plugin,
+          checkupPrompt: gameConfig.prompts?.startOfTurn ?? '',
+          plannerPrompt: gameConfig.prompts?.planner ?? '',
+          executorPrompt: gameConfig.prompts?.executor ?? '',
+          apiKey,
+          model: selectedModel.modelId,
+          provider: selectedModel.provider,
+          logging: true,
+        });
+      }
     } catch (e) {
       addLog(`[AI] Error: ${e}`);
     }
 
     // Safety net: if AI didn't end its turn (e.g. hit maxSteps), auto-end
-    if (gameState?.activePlayer === 1 && gameState.phase === PHASES.PLAYING) {
-      executeAction(gameState, endTurn(1));
+    if (gameState?.activePlayer === currentPlayer && gameState.phase === PHASES.PLAYING) {
+      executeAction(gameState, endTurn(currentPlayer));
       gameState = { ...gameState };
       addLog('[AI] Turn auto-ended (AI did not call end_turn)');
     }
@@ -654,7 +726,8 @@
    * Trigger the AI's setup turn (place initial Pokemon face-down).
    */
   async function triggerAISetupTurn() {
-    if (!gameState || gameState.activePlayer !== 1 || aiThinking) return;
+    if (!gameState || aiThinking || !hasAI) return;
+    const currentPlayer = gameState.activePlayer;
     const apiKey = import.meta.env[selectedModel.apiKeyEnv];
     if (!apiKey) return;
     aiThinking = true;
@@ -666,7 +739,7 @@
       await runAITurn({
         context: ctx,
         plugin,
-        heuristics: PROMPT_SETUP,
+        heuristics: gameConfig.prompts?.setup ?? '',
         apiKey,
         model: selectedModel.modelId,
         provider: selectedModel.provider,
@@ -678,15 +751,15 @@
     }
 
     // Safety net: if AI didn't end its setup turn, auto-end
-    if (gameState?.activePlayer === 1 && gameState.phase === PHASES.SETUP) {
-      executeAction(gameState, endTurn(1));
+    if (gameState?.activePlayer === currentPlayer && gameState.phase === PHASES.SETUP) {
+      executeAction(gameState, endTurn(currentPlayer));
       gameState = { ...gameState };
       addLog('[AI] Setup auto-ended (AI did not call end_turn)');
     }
 
     // After AI setup turn, check if phase transitioned to playing
     if (gameState && gameState.phase === PHASES.PLAYING && gameState.turnNumber === 1) {
-      flipFieldCardsFaceUp(gameState);
+      gameConfig.onSetupComplete?.(gameState);
       gameState = { ...gameState };
     }
 
@@ -698,7 +771,8 @@
    * Trigger a decision mini-turn for the AI (human created the decision).
    */
   async function triggerAIDecisionTurn() {
-    if (!gameState || aiThinking) return;
+    if (!gameState || aiThinking || !hasAI) return;
+    const decisionTarget = gameState.pendingDecision?.targetPlayer ?? gameState.activePlayer;
     const apiKey = import.meta.env[selectedModel.apiKeyEnv];
     if (!apiKey) return;
     aiThinking = true;
@@ -710,7 +784,7 @@
       await runAITurn({
         context: ctx,
         plugin,
-        heuristics: PROMPT_FULL_TURN,
+        heuristics: gameConfig.prompts?.fullTurn ?? '',
         apiKey,
         model: selectedModel.modelId,
         provider: selectedModel.provider,
@@ -723,7 +797,7 @@
 
     // Safety net: if AI didn't call resolve_decision, auto-resolve
     if (gameState?.pendingDecision) {
-      executeAction(gameState, resolveDecision(1));
+      executeAction(gameState, resolveDecision(decisionTarget));
       gameState = { ...gameState };
       addLog('[AI] Decision auto-resolved (AI did not call resolve_decision)');
     }
@@ -748,7 +822,7 @@
 
     // Check if staging has cards — prompt human player for confirmation
     const staging = gameState.zones['staging'];
-    if (staging && staging.cards.length > 0 && gameState.activePlayer === 0) {
+    if (staging && staging.cards.length > 0 && isLocal(playerConfig, gameState.activePlayer)) {
       showStagingConfirm = true;
       stagingConfirmCallback = () => {
         showStagingConfirm = false;
@@ -778,28 +852,28 @@
 
     // Check if setup just transitioned to playing
     if (wasSetup && gameState.phase === PHASES.PLAYING && gameState.turnNumber === 1) {
-      flipFieldCardsFaceUp(gameState);
+      gameConfig.onSetupComplete?.(gameState);
       gameState = { ...gameState };
   
       return; // Human's turn 1 — no AI trigger
     }
 
-    // During setup, if it's now AI's turn, trigger AI setup
-    if (gameState.phase === PHASES.SETUP && gameState.activePlayer === 1) {
-      triggerAISetupTurn();
+    // During setup, dispatch to the next player's controller
+    if (gameState.phase === PHASES.SETUP) {
+      controllers[gameState.activePlayer].takeSetupTurn();
       return;
     }
 
-    // Normal play: if it's now the AI's turn, trigger it
+    // Normal play: dispatch to the next player's controller
     if (gameState.phase === PHASES.PLAYING) {
-      triggerAITurn();
+      controllers[gameState.activePlayer].takeTurn();
     }
   }
 
   function handleResolveDecision() {
     if (!gameState || !gameState.pendingDecision) return;
-    executeAction(gameState, resolveDecision(0));
-    gameState.log.push(`[Player 1] Resolved decision`);
+    executeAction(gameState, resolveDecision(local));
+    gameState.log.push(`[Player ${local + 1}] Resolved decision`);
     gameState = { ...gameState };
     playSfx('confirm');
 
@@ -821,13 +895,14 @@
   function handleRequestSubmit() {
     if (!gameState) return;
     showRequestModal = false;
-    executeAction(gameState, createDecision(0, 1, requestInput.trim() || undefined));
+    const opp = opponent(local);
+    executeAction(gameState, createDecision(local, opp, requestInput.trim() || undefined));
     gameState = { ...gameState };
     playSfx('confirm');
     requestInput = '';
 
-    // Trigger AI decision mini-turn
-    triggerAIDecisionTurn();
+    // Dispatch to the target player's controller for the decision
+    controllers[opp].handleDecision();
   }
 
   function handleRequestCancel() {
@@ -890,41 +965,42 @@
     const zone = gameState.zones[zoneKey];
     const cardNames = zone?.cards.map(c => c.template.name).join(', ') ?? '';
     const zoneName = zone?.config.name ?? zoneKey;
-    executeAction(gameState, revealHand(0, zoneKey));
-    gameState.log.push(`[Player 1] Revealed ${zoneName}: ${cardNames}`);
+    executeAction(gameState, revealHand(local, zoneKey));
+    gameState.log.push(`[Player ${local + 1}] Revealed ${zoneName}: ${cardNames}`);
     gameState = { ...gameState };
     playSfx('confirm');
 
-    // If AI is the target, trigger a decision mini-turn
-    if (gameState.pendingDecision?.targetPlayer === 1) {
-      triggerAIDecisionTurn();
+    // Dispatch to the decision target's controller
+    if (gameState.pendingDecision) {
+      controllers[gameState.pendingDecision.targetPlayer].handleDecision();
     }
   }
 
   function handleRevealBothHands() {
     if (!gameState || !contextMenu || gameState.pendingDecision) return;
     const zoneKey = contextMenu.zoneKey;
+    const opp = opponent(local);
 
     // Collect card names from both hands BEFORE the reveal action (for logging)
     const playerZone = gameState.zones[zoneKey];
     const playerCardNames = playerZone?.cards.map(c => c.template.name).join(', ') ?? '';
     const suffix = zoneKey.replace(/^player[12]_/, '');
-    const opponentZoneKey = `player2_${suffix}`;
+    const opponentZoneKey = `player${opp + 1}_${suffix}`;
     const opponentZone = gameState.zones[opponentZoneKey];
     const opponentCardNames = opponentZone?.cards.map(c => c.template.name).join(', ') ?? '';
 
     // Pull card effect text from staging zone (the card being resolved)
     const stagingKey = 'staging';
     const stagingCard = gameState.zones[stagingKey]?.cards.at(-1);
-    const template = stagingCard ? getTemplate(stagingCard.template.id) : undefined;
+    const template = stagingCard && gameConfig.getTemplate ? gameConfig.getTemplate(stagingCard.template.id) : undefined;
     const rules = (template as any)?.rules?.join(' ') ?? '';
     // Include BOTH hands' card names in the decision message so AI sees them
-    const handInfo = `\nPlayer 1 hand: ${playerCardNames}\nYour hand (Player 2): ${opponentCardNames}`;
+    const handInfo = `\nPlayer ${local + 1} hand: ${playerCardNames}\nYour hand (Player ${opp + 1}): ${opponentCardNames}`;
     const actionMsg = rules
       ? `Both hands revealed. Card effect (${template!.name}): ${rules}${handInfo} — Execute this effect on YOUR hand (move cards, shuffle deck, etc.), then call resolve_decision.`
       : `Both hands revealed.${handInfo} — Execute the card effect on your hand, then call resolve_decision.`;
 
-    executeAction(gameState, revealHand(0, zoneKey, true, actionMsg));
+    executeAction(gameState, revealHand(local, zoneKey, true, actionMsg));
     gameState = { ...gameState };
     playSfx('confirm');
 
@@ -935,9 +1011,9 @@
       openCardModal({ cards: [...opponentZoneNow.cards], zoneKey: opponentZoneKey, zoneName, allowReorder: false, shuffleOnConfirm: false });
     }
 
-    // If AI is the target, trigger a decision mini-turn
-    if (gameState.pendingDecision?.targetPlayer === 1) {
-      triggerAIDecisionTurn();
+    // Dispatch to the decision target's controller
+    if (gameState.pendingDecision) {
+      controllers[gameState.pendingDecision.targetPlayer].handleDecision();
     }
   }
 
@@ -1012,9 +1088,9 @@
                 <span class="text-gbc-red animate-pulse">AI THINKING</span>
               {:else if decisionTargetsHuman}
                 <span class="text-gbc-red animate-pulse">DECISION</span>
-              {:else if gameState.pendingDecision?.targetPlayer === 1}
+              {:else if gameState.pendingDecision && isAI(playerConfig, gameState.pendingDecision.targetPlayer)}
                 <span class="text-gbc-blue animate-pulse">WAITING...</span>
-              {:else if gameState.activePlayer === 0}
+              {:else if isLocal(playerConfig, gameState.activePlayer)}
                 <span class="text-gbc-green">YOUR TURN</span>
               {:else}
                 <span class="text-gbc-blue">AI TURN</span>
@@ -1082,6 +1158,7 @@
               MULLIGAN
             </button>
           {/if}
+          {#if hasAI}
           <button
             class="gbc-btn sidebar-btn"
             onclick={handleRequestAction}
@@ -1089,6 +1166,7 @@
           >
             REQUEST
           </button>
+          {/if}
           <button
             class="gbc-btn sidebar-btn"
             onclick={() => coinFlipRef?.flip()}
@@ -1154,6 +1232,7 @@
           {cardBack}
           {counterDefinitions}
           {playmatImage}
+          {renderFace}
           actionPanels={gridPanels}
           onActionPanelClick={handleActionPanelClick}
           onDrop={handleDrop}
@@ -1180,10 +1259,10 @@
       onPeekTop={handlePeekTop}
       onClearCounters={handleClearCounters}
       onSetOrientation={handleSetOrientation}
-      onRevealToOpponent={contextMenu.zoneKey.startsWith('player1_') && !gameState?.pendingDecision ? handleRevealToOpponent : undefined}
-      onRevealBothHands={contextMenu.zoneKey.startsWith('player1_') && contextMenu.zoneKey.includes('hand') && !gameState?.pendingDecision ? handleRevealBothHands : undefined}
+      onRevealToOpponent={isLocalZone(playerConfig, contextMenu.zoneKey) && !gameState?.pendingDecision ? handleRevealToOpponent : undefined}
+      onRevealBothHands={isLocalZone(playerConfig, contextMenu.zoneKey) && contextMenu.zoneKey.includes('hand') && !gameState?.pendingDecision ? handleRevealBothHands : undefined}
       onMovePile={handleMovePile}
-      onSearch={contextMenu.zoneKey.startsWith('player1_') && !(contextMenu.zoneConfig.defaultVisibility[0] && contextMenu.zoneConfig.defaultVisibility[1]) && !gameState?.pendingDecision ? handleSearchZone : undefined}
+      onSearch={isLocalZone(playerConfig, contextMenu.zoneKey) && !(contextMenu.zoneConfig.defaultVisibility[0] && contextMenu.zoneConfig.defaultVisibility[1]) && !gameState?.pendingDecision ? handleSearchZone : undefined}
       onClose={handleCloseContextMenu}
     />
   {/if}
@@ -1228,7 +1307,7 @@
   {/if}
 
   <!-- Fullscreen Card Preview -->
-  {#if previewCard && previewCard.visibility[0] && previewCard.template.imageUrl}
+  {#if previewCard && previewCard.visibility[local] && previewCard.template.imageUrl}
     <div class="preview-overlay" onclick={() => previewCard = null} onkeydown={(e) => e.key === 'Escape' && (previewCard = null)} role="button" tabindex="-1">
       <div class="preview-overlay-card">
         <img src={previewCard.template.imageUrl} alt={previewCard.template.name} />
