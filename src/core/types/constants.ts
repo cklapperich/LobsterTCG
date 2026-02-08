@@ -23,6 +23,7 @@ export const ACTION_TYPES = {
   PEEK: 'peek',
   MULLIGAN: 'mulligan',
   SWAP_CARD_STACKS: 'swap_card_stacks',
+  DECLARE_ACTION:'declare_action'
 } as const;
 export type ActionType = typeof ACTION_TYPES[keyof typeof ACTION_TYPES];
 
