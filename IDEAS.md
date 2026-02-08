@@ -52,7 +52,9 @@ this requires a hook for pokemon specific stack logic?? ugh!
 14 update readable.ts/narrative.ts to hide pre-evolved pokemon from context
 15 remove readable.ts and only have narrative.ts? one file for better support?
 
-16. Refactor the ENTIRE repo to swap the top/bottom conventions cause it keeps confusing us
+17. add a little buzzing noise for normally-illegal stuff, unless it comes from staging
+
+18. disable all hooks when moving a card FROM staging to somewhere else??
 
 17. the 'find pokemon' system is suspicious, verify it needs to be that complex
 
