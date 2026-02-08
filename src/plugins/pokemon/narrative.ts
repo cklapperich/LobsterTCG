@@ -38,18 +38,17 @@ export function formatNarrativeState(readable: ReadableGameState): string {
     lines.push(`GAME RESULT: ${JSON.stringify(readable.result)}`);
   }
 
-  // Player 1 board (AI = viewer). No player number in label to avoid
-  // confusion with zone key prefixes (player1_, player2_).
+  // Player 2 board (AI = viewer)
   lines.push('');
   lines.push('--- YOUR BOARD ---');
   lines.push('');
-  lines.push(...formatBoard(readable, 'player2'));
+  lines.push(...formatBoard(readable, 'player2', 'Your'));
 
-  // Player 0 board (opponent)
+  // Player 1 board (opponent)
   lines.push('');
   lines.push('--- OPPONENT BOARD ---');
   lines.push('');
-  lines.push(...formatBoard(readable, 'player1'));
+  lines.push(...formatBoard(readable, 'player1', 'Opponent'));
 
   // Combat notes (weakness/resistance matchup between actives)
   const combatLines = formatCombatNotes(readable);
@@ -227,7 +226,7 @@ function formatAbility(ability: { name: string; type: string; effect: string }):
 
 // ── Board formatting ─────────────────────────────────────────────
 
-function formatBoard(readable: ReadableGameState, playerPrefix: string): string[] {
+function formatBoard(readable: ReadableGameState, playerPrefix: string, owner: string): string[] {
   const lines: string[] = [];
   const zones = readable.zones;
 
@@ -239,7 +238,8 @@ function formatBoard(readable: ReadableGameState, playerPrefix: string): string[
     const zone = zones[zoneKey];
     if (!zone) continue;
 
-    const label = zoneId === 'active' ? 'Active' : zoneId.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase());
+    const bareLabel = zoneId === 'active' ? 'Active' : zoneId.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase());
+    const label = `${owner} ${bareLabel}`;
 
     if (zone.count === 0) continue;
 
@@ -254,18 +254,18 @@ function formatBoard(readable: ReadableGameState, playerPrefix: string): string[
   const handKey = `${playerPrefix}_hand`;
   const hand = zones[handKey];
   if (hand) {
-    lines.push(formatHandLine(hand, handKey));
+    lines.push(formatHandLine(hand, handKey, owner));
   }
 
   // Count line: Deck | Discard | Prizes
-  lines.push(formatCountLine(zones, playerPrefix));
+  lines.push(formatCountLine(zones, playerPrefix, owner));
 
   // Discard contents (if non-empty and visible)
   const discardKey = `${playerPrefix}_discard`;
   const discard = zones[discardKey];
   if (discard && discard.cards.length > 0) {
     if (discard.cards.length <= NARRATIVE.DISCARD_DISPLAY_LIMIT) {
-      lines.push(`  Discard (zone: "${discardKey}"): ${condenseNames(discard.cards)}`);
+      lines.push(`  ${owner} Discard (zone: "${discardKey}"): ${condenseNames(discard.cards)}`);
     }
   }
 
@@ -274,19 +274,21 @@ function formatBoard(readable: ReadableGameState, playerPrefix: string): string[
   const lost = zones[lostKey];
   if (lost && lost.count > 0) {
     if (lost.cards.length > 0) {
-      lines.push(`Lost Zone (${lost.count}): ${condenseNames(lost.cards)}`);
+      lines.push(`${owner} Lost Zone (zone: "${lostKey}") (${lost.count}): ${condenseNames(lost.cards)}`);
     } else {
-      lines.push(`Lost Zone: ${lost.count}`);
+      lines.push(`${owner} Lost Zone (zone: "${lostKey}"): ${lost.count}`);
     }
   }
 
-  // Staging (shared zone, only if non-empty)
-  const staging = zones['staging'];
-  if (staging && staging.count > 0) {
-    if (staging.cards.length > 0) {
-      lines.push(`Staging (zone: "staging"): ${condenseNames(staging.cards)}`);
-    } else {
-      lines.push(`Staging (zone: "staging"): ${staging.count}`);
+  // Staging (shared zone, only print once under YOUR BOARD)
+  if (owner === 'Your') {
+    const staging = zones['staging'];
+    if (staging && staging.count > 0) {
+      if (staging.cards.length > 0) {
+        lines.push(`Staging (zone: "staging"): ${condenseNames(staging.cards)}`);
+      } else {
+        lines.push(`Staging (zone: "staging"): ${staging.count}`);
+      }
     }
   }
 
@@ -350,11 +352,12 @@ function formatInstanceStats(card: ReadableCard): string {
 
 // ── Hand formatting ──────────────────────────────────────────────
 
-function formatHandLine(zone: ReadableZone, zoneKey: string): string {
-  if (zone.count === 0) return `Hand (zone: "${zoneKey}"): 0`;
+function formatHandLine(zone: ReadableZone, zoneKey: string, owner: string): string {
+  const label = `${owner} Hand`;
+  if (zone.count === 0) return `${label} (zone: "${zoneKey}"): 0`;
 
   if (zone.cards.length === 0) {
-    return `Hand (zone: "${zoneKey}"): ${zone.count} (hidden)`;
+    return `${label} (zone: "${zoneKey}"): ${zone.count} (hidden)`;
   }
 
   // Sum actual visible card count from condensed entries (each may have count > 1)
@@ -363,9 +366,9 @@ function formatHandLine(zone: ReadableZone, zoneKey: string): string {
   const cardList = condenseNames(zone.cards);
 
   if (hiddenCount > 0) {
-    return `Hand (zone: "${zoneKey}") (${zone.count}): ${cardList}, [${hiddenCount} hidden]`;
+    return `${label} (zone: "${zoneKey}") (${zone.count}): ${cardList}, [${hiddenCount} hidden]`;
   }
-  return `Hand (zone: "${zoneKey}") (${zone.count}): ${cardList}`;
+  return `${label} (zone: "${zoneKey}") (${zone.count}): ${cardList}`;
 }
 
 // ── Shared helpers ───────────────────────────────────────────────

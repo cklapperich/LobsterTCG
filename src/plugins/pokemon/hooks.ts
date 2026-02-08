@@ -250,7 +250,9 @@ function warnEvolutionTiming(state: PokemonState, action: Action): PreHookResult
   return { outcome: 'continue' };
 }
 
-// Warning 4b: Cannot evolve the same Pokemon twice in one turn
+// Warning 4b: Cannot evolve a Pokemon that already evolved this turn
+// Tracks by Pokemon identity (top card of target zone), not by zone —
+// so switching a freshly-evolved Pokemon away frees the zone for another evolution.
 function warnDoubleEvolution(state: PokemonState, action: Action): PreHookResult {
   if (action.allowed_by_card_effect) return { outcome: 'continue' };
 
@@ -275,7 +277,15 @@ function warnDoubleEvolution(state: PokemonState, action: Action): PreHookResult
   const template = getTemplateForCard(state, cardInstanceId);
   if (!template || !isEvolution(template)) return { outcome: 'continue' };
 
-  // Check if an evolution was already placed in this same zone this turn
+  // The top card of the target zone is the Pokemon we're evolving FROM.
+  // If that card was itself placed as an evolution this turn, this is a double evolution.
+  const zone = state.zones[toZone];
+  if (!zone || zone.cards.length === 0) return { outcome: 'continue' };
+
+  const topCard = zone.cards.at(-1);
+  if (!topCard) return { outcome: 'continue' };
+
+  // Collect all evolution card instance IDs placed this turn
   for (const prev of state.currentTurn.actions) {
     let prevCardId: string | undefined;
     let prevToZone: string | undefined;
@@ -290,11 +300,14 @@ function warnDoubleEvolution(state: PokemonState, action: Action): PreHookResult
       prevToZone = s.toZone;
     }
 
-    if (!prevCardId || prevToZone !== toZone) continue;
+    if (!prevCardId || !prevToZone || !isFieldZone(prevToZone)) continue;
 
     const prevTemplate = getTemplateForCard(state, prevCardId);
-    if (prevTemplate && isEvolution(prevTemplate)) {
-      return blockOrWarn(action, `Cannot evolve a Pokemon twice in the same turn. ${toZone} already had an evolution this turn. Set allowed_by_card_effect if a card effect permits this.`);
+    if (!prevTemplate || !isEvolution(prevTemplate)) continue;
+
+    // The top card we're evolving from was itself an evolution placed this turn
+    if (prevCardId === topCard.instanceId) {
+      return blockOrWarn(action, `Cannot evolve ${topCard.template.name} again — it already evolved this turn. Set allowed_by_card_effect if a card effect permits this.`);
     }
   }
 
@@ -359,6 +372,42 @@ function warnNonBasicToEmptyField(state: PokemonState, action: Action): PreHookR
   return { outcome: 'continue' };
 }
 
+
+// Post-hook: Stamp PLAYED_THIS_TURN on cards placed from hand onto field zones.
+// This powers warnEvolutionTiming — a Pokemon played this turn cannot evolve.
+// Covers normal play AND scooped-then-replayed cards (e.g. Devolution Spray → replay).
+function stampPlayedThisTurn(state: PokemonState, action: Action): PostHookResult {
+  let cardIds: string[] = [];
+  let fromZone: string | undefined;
+  let toZone: string | undefined;
+
+  if (action.type === ACTION_TYPES.MOVE_CARD) {
+    const a = action as MoveCardAction;
+    cardIds = [a.cardInstanceId];
+    fromZone = a.fromZone;
+    toZone = a.toZone;
+  } else if (action.type === ACTION_TYPES.MOVE_CARD_STACK) {
+    const a = action as MoveCardStackAction;
+    cardIds = a.cardInstanceIds;
+    fromZone = a.fromZone;
+    toZone = a.toZone;
+  }
+
+  if (!fromZone?.endsWith('_hand') || !toZone || !isFieldZone(toZone)) return {};
+
+  const mutableState = state as GameState<PokemonCardTemplate>;
+  const zone = mutableState.zones[toZone];
+  if (!zone) return {};
+
+  for (const id of cardIds) {
+    const card = zone.cards.find(c => c.instanceId === id);
+    if (card && !card.flags.includes(CARD_FLAGS.PLAYED_THIS_TURN)) {
+      card.flags.push(CARD_FLAGS.PLAYED_THIS_TURN);
+    }
+  }
+
+  return {};
+}
 
 // Post-hook: During setup, cards placed on field zones are face-down (hidden from both players)
 function setupFaceDown(state: PokemonState, action: Action): PostHookResult {
@@ -728,11 +777,13 @@ export const pokemonHooksPlugin: Plugin<PokemonCardTemplate> = {
   postHooks: {
     [ACTION_TYPES.MOVE_CARD]: [
       { hook: setupFaceDown, priority: 50 },
+      { hook: stampPlayedThisTurn, priority: 60 },
       { hook: logTrainerText, priority: 100 },
       { hook: reorderFieldZone, priority: 200 },
     ],
     [ACTION_TYPES.MOVE_CARD_STACK]: [
       { hook: setupFaceDown, priority: 50 },
+      { hook: stampPlayedThisTurn, priority: 60 },
       { hook: logTrainerText, priority: 100 },
       { hook: reorderFieldZone, priority: 200 },
     ],
