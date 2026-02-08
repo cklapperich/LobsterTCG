@@ -1072,6 +1072,9 @@ export function executeAction<T extends CardTemplate>(
     case ACTION_TYPES.SWAP_CARD_STACKS:
       executeSwapCardStacks(state, action);
       break;
+    case ACTION_TYPES.DECLARE_ACTION:
+      state.log.push(action.message ?? `${action.name} declared`);
+      break;
   }
 
   return null;

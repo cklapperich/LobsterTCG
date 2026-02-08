@@ -1,4 +1,4 @@
-import type { GameState, Playmat, DeckList, PlayerIndex, CardTemplate, GameConfig, GamePlugin, CounterDefinition, ActionPanel } from '../../core';
+import type { GameState, Playmat, DeckList, PlayerIndex, CardTemplate, GameConfig, GamePlugin, CounterDefinition, ActionPanel, Action } from '../../core';
 import {
   createGameState,
   createCardInstance,
@@ -13,6 +13,7 @@ import {
   executeAction,
   setOrientation,
   resolveCardName,
+  declareAction,
 
   VISIBILITY,
   zoneVisibility,
@@ -36,7 +37,7 @@ import {
   COUNTER_IDS,
   COUNTER_CATEGORIES,
   SETUP,
-  POKEMON_ACTION_TYPES,
+  POKEMON_DECLARATION_TYPES,
 } from './constants';
 
 // Import counter images
@@ -416,13 +417,16 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
       required: ['attackName'],
     },
     async run(input) {
-      return ctx.execute({
-        type: POKEMON_ACTION_TYPES.DECLARE_ATTACK,
-        player: p,
-        attackName: input.attackName,
-        targetCardName: input.targetCardName,
-        ...(input.allowed_by_card_effect && { allowed_by_card_effect: true }),
-      } as any);
+      return ctx.execute((state) => {
+        const activeKey = `player${p + 1}_${ZONE_IDS.ACTIVE}`;
+        const topCard = state.zones[activeKey]?.cards.at(-1);
+        const activeName = topCard?.template?.name ?? 'Active Pokemon';
+        const target = input.targetCardName ? ` targeting ${input.targetCardName}` : '';
+        const msg = `${activeName} used ${input.attackName}!${target}`;
+        const action = declareAction(p, POKEMON_DECLARATION_TYPES.ATTACK, input.attackName, { targetCardName: input.targetCardName }, msg);
+        if (input.allowed_by_card_effect) action.allowed_by_card_effect = true;
+        return action;
+      });
     },
   }));
 
@@ -437,9 +441,7 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
       required: ['cardName'],
     },
     async run(input) {
-      const state = ctx.getState();
-      state.log.push(`${input.cardName} retreated!`);
-      return ctx.getReadableState();
+      return ctx.execute(declareAction(p, POKEMON_DECLARATION_TYPES.RETREAT, input.cardName, undefined, `${input.cardName} retreated!`));
     },
   }));
 
@@ -456,13 +458,10 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
       required: ['cardName', 'abilityName'],
     },
     async run(input) {
-      return ctx.execute({
-        type: POKEMON_ACTION_TYPES.DECLARE_ABILITY,
-        player: p,
-        cardName: input.cardName,
-        abilityName: input.abilityName,
-        ...(input.allowed_by_card_effect && { allowed_by_card_effect: true }),
-      } as any);
+      const msg = `${input.cardName} used ability: ${input.abilityName}`;
+      const action = declareAction(p, POKEMON_DECLARATION_TYPES.ABILITY, input.abilityName, { cardName: input.cardName }, msg);
+      if (input.allowed_by_card_effect) action.allowed_by_card_effect = true;
+      return ctx.execute(action);
     },
   }));
 
@@ -559,25 +558,20 @@ function getActionPanels(state: GameState<PokemonCardTemplate>, player: PlayerIn
   return panels;
 }
 
-function onActionPanelClick(state: GameState<PokemonCardTemplate>, player: PlayerIndex, panelId: string, buttonId: string): any {
+function onActionPanelClick(state: GameState<PokemonCardTemplate>, player: PlayerIndex, panelId: string, buttonId: string): Action | undefined {
   if (panelId === 'attacks') {
-    return {
-      type: POKEMON_ACTION_TYPES.DECLARE_ATTACK,
-      player,
-      attackName: buttonId,
-    };
+    const activeKey = `player${player + 1}_${ZONE_IDS.ACTIVE}`;
+    const topCard = state.zones[activeKey]?.cards.at(-1);
+    const activeName = topCard?.template?.name ?? 'Active Pokemon';
+    return declareAction(player, POKEMON_DECLARATION_TYPES.ATTACK, buttonId, undefined, `${activeName} used ${buttonId}!`);
   }
   if (panelId === 'abilities') {
     const [zoneKey, abilityName] = buttonId.split('::');
     const zone = state.zones[zoneKey];
     const cardName = zone?.cards.at(-1)?.template?.name ?? 'Pokemon';
-    return {
-      type: POKEMON_ACTION_TYPES.DECLARE_ABILITY,
-      player,
-      cardName,
-      abilityName,
-    };
+    return declareAction(player, POKEMON_DECLARATION_TYPES.ABILITY, abilityName, { cardName }, `${cardName} used ability: ${abilityName}`);
   }
+  return undefined;
 }
 
 // ── Start-of-Turn Skip Hook ──────────────────────────────────────

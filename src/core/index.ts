@@ -76,4 +76,5 @@ export {
   revealHand,
   mulligan,
   swapCardStacks,
+  declareAction,
 } from './action';

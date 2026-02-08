@@ -65,6 +65,7 @@ export type {
   PeekAction,
   MulliganAction,
   SwapCardStacksAction,
+  DeclareAction,
 } from './action';
 
 // Game types

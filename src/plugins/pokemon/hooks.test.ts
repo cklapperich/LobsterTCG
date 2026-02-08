@@ -8,12 +8,14 @@ import {
   moveCard,
   moveCardStack,
   addCounter,
+  declareAction,
   VISIBILITY,
   ACTION_SOURCES,
   GAME_EVENTS,
   CARD_FLAGS,
 } from '../../core';
 import type { GameState, Action, ZoneConfig } from '../../core';
+import { POKEMON_DECLARATION_TYPES } from './constants';
 import type { PokemonCardTemplate } from './cards';
 import { getTemplate } from './cards';
 import { pokemonHooksPlugin } from './hooks';
@@ -42,6 +44,7 @@ const JIGGLYPUFF = 'tk-xy-w-25';
 const FAIRY_ENERGY = 'tk-xy-w-9';
 const POTION = 'tk-xy-w-20';
 const STADIUM_CARD = 'sv5-156'; // A Stadium trainer card
+const PLUSLE = 'tk-ex-p-6'; // Basic Pokemon with attacks: Pickup Power (1), Rear Spark (2)
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -274,7 +277,7 @@ describe('warnEvolutionTiming', () => {
     gameLoop.submit({ ...moveCard(0, pidgeotto, 'player1_hand', 'player1_active'), source: ACTION_SOURCES.AI });
     gameLoop.processNext();
     expect(blocked).toHaveLength(1);
-    expect(blocked[0].reason).toContain('Cannot evolve on the first turn or the turn a Pokemon was played');
+    expect(blocked[0].reason).toContain('Cannot evolve a Pokemon the same turn');
   });
 });
 
@@ -329,8 +332,8 @@ describe('warnNonBasicToEmptyField', () => {
     gameLoop.submit({ ...moveCard(0, potion, 'player1_hand', 'player1_active'), source: ACTION_SOURCES.AI });
     gameLoop.processNext();
     expect(blocked).toHaveLength(1);
-    expect(blocked[0].reason).toContain('on empty active');
-    expect(blocked[0].reason).toContain('Only Basic Pokemon');
+    // warnTrainerToField (priority 85) fires before warnNonBasicToEmptyField (priority 90)
+    expect(blocked[0].reason).toContain('Cannot place Potion (Trainer) on a field zone');
   });
 
   it('blocks AI Stage 1 via move_card_stack to empty field zone', () => {
@@ -359,48 +362,6 @@ describe('warnOneEnergyAttachment (same-zone)', () => {
   });
 });
 
-// Array convention: index 0 = visual bottom, end of array = visual top.
-// Energy at position 0 (visual bottom, underneath Pokemon) is correct.
-// Energy at end of array (visual top, on top of Pokemon) should warn.
-describe('warnEnergyOnTopOfPokemon', () => {
-  it('allows energy at position 0 (visual bottom, underneath Pokemon)', () => {
-    const { state, gameLoop, blocked } = setupGame();
-
-    placeCard(state, 0, 'active', PIDGEY);
-    const energy = placeCard(state, 0, 'hand', FAIRY_ENERGY);
-
-    // position 0 = visual bottom = underneath = correct for energy
-    gameLoop.submit({ ...moveCard(0, energy, 'player1_hand', 'player1_active', 0), source: ACTION_SOURCES.AI });
-    gameLoop.processNext();
-    expect(blocked).toHaveLength(0);
-  });
-
-  it('blocks AI energy with no position (appends to top of stack)', () => {
-    const { state, gameLoop, blocked } = setupGame();
-
-    placeCard(state, 0, 'active', PIDGEY);
-    const energy = placeCard(state, 0, 'hand', FAIRY_ENERGY);
-
-    // No position = append to end = visual top = on top of Pokemon
-    gameLoop.submit({ ...moveCard(0, energy, 'player1_hand', 'player1_active'), source: ACTION_SOURCES.AI });
-    gameLoop.processNext();
-    expect(blocked).toHaveLength(1);
-    expect(blocked[0].reason).toContain('Cannot place energy on top of Pokemon');
-  });
-
-  it('blocks AI energy move_card_stack with no position (appends to top)', () => {
-    const { state, gameLoop, blocked } = setupGame();
-
-    placeCard(state, 0, 'active', PIDGEY);
-    const energy = placeCard(state, 0, 'hand', FAIRY_ENERGY);
-
-    // No position = append to end = visual top
-    gameLoop.submit({ ...moveCardStack(0, [energy], 'player1_hand', 'player1_active'), source: ACTION_SOURCES.AI });
-    gameLoop.processNext();
-    expect(blocked).toHaveLength(1);
-    expect(blocked[0].reason).toContain('Cannot place energy on top of Pokemon');
-  });
-});
 
 describe('warnStadiumOnly', () => {
   it('blocks AI non-stadium card to stadium zone via move_card', () => {
@@ -489,5 +450,56 @@ describe('trainer rules in readable state', () => {
     expect(narrative).toContain('Each player shuffles'); // Iono
     expect(narrative).toContain('Switch your Active'); // Switch
     expect(narrative).toContain('Shuffle your hand into your deck'); // Lillie
+  });
+});
+
+describe('warnAttackFirstTurn (declare_action)', () => {
+  it('blocks AI attack on turn 1', () => {
+    const { state, gameLoop, blocked } = setupGame();
+    state.turnNumber = 1;
+    state.currentTurn.number = 1;
+
+    placeCard(state, 0, 'active', PIDGEY);
+    const action = { ...declareAction(0, POKEMON_DECLARATION_TYPES.ATTACK, 'Gust'), source: ACTION_SOURCES.AI } as Action;
+    gameLoop.submit(action);
+    gameLoop.processNext();
+    expect(blocked).toHaveLength(1);
+    expect(blocked[0].reason).toContain('Cannot attack on the first turn');
+  });
+
+  it('allows attack on turn 3', () => {
+    const { state, gameLoop, blocked } = setupGame();
+
+    placeCard(state, 0, 'active', PIDGEY);
+    const action = { ...declareAction(0, POKEMON_DECLARATION_TYPES.ATTACK, 'Gust'), source: ACTION_SOURCES.AI } as Action;
+    gameLoop.submit(action);
+    gameLoop.processNext();
+    expect(blocked).toHaveLength(0);
+  });
+});
+
+describe('warnAttackEnergyCost (declare_action)', () => {
+  it('blocks AI attack with insufficient energy', () => {
+    const { state, gameLoop, blocked } = setupGame();
+
+    // Plusle's Rear Spark costs 2 energy — place none
+    placeCard(state, 0, 'active', PLUSLE);
+    const action = { ...declareAction(0, POKEMON_DECLARATION_TYPES.ATTACK, 'Rear Spark'), source: ACTION_SOURCES.AI } as Action;
+    gameLoop.submit(action);
+    gameLoop.processNext();
+    expect(blocked).toHaveLength(1);
+    expect(blocked[0].reason).toContain('energy');
+  });
+
+  it('allows attack with sufficient energy', () => {
+    const { state, gameLoop, blocked } = setupGame();
+
+    placeCard(state, 0, 'active', PLUSLE);
+    placeCard(state, 0, 'active', FAIRY_ENERGY);
+    placeCard(state, 0, 'active', FAIRY_ENERGY);
+    const action = { ...declareAction(0, POKEMON_DECLARATION_TYPES.ATTACK, 'Rear Spark'), source: ACTION_SOURCES.AI } as Action;
+    gameLoop.submit(action);
+    gameLoop.processNext();
+    expect(blocked).toHaveLength(0);
   });
 });

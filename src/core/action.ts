@@ -24,6 +24,7 @@ import type {
   PeekAction,
   MulliganAction,
   SwapCardStacksAction,
+  DeclareAction,
 } from './types';
 import {
   ACTION_TYPES,
@@ -227,4 +228,21 @@ export function mulligan(player: PlayerIndex, drawCount: number = 7): MulliganAc
 
 export function swapCardStacks(player: PlayerIndex, zone1: string, zone2: string): SwapCardStacksAction {
   return { type: ACTION_TYPES.SWAP_CARD_STACKS, player, zone1, zone2 };
+}
+
+export function declareAction(
+  player: PlayerIndex,
+  declarationType: string,
+  name: string,
+  metadata?: Record<string, unknown>,
+  message?: string
+): DeclareAction {
+  return {
+    type: ACTION_TYPES.DECLARE_ACTION,
+    player,
+    declarationType,
+    name,
+    ...(metadata ? { metadata } : {}),
+    ...(message ? { message } : {}),
+  };
 }
