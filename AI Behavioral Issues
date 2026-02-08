@@ -65,7 +65,7 @@ logging.ts:11 [thinking] Let me analyze the current game state:
 4. Attack with Farfetch'd's Tool Buster (20 damage, or 90 if they have a tool)
 
 Since Golduck used Amnesia on "Collect", I can still use "Tool Buster" which costs [Colorless] and I have Fire Energy attached. Tool Buster does 20 damage, or 90 if I discard a tool from the opponent's Active Pokemon. Golduck doesn't have a tool attached, so it would only do 20 damage.
-
+https://bulbapedia.bulbagarden.net/wiki/KSI%27s_Gardevoir_(TCG)
 Actually, looking at the energy cost - Tool Buster costs [Colorless] which means any energy type works. I have Fire Energy attached, so I can use Tool Buster for 20 damage.
 
 But wait - I should think about my strategy. I have Copycat in hand which lets me shuffle my hand and draw cards equal to opponent's hand (5 cards). That could be good for finding more resources.

@@ -49,6 +49,8 @@ this requires a hook for pokemon specific stack logic?? ugh!
 
 13 add a 'shuffle into deck' tool (?? probably not needed)
 
+14. Really big Pop-up with pretty text, a sound effect, and the card text description whenever oponnent declares an attack
+
 17. add a little buzzing noise for normally-illegal stuff, unless it comes from staging
 
 18. disable all hooks when moving a card FROM staging to somewhere else??
