@@ -1,7 +1,7 @@
 import type { GameTypeConfig, SetupCompleteUtils } from '../../core/types/game-type-config';
 import type { GameState } from '../../core/types/game';
 import type { PlayerIndex } from '../../core/types/card';
-import { plugin, executeSetup, pokemonHooksPlugin, flipFieldCardsFaceUp, ensureCardInHand } from './index';
+import { plugin, executeSetup, pokemonHooksPlugin, flipFieldCardsFaceUp } from './index';
 import { getTemplate } from './cards';
 import {
   PROMPT_SETUP,
@@ -36,17 +36,7 @@ export const pokemonConfig: GameTypeConfig = {
     state.activePlayer = firstPlayer as PlayerIndex;
     state.currentTurn = { number: 1, activePlayer: firstPlayer as PlayerIndex, actions: [], ended: false };
   },
-  injectTestCards: (state: GameState, testId: string, playerIndex: PlayerIndex) => {
-    if (testId === 'lassTest') {
-      ensureCardInHand(state, playerIndex, 'base1-75');
-    } else if (testId === 'fastBallTest') {
-      ensureCardInHand(state, playerIndex, 'ecard3-124');
-    }
-  },
-  testOptions: [
-    { id: 'lassTest', label: 'LASS TEST' },
-    { id: 'fastBallTest', label: 'FAST BALL TEST' },
-  ],
+
   prompts: {
     setup: PROMPT_SETUP,
     fullTurn: PROMPT_FULL_TURN,

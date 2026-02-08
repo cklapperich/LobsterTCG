@@ -58,6 +58,9 @@ this requires a hook for pokemon specific stack logic?? ugh!
 17. the 'find pokemon' system is suspicious, verify it needs to be that complex
 
 18. System states auto-ended turn even when AI called end_turn
+
+19. remove fastball test and lass test
+
 to active
 [Professor Kukui] Draw 2 cards. During this turn, your Pokémon’s attacks do 20 more damage to your opponent’s Active Pokémon (before applying Weakness and Resistance).
 [AI] Moved Professor Kukui from hand to

@@ -497,8 +497,7 @@
     const fromZone = cardModal.zoneKey;
     const shouldShuffle = cardModal.shuffleOnConfirm;
     const playerIndex = playerFromZoneKey(fromZone);
-    // Search operations (shuffleOnConfirm=true) respect the search-to-hand setting
-    const destZone = (settings.searchToHand && shouldShuffle)
+    const destZone = settings.searchToHand
       ? `player${playerIndex + 1}_hand`
       : 'staging';
 
@@ -1242,10 +1241,10 @@
         {/if}
 
         <div class="gbc-panel log-panel">
-          <div class="text-gbc-yellow text-[0.5rem] text-center mb-2 py-1 px-2 bg-gbc-border">LOG</div>
+          <div class="text-gbc-yellow text-[0.9rem] text-center mb-2 py-1 px-2 bg-gbc-border">LOG</div>
           <div class="log-content" bind:this={logContainer}>
             {#each gameLog as entry}
-              <div class="log-entry text-[0.45rem]" class:text-gbc-yellow={entry.startsWith('Warning:')} class:text-gbc-light={!entry.startsWith('Warning:')}>{entry}</div>
+              <div class="log-entry text-[0.7rem]" class:text-gbc-yellow={entry.startsWith('Warning:')} class:text-gbc-light={!entry.startsWith('Warning:')}>{entry}</div>
             {/each}
           </div>
           <form class="log-input-bar" onsubmit={(e) => {
@@ -1466,19 +1465,24 @@
   }
 
   .game-layout {
-    @apply flex items-start;
+    display: grid;
+    grid-template-columns: 20rem 1fr;
+    grid-template-rows: minmax(0, 1fr);
     gap: 0.5rem;
-    @apply max-lg:flex-col max-lg:items-center;
+    height: calc(100vh - 2rem);
+    @apply max-lg:flex max-lg:flex-col max-lg:items-center max-lg:h-auto;
   }
 
   .playmat-area {
     @apply overflow-auto;
+    height: 100%;
   }
 
   .sidebar {
-    @apply flex flex-col gap-3 shrink-0;
+    @apply flex flex-col gap-3 shrink-0 min-h-0 overflow-hidden;
     width: 20rem;
-    @apply max-lg:w-full max-lg:flex-row max-lg:flex-wrap max-lg:justify-center;
+    height: 100%;
+    @apply max-lg:w-full max-lg:flex-row max-lg:flex-wrap max-lg:justify-center max-lg:overflow-visible max-lg:h-auto;
   }
 
   .phase-panel {
@@ -1511,12 +1515,11 @@
   }
 
   .log-panel {
-    @apply max-lg:w-auto flex flex-col;
-    height: 28rem;
+    @apply max-lg:w-auto flex flex-col flex-1 min-h-0;
   }
 
   .log-content {
-    @apply overflow-y-auto px-2 flex-1;
+    @apply overflow-y-auto overflow-x-hidden px-2 flex-1;
     scrollbar-width: thin;
     scrollbar-color: var(--color-gbc-green) var(--color-gbc-border);
   }
@@ -1530,7 +1533,7 @@
   }
 
   .log-input {
-    @apply w-full bg-gbc-dark-green text-gbc-light text-[0.45rem] px-2 py-1 border border-gbc-border rounded-sm;
+    @apply w-full bg-gbc-dark-green text-gbc-light text-[0.9rem] px-2 py-1 border border-gbc-border rounded-sm;
     @apply outline-none;
   }
 

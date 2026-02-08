@@ -26,6 +26,9 @@ const BATTLE_THEMES = [
   '/battle_themes/20 Grand Master Duel.mp3',
 ];
 
+// BGM plays quieter than SFX at the same slider position
+const BGM_GAIN = 0.7;
+
 // Audio element cache for preloading
 const audioCache = new Map<SfxKey, HTMLAudioElement>();
 
@@ -74,7 +77,7 @@ export function playBgm(): void {
 
 function startTheme(index: number): void {
   bgmAudio = new Audio(BATTLE_THEMES[index]);
-  bgmAudio.volume = settings.bgmVolume;
+  bgmAudio.volume = settings.bgmVolume * BGM_GAIN;
   bgmAudio.addEventListener('ended', () => {
     currentThemeIndex = pickNextTheme();
     startTheme(currentThemeIndex);
@@ -100,7 +103,7 @@ export function toggleMute(): void {
     if (audioSettings.bgmMuted) {
       bgmAudio.pause();
     } else {
-      bgmAudio.volume = settings.bgmVolume;
+      bgmAudio.volume = settings.bgmVolume * BGM_GAIN;
       bgmAudio.play().catch(() => {});
     }
   }
@@ -115,8 +118,11 @@ export const audioSettings = $state({
 // Live-update BGM volume when settings change
 $effect.root(() => {
   $effect(() => {
-    if (bgmAudio && !audioSettings.bgmMuted) {
-      bgmAudio.volume = settings.bgmVolume;
+    // Read reactive deps eagerly so Svelte subscribes even when bgmAudio is null
+    const vol = settings.bgmVolume * BGM_GAIN;
+    const muted = audioSettings.bgmMuted;
+    if (bgmAudio && !muted) {
+      bgmAudio.volume = vol;
     }
   });
 });

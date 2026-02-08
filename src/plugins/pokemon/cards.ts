@@ -73,11 +73,6 @@ interface WesternCard {
   rules?: string[];
 }
 
-// Patch missing rules text for cards whose JSON entries lack it
-const RULES_TEXT_PATCHES = new Map<string, string[]>([
-  ['base1-75', ['You and your opponent show each other your hands, then shuffle all Trainer cards from your hands into your decks.']],
-]);
-
 // Lazy-loaded western card maps
 let westernCardMap: Map<string, WesternCard> | null = null;
 let cardsBySetNumber: Map<string, WesternCard> | null = null;
@@ -109,13 +104,6 @@ function ensureWesternCardsLoaded(): void {
     }
   }
 
-  // Patch missing rules text for cards that need it
-  for (const [id, rules] of RULES_TEXT_PATCHES) {
-    const card = westernCardMap.get(id);
-    if (card && !card.rules?.length) {
-      card.rules = rules;
-    }
-  }
 }
 
 /**
