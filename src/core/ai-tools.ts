@@ -48,8 +48,6 @@ export interface ToolContext {
   isDecisionResponse?: boolean;
   /** Format a card template for search results. Plugin-provided for rich output. */
   formatCardForSearch?: (template: CardTemplate) => string;
-  /** Set by tools to abort remaining calls in the current AI SDK step. */
-  batchAbortReason?: string;
   /** Which pipeline phase this context is currently serving. */
   agentRole?: 'checkup' | 'planner' | 'executor';
   /** Set by request_replan tool — signals the executor wants to bail back to the planner. */

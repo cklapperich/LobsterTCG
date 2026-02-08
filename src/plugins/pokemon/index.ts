@@ -322,13 +322,13 @@ function createSetStatusTool(ctx: ToolContext): RunnableTool {
   });
 }
 
-/** No-op end_phase tool for checkup agent. Just returns a string; AbortController stops the agent. */
-function createCheckupEndPhaseTool(): RunnableTool {
+/** No-op end_phase tool. Just returns a string; AbortController stops the agent. */
+function createEndPhaseTool(description: string = 'Signal that this phase is complete.'): RunnableTool {
   return tool({
     name: 'end_phase',
-    description: 'Signal that checkup is complete.',
+    description,
     inputSchema: { type: 'object' as const, properties: {}, required: [] },
-    run() { return 'Checkup phase complete.'; },
+    run() { return 'Phase complete.'; },
   });
 }
 
@@ -354,7 +354,7 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
     const checkupTools = createDefaultTools(ctx)
       .filter(t => CHECKUP_TOOL_NAMES.has(t.name));
     checkupTools.push(createSetStatusTool(ctx));
-    checkupTools.push(createCheckupEndPhaseTool());
+    checkupTools.push(createEndPhaseTool('Signal that checkup is complete.'));
     return checkupTools;
   }
 
@@ -387,6 +387,12 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
   } else {
     // Normal turn: hide resolve_decision, show end_turn and create_decision
     tools = tools.filter(t => t.name !== ACTION_TYPES.RESOLVE_DECISION);
+  }
+
+  // Executor: replace end_turn with end_phase (pipeline handles actual end_turn)
+  if (role === 'executor') {
+    tools = tools.filter(t => t.name !== ACTION_TYPES.END_TURN);
+    tools.push(createEndPhaseTool('Signal that you have finished executing the plan.'));
   }
 
   // ── Pokemon-specific tools ──────────────────────────────────
@@ -456,6 +462,29 @@ function createPokemonTools(ctx: ToolContext): RunnableTool[] {
 
   // ── Status condition tool (Pokemon-specific wrapper around orientation) ──
   tools.push(createSetStatusTool(ctx));
+
+  // ── Discard Zone (move all cards from a zone to discard) ──
+  tools.push(tool({
+    name: 'discard_zone',
+    description: 'Discard all cards in a zone. Moves every card from the specified zone to your discard pile.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        zone: { type: 'string', description: 'Zone key to discard all cards from (e.g. "player2_active", "player2_bench_1")' },
+      },
+      required: ['zone'],
+    },
+    async run(input) {
+      return ctx.execute((state) => {
+        const zone = state.zones[input.zone];
+        if (!zone) throw new Error(`Zone "${input.zone}" not found`);
+        if (zone.cards.length === 0) throw new Error(`Zone "${input.zone}" is empty`);
+        const cardIds = zone.cards.map(c => c.instanceId);
+        const discardKey = `player${p + 1}_${ZONE_IDS.DISCARD}`;
+        return moveCardStack(p, cardIds, input.zone, discardKey);
+      });
+    },
+  }));
 
   return tools;
 }

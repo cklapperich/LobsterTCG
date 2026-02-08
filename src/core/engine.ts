@@ -135,7 +135,7 @@ export function createGameState<T extends CardTemplate>(
     id: `game_${now}_${Math.random().toString(36).slice(2, 9)}`,
     config,
     phase: PHASES.SETUP,
-    setupComplete: [false, false],
+    setupComplete: [false, config.playerCount === 1],
     turnNumber: 0,
     activePlayer: 0,
     zones,
@@ -294,7 +294,7 @@ function clearCounters<T extends CardTemplate>(card: CardInstance<T>): void {
  * Ensure all counters in a zone are on the top card.
  * Called after adding a card or reordering to keep counters locked on top.
  */
-function consolidateCountersToTop<T extends CardTemplate>(zone: Zone<T>): void {
+export function consolidateCountersToTop<T extends CardTemplate>(zone: Zone<T>): void {
   if (zone.cards.length <= 1) return;
 
   const topCard = zone.cards[zone.cards.length - 1];
@@ -612,7 +612,9 @@ function executeEndTurn<T extends CardTemplate>(
 
   state.currentTurn.ended = true;
   state.turnNumber++;
-  state.activePlayer = state.activePlayer === 0 ? 1 : 0;
+  if (state.config.playerCount === 2) {
+    state.activePlayer = state.activePlayer === 0 ? 1 : 0;
+  }
   state.currentTurn = createTurn(state.turnNumber, state.activePlayer);
 
   // Clear "played_this_turn" flag from all cards

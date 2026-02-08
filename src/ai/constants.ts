@@ -21,3 +21,9 @@ export const PIPELINE_CONFIG = {
   EXECUTOR_MAX_STEPS: 30,
   MAX_RETRY_CYCLES: 2, // 3 total: initial + 2 retries
 } as const;
+
+export const AUTONOMOUS_CONFIG = {
+  MAX_STEPS_PER_ITERATION: 15,
+  MAX_ITERATIONS: 5,
+  CHECKUP_MAX_STEPS: 15,
+} as const;

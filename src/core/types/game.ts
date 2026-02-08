@@ -28,7 +28,7 @@ export interface Turn {
 export interface GameConfig {
   gameType: string;
   zones: Record<string, ZoneConfig>;  // zone ID -> config
-  playerCount: 2;
+  playerCount: 1 | 2;
 }
 
 export interface GameResult {

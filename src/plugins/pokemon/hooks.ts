@@ -3,7 +3,7 @@ import { VISIBILITY, ACTION_TYPES, PHASES, CARD_FLAGS, ACTION_SOURCES } from '..
 import type { PreHookResult, PostHookResult, Plugin } from '../../core/plugin/types';
 import type { PokemonCardTemplate } from './cards';
 import { getTemplate } from './cards';
-import { findCardInZones } from '../../core/engine';
+import { findCardInZones, consolidateCountersToTop } from '../../core/engine';
 import {
   isSupporter,
   isEnergy,
@@ -250,6 +250,57 @@ function warnEvolutionTiming(state: PokemonState, action: Action): PreHookResult
   return { outcome: 'continue' };
 }
 
+// Warning 4b: Cannot evolve the same Pokemon twice in one turn
+function warnDoubleEvolution(state: PokemonState, action: Action): PreHookResult {
+  if (action.allowed_by_card_effect) return { outcome: 'continue' };
+
+  let cardInstanceId: string;
+  let toZone: string;
+
+  if (action.type === ACTION_TYPES.MOVE_CARD) {
+    const a = action as MoveCardAction;
+    cardInstanceId = a.cardInstanceId;
+    toZone = a.toZone;
+  } else if (action.type === ACTION_TYPES.MOVE_CARD_STACK) {
+    const a = action as MoveCardStackAction;
+    cardInstanceId = a.cardInstanceIds[0];
+    toZone = a.toZone;
+    if (!cardInstanceId) return { outcome: 'continue' };
+  } else {
+    return { outcome: 'continue' };
+  }
+
+  if (!isFieldZone(toZone)) return { outcome: 'continue' };
+
+  const template = getTemplateForCard(state, cardInstanceId);
+  if (!template || !isEvolution(template)) return { outcome: 'continue' };
+
+  // Check if an evolution was already placed in this same zone this turn
+  for (const prev of state.currentTurn.actions) {
+    let prevCardId: string | undefined;
+    let prevToZone: string | undefined;
+
+    if (prev.type === ACTION_TYPES.MOVE_CARD) {
+      const m = prev as MoveCardAction;
+      prevCardId = m.cardInstanceId;
+      prevToZone = m.toZone;
+    } else if (prev.type === ACTION_TYPES.MOVE_CARD_STACK) {
+      const s = prev as MoveCardStackAction;
+      prevCardId = s.cardInstanceIds[0];
+      prevToZone = s.toZone;
+    }
+
+    if (!prevCardId || prevToZone !== toZone) continue;
+
+    const prevTemplate = getTemplateForCard(state, prevCardId);
+    if (prevTemplate && isEvolution(prevTemplate)) {
+      return blockOrWarn(action, `Cannot evolve a Pokemon twice in the same turn. ${toZone} already had an evolution this turn. Set allowed_by_card_effect if a card effect permits this.`);
+    }
+  }
+
+  return { outcome: 'continue' };
+}
+
 // Warning 5: Cannot place damage/status counters on Trainer cards
 function warnCountersOnTrainers(state: PokemonState, action: Action): PreHookResult {
   if (action.type !== ACTION_TYPES.ADD_COUNTER) return { outcome: 'continue' };
@@ -406,6 +457,26 @@ function reorderFieldZone(state: PokemonState, action: Action): PostHookResult {
 
   zone.cards.sort((a, b) => sortWeight(a) - sortWeight(b));
 
+  return {};
+}
+
+// Post-hook: Re-consolidate counters to top card after reorder
+function consolidateCountersAfterReorder(state: PokemonState, action: Action): PostHookResult {
+  let toZone: string | undefined;
+
+  if (action.type === ACTION_TYPES.MOVE_CARD) {
+    toZone = (action as MoveCardAction).toZone;
+  } else if (action.type === ACTION_TYPES.MOVE_CARD_STACK) {
+    toZone = (action as MoveCardStackAction).toZone;
+  }
+
+  if (!toZone || !isFieldZone(toZone)) return {};
+
+  const mutableState = state as GameState<PokemonCardTemplate>;
+  const zone = mutableState.zones[toZone];
+  if (!zone) return {};
+
+  consolidateCountersToTop(zone);
   return {};
 }
 
@@ -676,6 +747,7 @@ export const pokemonHooksPlugin: Plugin<PokemonCardTemplate> = {
       { hook: warnOneEnergyAttachment, priority: 100 },
       { hook: warnEvolutionChain, priority: 100 },
       { hook: warnEvolutionTiming, priority: 110 },
+      { hook: warnDoubleEvolution, priority: 115 },
       { hook: warnNonBasicToEmptyField, priority: 90 },
       { hook: warnStadiumOnly, priority: 90 },
       { hook: warnTrainerToField, priority: 85 },
@@ -686,6 +758,7 @@ export const pokemonHooksPlugin: Plugin<PokemonCardTemplate> = {
       { hook: warnOneEnergyAttachment, priority: 100 },
       { hook: warnEvolutionChain, priority: 100 },
       { hook: warnEvolutionTiming, priority: 110 },
+      { hook: warnDoubleEvolution, priority: 115 },
       { hook: warnNonBasicToEmptyField, priority: 90 },
       { hook: warnStadiumOnly, priority: 90 },
       { hook: warnTrainerToField, priority: 85 },

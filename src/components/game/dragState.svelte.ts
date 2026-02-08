@@ -1,6 +1,7 @@
 import type { CardInstance, CardTemplate, Visibility, GameState } from '../../core';
 import { executeAction, moveCard, moveCardStack, checkOpponentZone, zoneVisibility, type PluginManager } from '../../core';
 import { playSfx } from '../../lib/audio.svelte';
+import { playerFromZoneKey } from './player-config';
 
 export interface DragState {
   cardInstanceId: string;
@@ -77,8 +78,8 @@ export function executeDrop(
   }
 
   // Extract player indices from zone keys for cross-player check
-  const fromPlayerIndex = dragStore.current.fromZoneKey.startsWith('player1_') ? 0 : 1;
-  const toPlayerIndex = toZoneKey.startsWith('player1_') ? 0 : 1;
+  const fromPlayerIndex = playerFromZoneKey(dragStore.current.fromZoneKey);
+  const toPlayerIndex = playerFromZoneKey(toZoneKey);
 
   // Build action using the destination player's index for the action player
   // (so warnings check the right player's zones)
@@ -182,8 +183,8 @@ export function executeStackDrop(
     return null;
   }
 
-  const fromPlayerIndex = fromZoneKey.startsWith('player1_') ? 0 : 1;
-  const toPlayerIndex = toZoneKey.startsWith('player1_') ? 0 : 1;
+  const fromPlayerIndex = playerFromZoneKey(fromZoneKey);
+  const toPlayerIndex = playerFromZoneKey(toZoneKey);
   const actionPlayer = toPlayerIndex;
   const action = moveCardStack(actionPlayer, pileCardIds, fromZoneKey, toZoneKey, position);
 

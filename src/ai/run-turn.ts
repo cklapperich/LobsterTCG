@@ -1,12 +1,12 @@
 import { generateText, jsonSchema } from 'ai';
-import type { LanguageModelV1, ToolSet } from 'ai';
+import type { LanguageModelV1, ToolSet, CoreMessage } from 'ai';
 import { createFireworks } from '@ai-sdk/fireworks';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import type { GamePlugin } from '../core';
 import type { ToolContext, RunnableTool } from '../core/ai-tools';
 import { createSpawnSubagentTool } from './spawn-subagent';
 import { logStepFinish } from './logging';
-import { AI_CONFIG, PIPELINE_CONFIG, TERMINAL_TOOL_NAMES } from './constants';
+import { AI_CONFIG, PIPELINE_CONFIG, AUTONOMOUS_CONFIG, TERMINAL_TOOL_NAMES } from './constants';
 
 export type AIProvider = 'fireworks' | 'anthropic';
 
@@ -22,6 +22,13 @@ export const MODEL_OPTIONS: ModelOption[] = [
   {
     id: 'kimi-k2',
     label: 'Kimi K2',
+    provider: 'fireworks',
+    modelId: AI_CONFIG.DEFAULT_MODEL,
+    apiKeyEnv: 'VITE_FIREWORKS_API_KEY',
+  },
+  {
+    id: 'kimi-k2p5',
+    label: 'Kimi K2.5',
     provider: 'fireworks',
     modelId: AI_CONFIG.DEFAULT_MODEL,
     apiKeyEnv: 'VITE_FIREWORKS_API_KEY',
@@ -64,17 +71,13 @@ const TERMINAL_TOOLS = new Set<string>(TERMINAL_TOOL_NAMES);
  * When an AbortController is provided, terminal tools (end_turn, concede, etc.)
  * will abort after executing so generateText stops immediately.
  */
-export function toAISDKTools(tools: RunnableTool[], abort?: AbortController, ctx?: ToolContext): ToolSet {
+export function toAISDKTools(tools: RunnableTool[], abort?: AbortController): ToolSet {
   const result: ToolSet = {};
   for (const t of tools) {
     result[t.name] = {
       description: t.description,
       parameters: jsonSchema(t.parameters as any),
       execute: async (args: Record<string, any>) => {
-        // Batch abort: if a previous tool in this step set the abort reason, reject remaining calls
-        if (ctx?.batchAbortReason) {
-          return `[batch aborted] ${ctx.batchAbortReason}`;
-        }
         try {
           const res = await t.execute(args);
           if (abort && TERMINAL_TOOLS.has(t.name)) {
@@ -180,15 +183,16 @@ interface AgentPhaseConfig {
   userMessage: string;
   tools: RunnableTool[];
   maxSteps: number;
-  ctx: ToolContext;
   label: string;
   logging?: boolean;
+  messages?: CoreMessage[];  // accumulated history (userMessage appended to end)
 }
 
 interface AgentPhaseResult {
   text: string;
   stepCount: number;
   aborted: boolean;
+  responseMessages: CoreMessage[];
 }
 
 /**
@@ -197,7 +201,7 @@ interface AgentPhaseResult {
  * only stop the current phase, not the whole pipeline.
  */
 async function runAgentPhase(config: AgentPhaseConfig): Promise<AgentPhaseResult> {
-  const { model, systemPrompt, userMessage, tools, maxSteps, ctx, label, logging } = config;
+  const { model, systemPrompt, userMessage, tools, maxSteps, label, logging, messages: priorMessages } = config;
   const abort = new AbortController();
   let stepCount = 0;
 
@@ -206,29 +210,34 @@ async function runAgentPhase(config: AgentPhaseConfig): Promise<AgentPhaseResult
     console.log('%c[system]', 'color: #88f', systemPrompt.slice(0, 200) + '...');
   }
 
+  // Build message list: prior history (if any) + new user message
+  const inputMessages: CoreMessage[] = [
+    ...(priorMessages ?? []),
+    { role: 'user' as const, content: userMessage },
+  ];
+
   try {
     const result = await generateText({
       model,
       maxTokens: AI_CONFIG.MAX_TOKENS,
       maxRetries: 0,
       system: systemPrompt,
-      tools: tools.length > 0 ? toAISDKTools(tools, abort, ctx) : undefined,
+      tools: tools.length > 0 ? toAISDKTools(tools, abort) : undefined,
       maxSteps,
       abortSignal: abort.signal,
-      messages: [{ role: 'user', content: userMessage }],
+      messages: inputMessages,
       onStepFinish: (step) => {
         stepCount++;
         if (logging) logStepFinish(step);
-        ctx.batchAbortReason = undefined;
       },
     });
 
     if (logging) console.groupEnd();
-    return { text: result.text ?? '', stepCount, aborted: false };
+    return { text: result.text ?? '', stepCount, aborted: false, responseMessages: result.response.messages as CoreMessage[] };
   } catch (e: any) {
     if (e?.name === 'AbortError') {
       if (logging) console.groupEnd();
-      return { text: '', stepCount, aborted: true };
+      return { text: '', stepCount, aborted: true, responseMessages: [] };
     }
     if (logging) console.groupEnd();
     throw e;
@@ -265,7 +274,6 @@ export async function runAITurn(config: AITurnConfig): Promise<void> {
     userMessage,
     tools: allTools,
     maxSteps: AI_CONFIG.MAX_STEPS,
-    ctx: context,
     label: config.setupMode ? 'Setup' : config.decisionMode ? 'Decision' : 'Turn',
     logging: config.logging,
   });
@@ -326,7 +334,6 @@ export async function runAIPipeline(config: AIPipelineConfig): Promise<void> {
           userMessage: `Current game state:\n${readableState}\n\nPerform the start-of-turn checkup, then call end_phase.`,
           tools: checkupTools,
           maxSteps: PIPELINE_CONFIG.CHECKUP_MAX_STEPS,
-          ctx,
           label: 'Checkup',
           logging: config.logging,
         });
@@ -359,7 +366,6 @@ export async function runAIPipeline(config: AIPipelineConfig): Promise<void> {
         userMessage: plannerMessage,
         tools: plannerTools,
         maxSteps: PIPELINE_CONFIG.PLANNER_MAX_STEPS,
-        ctx,
         label: attempt > 0 ? `Planner (retry ${attempt})` : 'Planner',
         logging: config.logging,
       });
@@ -393,7 +399,6 @@ export async function runAIPipeline(config: AIPipelineConfig): Promise<void> {
         userMessage: executorMessage,
         tools: executorTools,
         maxSteps: PIPELINE_CONFIG.EXECUTOR_MAX_STEPS,
-        ctx,
         label: attempt > 0 ? `Executor (retry ${attempt})` : 'Executor',
         logging: config.logging,
       });
@@ -433,5 +438,116 @@ export async function runAIPipeline(config: AIPipelineConfig): Promise<void> {
   }
 
   // Clear agentRole when pipeline is done
+  ctx.agentRole = undefined;
+}
+
+// ── Autonomous Agent ────────────────────────────────────────────
+
+export interface AIAutonomousConfig {
+  context: ToolContext;
+  plugin: GamePlugin;
+  systemPrompt: string;      // for main loop (PROMPT_AUTONOMOUS)
+  checkupPrompt: string;     // for checkup phase (PROMPT_START_OF_TURN)
+  model?: string;
+  provider?: AIProvider;
+  apiKey: string;
+  logging?: boolean;
+}
+
+/**
+ * Run a full AI turn as a single autonomous agent:
+ *   1. Checkup phase (same as pipeline — limited tools, shouldSkipStartOfTurn)
+ *   2. Autonomous loop — agent thinks + acts with full tools, looping with
+ *      accumulated conversation history until end_turn or MAX_ITERATIONS.
+ */
+export async function runAutonomousAgent(config: AIAutonomousConfig): Promise<void> {
+  const { context: ctx, plugin, apiKey } = config;
+  const modelId = config.model ?? AI_CONFIG.DEFAULT_MODEL;
+  const provider = config.provider ?? 'fireworks';
+
+  const rateLimitedFetch = createRateLimitedFetch(AI_CONFIG.MIN_REQUEST_INTERVAL_MS);
+  const model = (provider === 'anthropic'
+    ? createAnthropic({ apiKey, fetch: rateLimitedFetch })(modelId)
+    : createFireworks({ apiKey, fetch: rateLimitedFetch })(modelId)) as any;
+
+  // ── Phase 1: CHECKUP ─────────────────────────────────────────
+  let skipStartOfTurn = false;
+  try {
+    skipStartOfTurn = await plugin.shouldSkipStartOfTurn?.(ctx) ?? false;
+  } catch (e) {
+    console.warn('[AI Autonomous] shouldSkipStartOfTurn hook failed:', e);
+  }
+
+  if (!skipStartOfTurn) {
+    try {
+      ctx.agentRole = 'checkup';
+      const checkupTools = plugin.listTools!(ctx);
+
+      if (checkupTools.length > 0) {
+        const readableState = ctx.getReadableState();
+        await runAgentPhase({
+          model,
+          systemPrompt: config.checkupPrompt,
+          userMessage: `Current game state:\n${readableState}\n\nPerform the start-of-turn checkup, then call end_phase.`,
+          tools: checkupTools,
+          maxSteps: AUTONOMOUS_CONFIG.CHECKUP_MAX_STEPS,
+          label: 'Autonomous: Checkup',
+          logging: config.logging,
+        });
+      }
+    } catch (e) {
+      console.warn('[AI Autonomous] Checkup agent failed, continuing:', e);
+    }
+  }
+
+  // ── Phase 2: AUTONOMOUS LOOP ─────────────────────────────────
+  ctx.agentRole = undefined; // full tools
+  const gameTools = plugin.listTools!(ctx);
+  const subagentTool = createSpawnSubagentTool(model, gameTools, config.systemPrompt);
+  const allTools = [...gameTools, subagentTool];
+
+  let history: CoreMessage[] = [];
+
+  for (let iteration = 0; iteration < AUTONOMOUS_CONFIG.MAX_ITERATIONS; iteration++) {
+    const readableState = ctx.getReadableState();
+    const userMessage = iteration === 0
+      ? `Current game state:\n${readableState}\n\nIt's your turn. Drawing and checkup are already done. Take actions to advance toward winning. Call end_turn when done.`
+      : `Continue where you left off. Here is the current game state:\n${readableState}`;
+
+    if (config.logging) {
+      console.log(`%c[AI Autonomous] Iteration ${iteration + 1}/${AUTONOMOUS_CONFIG.MAX_ITERATIONS}`, 'color: #8f8; font-weight: bold');
+    }
+
+    try {
+      const result = await runAgentPhase({
+        model,
+        systemPrompt: config.systemPrompt,
+        userMessage,
+        tools: allTools,
+        maxSteps: AUTONOMOUS_CONFIG.MAX_STEPS_PER_ITERATION,
+        label: iteration === 0 ? 'Autonomous' : `Autonomous (iter ${iteration + 1})`,
+        logging: config.logging,
+        messages: iteration > 0 ? history : undefined,
+      });
+
+      // Accumulate conversation history
+      history = [
+        ...history,
+        { role: 'user' as const, content: userMessage },
+        ...result.responseMessages,
+      ];
+
+      // If end_turn was called (aborted), we're done
+      if (result.aborted) break;
+
+      // If the turn ended some other way (e.g. concede, declare_victory)
+      const state = ctx.getState();
+      if (state.activePlayer !== 1) break;
+    } catch (e: any) {
+      console.error(`[AI Autonomous] Iteration ${iteration + 1} failed:`, e);
+      break;
+    }
+  }
+
   ctx.agentRole = undefined;
 }
