@@ -45,8 +45,8 @@
   let { gameType, player1Deck, player2Deck, testFlags = {}, playmatImage, aiModel, playerConfig = DEFAULT_CONFIG, onBackToMenu }: Props = $props();
 
   // Resolve game type config
-  const gameConfig = GAME_TYPES[gameType];
-  const plugin = gameConfig.plugin;
+  const gameConfig = $derived(GAME_TYPES[gameType]);
+  const plugin = $derived(gameConfig.plugin);
 
   // Derived local player index from config
   const local = $derived(localPlayerIndex(playerConfig));
@@ -218,15 +218,15 @@
   }
 
   // Try an action through plugin hooks + capacity checks
-  function tryAction(action: Action): GameState | null {
-    if (!gameState) return null;
+  function tryAction(action: Action): string | null {
+    if (!gameState) return 'No game state';
 
     const preResult = pluginManager.runPreHooks(gameState, action);
     if (preResult.outcome === 'block') {
       const reason = `Action blocked: ${preResult.reason ?? 'Unknown'}`;
       gameState.log.push(reason);
       gameState = { ...gameState };
-      return null;
+      return reason;
     }
     if (preResult.outcome === 'replace') {
       action = preResult.action;
@@ -235,10 +235,10 @@
       gameState.log.push(`Warning: ${preResult.reason}`);
     }
 
-    const newGameState = executeAction(gameState, action);
-    if (newGameState) {
+    const blocked = executeAction(gameState, action);
+    if (blocked) {
       gameState = { ...gameState };
-      return newGameState;
+      return blocked;
     }
 
     // Run post-hooks (e.g., setup face-down, trainer text logging)
@@ -273,12 +273,12 @@
 
     return {
       tryAction: (action: Action) => {
-        const newGameState = tryAction(action);
-        if (!newGameState) {
+        const blocked = tryAction(action);
+        if (!blocked) {
           const sfx = sfxMap[action.type];
           if (sfx) playSfx(sfx as any);
         }
-        return newGameState;
+        return blocked;
       },
       flipCoin: async () => {
         const isHeads = Math.random() < 0.5;
@@ -832,15 +832,17 @@
     const zone = gameState.zones[zoneKey];
     const cardNames = zone?.cards.map(c => c.template.name).join(', ') ?? '';
     const zoneName = zone?.config.name ?? zoneKey;
-    const newGameState = executeAction(gameState, revealHand(local, zoneKey));
-    if (!newGameState || !newGameState.pendingDecision){
+    const err_or_block_reason = executeAction(gameState, revealHand(local, zoneKey));
+    if (err_or_block_reason){
       return;
     }
-
-    controllers[newGameState.pendingDecision.targetPlayer].handleDecision();
-
     addLog(`[Player ${local + 1}] Revealed ${zoneName}: ${cardNames}`);
     playSfx('confirm');
+
+    // Dispatch to the decision target's controller
+    if (gameState.pendingDecision) {
+      controllers[gameState.pendingDecision.targetPlayer].handleDecision();
+    }
   }
 
   function handleRevealBothHands() {
