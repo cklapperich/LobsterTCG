@@ -42,7 +42,7 @@
     onBackToMenu?: () => void;
   }
 
-  let { gameType, player1Deck, player2Deck, testFlags = {}, playmatImage, aiModel, aiMode, playerConfig = DEFAULT_CONFIG, onBackToMenu }: Props = $props();
+  let { gameType, player1Deck, player2Deck, testFlags = {}, playmatImage, aiModel, playerConfig = DEFAULT_CONFIG, onBackToMenu }: Props = $props();
 
   // Resolve game type config
   const gameConfig = $derived(GAME_TYPES[gameType]);
