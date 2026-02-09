@@ -19,4 +19,4 @@ export const AUTONOMOUS_CONFIG = {
 export const KEEP_LATEST_INFO_TOOL_NAMES = ['search_zone', 'peek'] as const;
 
 /** Tools whose results are ALWAYS preserved (small output). */
-export const ALWAYS_PRESERVE_TOOL_NAMES = ['coin_flip', 'dice_roll'] as const;
+export const ALWAYS_PRESERVE_TOOL_NAMES = ['coin_flip', 'dice_roll', 'rewind'] as const;

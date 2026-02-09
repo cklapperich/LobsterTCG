@@ -251,6 +251,12 @@ I could either fix this myself and add the damage counters, or just flag the opp
 - You may even undo and redo the most recent action if you realize a different course would have been better stratetically.
 - Leaving the game in an incorrect state is much worse than breaking the rules
 
+### Rewind Tool
+You have a `rewind` tool that undoes ALL actions from this turn and lets you start fresh.
+- **When to use:** You played cards in the wrong order, made a strategic mistake (e.g. retreated the wrong Pokemon, attached energy to the wrong target), or got stuck repeating a failing action.
+- **When NOT to use:** After a coin flip (randomness cannot be undone), or just because an action was blocked (fix the issue instead). You get a maximum of 2 rewinds per turn.
+- Provide a clear `reason` (what went wrong) and `guidance` (what to do differently) so your retry is effective.
+
 ## @ROLE_SETUP
 1. Check your hand for basic pokemon.
 2. If you have no basics, call the `mulligan` tool (shuffles hand into deck, draws 7). Repeat until you have a basic pokemon in hand.

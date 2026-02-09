@@ -64,6 +64,18 @@ export interface StepState {
 }
 
 /**
+ * Shared signal for rewind communication between tools and the agent loop.
+ * The rewind tool sets `triggered = true`; the loop detects it after the step.
+ */
+export interface RewindSignal {
+  triggered: boolean;
+  reason: string;
+  guidance: string;
+}
+
+const MAX_REWINDS = 2;
+
+/**
  * Convert our RunnableTool[] array into the Record<string, CoreTool>
  * map that the Vercel AI SDK's generateText expects.
  *
@@ -74,7 +86,13 @@ export interface StepState {
  * parallel batch — subsequent tools return a cancellation message instead
  * of executing. The caller resets `stepState.blocked` between steps.
  */
-export function toAISDKTools(tools: RunnableTool[], abort?: AbortController, stepState?: StepState): ToolSet {
+export function toAISDKTools(
+  tools: RunnableTool[],
+  abort?: AbortController,
+  stepState?: StepState,
+  rewindSignal?: RewindSignal,
+  restoreCheckpoint?: () => void,
+): ToolSet {
   const result: ToolSet = {};
   for (const t of tools) {
     result[t.name] = {
@@ -88,6 +106,17 @@ export function toAISDKTools(tools: RunnableTool[], abort?: AbortController, ste
           const res = await t.execute(args);
           if (abort && TERMINAL_TOOLS.has(t.name)) {
             abort.abort();
+          }
+          // Handle rewind: set signal, block batch, restore state
+          if (t.name === 'rewind' && rewindSignal) {
+            rewindSignal.triggered = true;
+            rewindSignal.reason = args.reason ?? '';
+            rewindSignal.guidance = args.guidance ?? '';
+            if (stepState) {
+              stepState.blocked = true;
+              stepState.blockReason = 'Rewind triggered — remaining actions cancelled';
+            }
+            restoreCheckpoint?.();
           }
           return res;
         } catch (e: any) {
@@ -118,6 +147,11 @@ interface AgentConfig {
   maxSteps: number;
   label: string;
   logging?: boolean;
+  /** Checkpoint for rewind support. When provided, the AI can call `rewind` to restore state. */
+  checkpoint?: {
+    snapshot: any;
+    restore: (snapshot: any) => void;
+  };
 }
 
 interface AgentResult {
@@ -197,10 +231,20 @@ function condenseToolResults(history: CoreMessage[], fromIndex: number): void {
  */
 async function runAgent(config: AgentConfig): Promise<AgentResult> {
   return startActiveObservation(config.label, async (span) => {
-    const { model, systemPrompt, getState, tools, maxSteps, label, logging } = config;
+    const { model, systemPrompt, getState, tools, maxSteps, label, logging, checkpoint } = config;
     const abort = new AbortController();
     const stepState: StepState = { blocked: false };
-    const sdkTools = tools.length > 0 ? toAISDKTools(tools, abort, stepState) : undefined;
+
+    // Rewind support
+    let rewindCount = 0;
+    const rewindSignal: RewindSignal = { triggered: false, reason: '', guidance: '' };
+    const restoreCheckpoint = checkpoint
+      ? () => checkpoint.restore(checkpoint.snapshot)
+      : undefined;
+
+    const sdkTools = tools.length > 0
+      ? toAISDKTools(tools, abort, stepState, checkpoint ? rewindSignal : undefined, restoreCheckpoint)
+      : undefined;
     let stepCount = 0;
     let lastText = '';
     let aborted = false;
@@ -279,6 +323,46 @@ async function runAgent(config: AgentConfig): Promise<AgentResult> {
         stepCount++;
         lastText = result.text || lastText;
 
+        // ── Rewind detection (check BEFORE accumulating history) ──
+        if (rewindSignal.triggered) {
+          rewindCount++;
+          if (logging) {
+            console.log(
+              `%c[${label}] REWIND #${rewindCount}: ${rewindSignal.reason}`,
+              'color: #f44',
+            );
+          }
+
+          if (rewindCount > MAX_REWINDS) {
+            // Over limit — accumulate history normally, inject denial
+            if (logging) {
+              console.log(`%c[${label}] Max rewinds (${MAX_REWINDS}) exceeded, continuing`, 'color: #f80');
+            }
+            const prevLen = history.length;
+            for (const msg of result.response.messages) {
+              history.push(msg as CoreMessage);
+            }
+            condenseToolResults(history, prevLen);
+            history.push({
+              role: 'user' as const,
+              content: `[REWIND DENIED] Maximum rewind limit (${MAX_REWINDS}) reached. You must continue with the current game state. Guidance: ${rewindSignal.guidance}`,
+            });
+          } else {
+            // Successful rewind — clear history, inject guidance
+            history.length = 0;
+            history.push({
+              role: 'user' as const,
+              content: `[REWIND APPLIED] Your previous actions have been undone. Reason: ${rewindSignal.reason}\n\nGuidance for this attempt: ${rewindSignal.guidance}`,
+            });
+          }
+
+          // Reset signal
+          rewindSignal.triggered = false;
+          rewindSignal.reason = '';
+          rewindSignal.guidance = '';
+          continue;
+        }
+
         // Accumulate response into history, then condense tool results
         const prevLen = history.length;
         for (const msg of result.response.messages) {
@@ -304,7 +388,7 @@ async function runAgent(config: AgentConfig): Promise<AgentResult> {
     }
 
     if (logging) console.groupEnd();
-    span.update({ output: { stepCount, aborted, finalHistory: history } });
+    span.update({ output: { stepCount, aborted, rewindCount, finalHistory: history } });
     return { text: lastText, stepCount, aborted };
   }, { asType: 'span' });
 }
@@ -379,6 +463,9 @@ export async function runAutonomousAgent(config: AIAutonomousConfig): Promise<vo
       }
 
       const { prompt, tools } = plugin.getAgentConfig!(ctx, 'main');
+      const mainCheckpoint = ctx.createCheckpoint && ctx.restoreState
+        ? { snapshot: ctx.createCheckpoint(), restore: ctx.restoreState }
+        : undefined;
       await runAgent({
         model,
         systemPrompt: withStrategy(prompt),
@@ -387,9 +474,25 @@ export async function runAutonomousAgent(config: AIAutonomousConfig): Promise<vo
         maxSteps: AUTONOMOUS_CONFIG.MAX_STEPS,
         label: 'Main',
         logging: config.logging,
+        checkpoint: mainCheckpoint,
+      });
+    } else if (mode === 'decision') {
+      const { prompt, tools } = plugin.getAgentConfig!(ctx, 'decision');
+      const decisionCheckpoint = ctx.createCheckpoint && ctx.restoreState
+        ? { snapshot: ctx.createCheckpoint(), restore: ctx.restoreState }
+        : undefined;
+      await runAgent({
+        model,
+        systemPrompt: withStrategy(prompt),
+        getState: () => ctx.getReadableState(),
+        tools,
+        maxSteps: AUTONOMOUS_CONFIG.MAX_STEPS,
+        label: 'Decision',
+        logging: config.logging,
+        checkpoint: decisionCheckpoint,
       });
     } else {
-      // Setup or decision: single agent call
+      // Setup: no rewind support
       const { prompt, tools } = plugin.getAgentConfig!(ctx, mode);
       await runAgent({
         model,
@@ -397,7 +500,7 @@ export async function runAutonomousAgent(config: AIAutonomousConfig): Promise<vo
         getState: () => ctx.getReadableState(),
         tools,
         maxSteps: AUTONOMOUS_CONFIG.MAX_STEPS,
-        label: mode === 'decision' ? 'Decision' : 'Setup',
+        label: 'Setup',
         logging: config.logging,
       });
     }

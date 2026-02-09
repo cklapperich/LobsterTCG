@@ -16,6 +16,10 @@ export interface ToolContextDeps {
   translateZoneKey: (key: string, aiPlayerIndex: number) => string;
   describeAction: (state: GameState<CardTemplate>, action: Action) => string | null;
   onPreviewCard: (card: CardInstance<CardTemplate> | null) => void;
+  /** Create a deep-cloned game state snapshot for rewind checkpoints. */
+  createCheckpoint: () => any;
+  /** Replace game state with a previously checkpointed snapshot. */
+  restoreState: (snapshot: any) => void;
 }
 
 /**
@@ -38,6 +42,8 @@ export function createToolContext(
     translateZoneKey: (key) => deps.translateZoneKey(key, aiPlayer),
     getState: () => deps.getState(),
     getReadableState: () => deps.getReadableState(aiPlayer),
+    createCheckpoint: () => deps.createCheckpoint(),
+    restoreState: (snapshot) => deps.restoreState(snapshot),
     execute: (actionOrFactory) => {
       const result = queue.then(async () => {
         const currentState = deps.getState();

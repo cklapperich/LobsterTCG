@@ -563,6 +563,8 @@
       translateZoneKey: (key, aiIdx) => fromAIPerspective(key, aiIdx as 0 | 1),
       describeAction: (state, action) => describeAction(state, action, counterNameResolver),
       onPreviewCard: (card) => { previewCard = card; },
+      createCheckpoint: () => JSON.parse(JSON.stringify($state.snapshot(gameState!))),
+      restoreState: (snapshot) => { gameState = snapshot as GameState<CardTemplate>; gameState = { ...gameState }; },
     };
   }
 
