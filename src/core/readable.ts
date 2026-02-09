@@ -357,7 +357,12 @@ export function resolveCardName<T extends CardTemplate>(
   const ambiguousNames = findAmbiguousNames(zone.cards);
   const normalizedInput = normalizeQuotes(cardName);
 
-  for (const card of zone.cards) {
+  // Iterate from end (top of zone) first — after peeking from top, the
+  // relevant cards are at the end of the array.  This ensures that when
+  // duplicate names exist (e.g. multiple "Water Energy" in a deck), we
+  // resolve to the peeked copy rather than a hidden one deeper in the deck.
+  for (let i = zone.cards.length - 1; i >= 0; i--) {
+    const card = zone.cards[i];
     const displayName = computeDisplayName(card, ambiguousNames);
     if (displayName === cardName || normalizeQuotes(displayName) === normalizedInput) {
       return card.instanceId;
