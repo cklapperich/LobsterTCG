@@ -22,8 +22,3 @@ export const KEEP_LATEST_INFO_TOOL_NAMES = ['search_zone', 'peek'] as const;
 
 /** Tools whose results are ALWAYS preserved (small output). */
 export const ALWAYS_PRESERVE_TOOL_NAMES = ['coin_flip', 'dice_roll'] as const;
-
-export const SUBAGENT_CONFIG = {
-  MAX_TOKENS: 2048,
-  MAX_STEPS: 20,
-} as const;
