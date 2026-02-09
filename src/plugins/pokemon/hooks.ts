@@ -122,8 +122,8 @@ function warnOneEnergyAttachment(state: PokemonState, action: Action): PreHookRe
     return { outcome: 'continue' };
   }
 
-  // Same-zone rearrangement is not an energy attachment
-  if (fromZone && fromZone === toZone) return { outcome: 'continue' };
+  // Only hand → field counts as "normal" energy attachment
+  if (!fromZone?.endsWith('_hand')) return { outcome: 'continue' };
 
   // Only care about energy going to field zones
   if (!isFieldZone(toZone)) return { outcome: 'continue' };
@@ -131,8 +131,10 @@ function warnOneEnergyAttachment(state: PokemonState, action: Action): PreHookRe
   const template = getTemplateForCard(state, cardInstanceId);
   if (!template || !isEnergy(template)) return { outcome: 'continue' };
 
-  // Check if an energy was already attached to a field zone this turn
+  // Check if an energy was already attached (hand → field) this turn
   for (const prev of state.currentTurn.actions) {
+    if (prev.allowed_by_card_effect) continue;
+
     let prevCardId: string | undefined;
     let prevToZone: string | undefined;
     let prevFromZone: string | undefined;
@@ -150,8 +152,8 @@ function warnOneEnergyAttachment(state: PokemonState, action: Action): PreHookRe
     }
 
     if (!prevCardId || !prevToZone || !isFieldZone(prevToZone)) continue;
-    // Skip same-zone rearrangements in history
-    if (prevFromZone && prevFromZone === prevToZone) continue;
+    // Only count hand → field as a "normal" attachment
+    if (!prevFromZone?.endsWith('_hand')) continue;
 
     const prevTemplate = getTemplateForCard(state, prevCardId);
     if (prevTemplate && isEnergy(prevTemplate)) {
@@ -168,20 +170,25 @@ function warnEvolutionChain(state: PokemonState, action: Action): PreHookResult 
 
   let cardInstanceId: string;
   let toZone: string;
+  let fromZone: string | undefined;
 
   if (action.type === ACTION_TYPES.MOVE_CARD) {
     const a = action as MoveCardAction;
     cardInstanceId = a.cardInstanceId;
     toZone = a.toZone;
+    fromZone = a.fromZone;
   } else if (action.type === ACTION_TYPES.MOVE_CARD_STACK) {
     const a = action as MoveCardStackAction;
-    cardInstanceId = a.cardInstanceIds[0];
+    cardInstanceId = a.cardInstanceIds.at(-1)!;
     toZone = a.toZone;
+    fromZone = a.fromZone;
     if (!cardInstanceId) return { outcome: 'continue' };
   } else {
     return { outcome: 'continue' };
   }
 
+  // Only validate hand → field (skip staging resolution, promotions, etc.)
+  if (!fromZone?.endsWith('_hand')) return { outcome: 'continue' };
   if (!isFieldZone(toZone)) return { outcome: 'continue' };
 
   const template = getTemplateForCard(state, cardInstanceId);
@@ -212,20 +219,25 @@ function warnEvolutionTiming(state: PokemonState, action: Action): PreHookResult
 
   let cardInstanceId: string;
   let toZone: string;
+  let fromZone: string | undefined;
 
   if (action.type === ACTION_TYPES.MOVE_CARD) {
     const a = action as MoveCardAction;
     cardInstanceId = a.cardInstanceId;
     toZone = a.toZone;
+    fromZone = a.fromZone;
   } else if (action.type === ACTION_TYPES.MOVE_CARD_STACK) {
     const a = action as MoveCardStackAction;
-    cardInstanceId = a.cardInstanceIds[0];
+    cardInstanceId = a.cardInstanceIds.at(-1)!;
     toZone = a.toZone;
+    fromZone = a.fromZone;
     if (!cardInstanceId) return { outcome: 'continue' };
   } else {
     return { outcome: 'continue' };
   }
 
+  // Only validate hand → field (skip staging resolution, promotions, etc.)
+  if (!fromZone?.endsWith('_hand')) return { outcome: 'continue' };
   if (!isFieldZone(toZone)) return { outcome: 'continue' };
 
   const template = getTemplateForCard(state, cardInstanceId);
@@ -267,40 +279,53 @@ function warnCountersOnTrainers(state: PokemonState, action: Action): PreHookRes
   return { outcome: 'continue' };
 }
 
-// Warning 6: Only Basic Pokemon can be placed on empty field zones
-function warnNonBasicToEmptyField(state: PokemonState, action: Action): PreHookResult {
+// Warning 6: Pokemon placement — basics on empty only, evolutions on occupied only
+function warnPokemonPlacement(state: PokemonState, action: Action): PreHookResult {
   if (action.allowed_by_card_effect) return { outcome: 'continue' };
 
   let cardInstanceId: string;
   let toZone: string;
+  let fromZone: string | undefined;
 
   if (action.type === ACTION_TYPES.MOVE_CARD) {
-    const moveAction = action as MoveCardAction;
-    cardInstanceId = moveAction.cardInstanceId;
-    toZone = moveAction.toZone;
+    const a = action as MoveCardAction;
+    cardInstanceId = a.cardInstanceId;
+    toZone = a.toZone;
+    fromZone = a.fromZone;
   } else if (action.type === ACTION_TYPES.MOVE_CARD_STACK) {
-    const stackAction = action as MoveCardStackAction;
-    cardInstanceId = stackAction.cardInstanceIds[0];
-    toZone = stackAction.toZone;
+    const a = action as MoveCardStackAction;
+    cardInstanceId = a.cardInstanceIds.at(-1)!;
+    toZone = a.toZone;
+    fromZone = a.fromZone;
     if (!cardInstanceId) return { outcome: 'continue' };
   } else {
     return { outcome: 'continue' };
   }
 
+  // Only validate hand → field (skip staging resolution, promotions, etc.)
+  if (!fromZone?.endsWith('_hand')) return { outcome: 'continue' };
   if (!isFieldZone(toZone)) return { outcome: 'continue' };
 
   const template = getTemplateForCard(state, cardInstanceId);
   if (!template) return { outcome: 'continue' };
-  if (isBasicPokemon(template)) return { outcome: 'continue' };
 
-  // Check if the target zone is empty
+  // Only validate Pokemon cards — energy/tools handled by other hooks
+  if (template.supertype !== SUPERTYPES.POKEMON) return { outcome: 'continue' };
+
   const zone = state.zones[toZone];
-  if (!zone || zone.cards.length === 0) {
-    const label = template.supertype === SUPERTYPES.POKEMON
-      ? `${template.name} (${template.subtypes.join('/')})`
-      : `${template.name} (${template.supertype})`;
-    const zoneName = zone?.config.name?.toLowerCase() ?? toZone;
-    return blockOrWarn(action, `Cannot place ${label} on empty ${zoneName}. Only Basic Pokemon can be placed directly. Set allowed_by_card_effect if a card effect permits this.`);
+  const isEmpty = !zone || zone.cards.length === 0;
+  const zoneName = zone?.config.name ?? toZone;
+
+  if (isBasicPokemon(template)) {
+    if (!isEmpty) {
+      return blockOrWarn(action, `Cannot place ${template.name} (Basic) on occupied ${zoneName}. Basic Pokemon can only go on empty field zones. Set allowed_by_card_effect if a card effect permits this.`);
+    }
+    return { outcome: 'continue' };
+  }
+
+  // Non-basic (Stage 1, Stage 2) on empty zone
+  if (isEmpty) {
+    return blockOrWarn(action, `Cannot place ${template.name} (${template.subtypes.join('/')}) on empty ${zoneName.toLowerCase()}. Only Basic Pokemon can be placed directly. Set allowed_by_card_effect if a card effect permits this.`);
   }
 
   return { outcome: 'continue' };
@@ -499,10 +524,7 @@ function warnTrainerToField(state: PokemonState, action: Action): PreHookResult 
 
     // Trainer cards: only Pokemon Tools can attach to field Pokemon
     if (template.supertype === SUPERTYPES.TRAINER) {
-      const isPokemonTool = template.subtypes.some(
-        s => s.toLowerCase().includes('tool')
-      );
-      if (isPokemonTool) continue;
+      if (isTool(template)) continue;
 
       return blockOrWarn(action,
         `Cannot place ${template.name} (Trainer) on a field zone. Only Pokemon, Energy, and Pokemon Tools belong on the field.`
@@ -726,7 +748,7 @@ export const pokemonHooksPlugin: Plugin<PokemonCardTemplate> = {
       { hook: warnEvolutionChain, priority: 100 },
       { hook: warnEvolutionTiming, priority: 110 },
 
-      { hook: warnNonBasicToEmptyField, priority: 90 },
+      { hook: warnPokemonPlacement, priority: 90 },
       { hook: warnStadiumOnly, priority: 90 },
       { hook: warnTrainerToField, priority: 85 },
     ],
@@ -737,7 +759,7 @@ export const pokemonHooksPlugin: Plugin<PokemonCardTemplate> = {
       { hook: warnEvolutionChain, priority: 100 },
       { hook: warnEvolutionTiming, priority: 110 },
 
-      { hook: warnNonBasicToEmptyField, priority: 90 },
+      { hook: warnPokemonPlacement, priority: 90 },
       { hook: warnStadiumOnly, priority: 90 },
       { hook: warnTrainerToField, priority: 85 },
     ],
