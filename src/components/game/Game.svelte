@@ -160,11 +160,10 @@
   });
 
   // Announce turn start: SFX + log entry on any turn transition.
-  // Dedup key prevents re-firing for the same turn. aiThinking gate
-  // ensures this doesn't fire mid-AI-execution.
+  // Dedup key prevents re-firing for the same turn.
   let lastAnnouncedKey = '';
   $effect(() => {
-    if (!gameState || aiThinking || gameState.pendingDecision) return;
+    if (!gameState || gameState.pendingDecision) return;
     const key = `${gameState.phase}-${gameState.turnNumber}-${gameState.activePlayer}`;
     if (key !== lastAnnouncedKey) {
       lastAnnouncedKey = key;
