@@ -1,4 +1,4 @@
-import { generateText, jsonSchema } from 'ai';
+import { streamText, jsonSchema } from 'ai';
 import type { LanguageModelV1, ToolSet, CoreMessage } from 'ai';
 import { createFireworks } from '@ai-sdk/fireworks';
 import { createAnthropic } from '@ai-sdk/anthropic';
@@ -135,6 +135,10 @@ function createRateLimitedFetch(minDelayMs: number, maxRetries = 3): typeof fetc
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
         trackRequest();
         const res = await fetch(input, init);
+        if (res.status === 400) {
+          const body = await res.clone().text();
+          console.error('[400 body]', body);
+        }
         if (res.status !== 429) return res;
 
         const retryAfter = res.headers.get('retry-after');
@@ -258,9 +262,7 @@ async function runAgent(config: AgentConfig): Promise<AgentResult> {
     let lastText = '';
     let aborted = false;
 
-    const history: CoreMessage[] = [
-      { role: 'user' as const, content: systemPrompt },
-    ];
+    const history: CoreMessage[] = [];
 
     span.update({
       input: { systemPrompt: systemPrompt },
@@ -286,7 +288,7 @@ async function runAgent(config: AgentConfig): Promise<AgentResult> {
             input: { system: systemPrompt, messages: messagesWithState },
           });
 
-          const res = await generateText({
+          const stream = streamText({
             model,
             maxTokens: AI_CONFIG.MAX_TOKENS,
             maxRetries: 0,
@@ -294,10 +296,21 @@ async function runAgent(config: AgentConfig): Promise<AgentResult> {
             tools: sdkTools,
             maxSteps: 1,
             messages: messagesWithState,
-            onStepFinish: (s) => {
+            onStepFinish: (s: any) => {
               if (logging) logStepFinish(s);
             },
           });
+
+          // Drain the stream (executes tools, resolves all DelayedPromise properties)
+          await stream.consumeStream();
+
+          const res = {
+            text: await stream.text,
+            reasoning: await stream.reasoning,
+            toolCalls: await stream.toolCalls,
+            response: await stream.response,
+            usage: await stream.usage,
+          };
 
           gen.update({
             output: {
@@ -318,7 +331,7 @@ async function runAgent(config: AgentConfig): Promise<AgentResult> {
 
         stepCount++;
         lastText = result.text || lastText;
-
+4096
         // Accumulate response into history, then condense tool results
         const prevLen = history.length;
         for (const msg of result.response.messages) {
