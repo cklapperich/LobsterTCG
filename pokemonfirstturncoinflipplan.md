@@ -181,10 +181,8 @@
   time), that would require a different architecture, but the current
   sequential-with-hidden-info approach is rules-correct.
 
-✻ Sautéed for 53s
+❯ and if the pokemon hook function for setup calls the coin flip action with actionexecutor it  
+  will appear on screen                               
 
-❯ and if the pokemon hook function for setup calls the coin flip action it  
-  should appear on screen yeah?                                             
-
-This is the purpose of the actionexeecutor! 
+This is the purpose of the action_executor.ts! 
 
