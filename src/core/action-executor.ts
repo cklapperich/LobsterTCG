@@ -1,9 +1,11 @@
 import type { Action } from './types';
 import type { PlayerIndex } from './types';
-
+import type { GameState
+  
+ } from './types';
 export interface ActionExecutor {
   /** Execute action through plugin hooks + state mutation + reactivity trigger. Returns error string if blocked, null on success. */
-  tryAction(action: Action): string | null;
+  tryAction(action: Action): GameState | null;
   /** Flip a coin with visual animation. Returns true=heads, false=tails. */
   flipCoin(): Promise<boolean>;
   /** Play a sound effect. */

@@ -1,6 +1,6 @@
 export const AI_CONFIG = {
   DEFAULT_MODEL: 'accounts/fireworks/models/kimi-k2p5',
-  MAX_TOKENS: 4096,
+  MAX_TOKENS: 16384,
   MAX_STEPS: 30,
   /** Minimum ms between API requests to avoid 429 rate limits. */
   MIN_REQUEST_INTERVAL_MS: 1000,

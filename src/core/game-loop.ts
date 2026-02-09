@@ -142,9 +142,9 @@ export class GameLoop<T extends CardTemplate = CardTemplate> {
       }
     }
     if (!executed) {
-      const blocked = executeAction(this.state, action);
-      if (blocked) {
-        this.emit(GAME_EVENTS.ACTION_BLOCKED, { state: this.state, action, reason: blocked });
+      const newGameState = executeAction(this.state, action);
+      if (newGameState) {
+        this.emit(GAME_EVENTS.ACTION_BLOCKED, { state: this.state, action, reason: newGameState.actionBlockedReason });
         return;
       }
     }
