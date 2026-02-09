@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { DeckList } from './core';
+  import type { DeckSelection } from './core';
   import { DEFAULT_GAME_TYPE } from './game-types';
   import type { PlayerConfig } from './components/game/player-config';
   import DeckSelect from './components/game/DeckSelect.svelte';
@@ -10,8 +10,7 @@
   let currentScreen = $state<Screen>('deck-select');
   let selectedGame = $state<{
     gameType: string;
-    player1Deck?: DeckList;
-    player2Deck?: DeckList;
+    decks?: DeckSelection[];
     testFlags: Record<string, boolean>;
     playmatImage: string;
     aiModel: string;
@@ -21,8 +20,7 @@
 
   function handleStartGame(options: {
     gameType: string;
-    player1Deck?: DeckList;
-    player2Deck?: DeckList;
+    decks?: DeckSelection[];
     testFlags: Record<string, boolean>;
     playmatImage: string;
     aiModel: string;
@@ -44,8 +42,7 @@
 {:else if currentScreen === 'game' && selectedGame}
   <Game
     gameType={selectedGame.gameType}
-    player1Deck={selectedGame.player1Deck}
-    player2Deck={selectedGame.player2Deck}
+    decks={selectedGame.decks}
     testFlags={selectedGame.testFlags}
     playmatImage={selectedGame.playmatImage}
     aiModel={selectedGame.aiModel}

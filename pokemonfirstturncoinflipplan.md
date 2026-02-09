@@ -19,7 +19,10 @@
   └─────────────────────────────────────────────────────────┘
                            ↓
   ┌─────────────────────────────────────────────────────────┐
-  │ Game.svelte executeEndTurnInner():                      │
+  │ Game.svelte executeEndTurnInner():                      │toZone
+: 
+"your_active"
+
   │ └─ gameConfig.onSetupComplete?.(gameState)              │
   │    ← Called AFTER activePlayer already set to 0         │
   └─────────────────────────────────────────────────────────┘

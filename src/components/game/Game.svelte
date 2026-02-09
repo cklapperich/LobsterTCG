@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Playmat, CardInstance, CardTemplate, GameState, CounterDefinition, DeckList, ZoneConfig, Action, ActionExecutor } from '../../core';
+  import type { Playmat, CardInstance, CardTemplate, GameState, CounterDefinition, DeckList, DeckSelection, ZoneConfig, Action, ActionExecutor } from '../../core';
   import { executeAction, shuffle, moveCard, VISIBILITY, flipCard, endTurn, loadDeck, getCardName, findCardInZones, toReadableState, PluginManager, setOrientation, createDecision, resolveDecision, revealHand, mulligan as mulliganAction, PHASES, ACTION_TYPES } from '../../core';
   import { GAME_TYPES } from '../../game-types';
   import PlaymatGrid from './PlaymatGrid.svelte';
@@ -32,8 +32,7 @@
   // Props
   interface Props {
     gameType: string;
-    player1Deck?: DeckList;
-    player2Deck?: DeckList;
+    decks?: DeckSelection[];
     testFlags?: Record<string, boolean>;
     playmatImage?: string;
     aiModel?: string;
@@ -42,7 +41,11 @@
     onBackToMenu?: () => void;
   }
 
-  let { gameType, player1Deck, player2Deck, testFlags = {}, playmatImage, aiModel, playerConfig = DEFAULT_CONFIG, onBackToMenu }: Props = $props();
+  let { gameType, decks, testFlags = {}, playmatImage, aiModel, playerConfig = DEFAULT_CONFIG, onBackToMenu }: Props = $props();
+
+  // Convenience accessors for player decks
+  const player1Deck = $derived(decks?.[0]?.deckList);
+  const player2Deck = $derived(decks?.[1]?.deckList);
 
   // Resolve game type config
   const gameConfig = $derived(GAME_TYPES[gameType]);
@@ -580,6 +583,7 @@
         apiKey,
         model: selectedModel.modelId,
         provider: selectedModel.provider,
+        deckStrategy: decks?.[currentPlayer]?.strategy,
         logging: true,
       });
     } catch (e) {
@@ -616,6 +620,7 @@
         apiKey,
         model: selectedModel.modelId,
         provider: selectedModel.provider,
+        deckStrategy: decks?.[currentPlayer]?.strategy,
         logging: true,
       });
     } catch (e) {
@@ -656,6 +661,7 @@
         apiKey,
         model: selectedModel.modelId,
         provider: selectedModel.provider,
+        deckStrategy: decks?.[decisionTarget]?.strategy,
         logging: true,
       });
     } catch (e) {

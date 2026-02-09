@@ -370,6 +370,7 @@ export interface AIAutonomousConfig {
   model?: string;
   provider?: AIProvider;
   apiKey: string;
+  deckStrategy?: string;
   logging?: boolean;
 }
 
@@ -398,7 +399,7 @@ export async function runAutonomousAgent(config: AIAutonomousConfig): Promise<vo
   const provider = config.provider ?? 'fireworks';
 
   await startActiveObservation('ai-autonomous', async (agent) => {
-    const { context: ctx, plugin, apiKey } = config;
+    const { context: ctx, plugin, apiKey, deckStrategy } = config;
 
     agent.update({ metadata: { model: modelId, provider } });
 
@@ -406,6 +407,10 @@ export async function runAutonomousAgent(config: AIAutonomousConfig): Promise<vo
     const model = (provider === 'anthropic'
       ? createAnthropic({ apiKey, fetch: rateLimitedFetch })(modelId)
       : createFireworks({ apiKey, fetch: rateLimitedFetch })(modelId)) as any;
+
+    /** Append deck strategy to a prompt if available. */
+    const withStrategy = (prompt: string) =>
+      deckStrategy ? prompt + '\n\n## YOUR DECK STRATEGY\n' + deckStrategy : prompt;
 
     const mode = resolveMode(ctx);
     const isNormalTurn = mode === 'main';
@@ -418,7 +423,7 @@ export async function runAutonomousAgent(config: AIAutonomousConfig): Promise<vo
         const { prompt, tools } = plugin.getAgentConfig!(ctx, 'startOfTurn');
         await runAgent({
           model,
-          systemPrompt: prompt,
+          systemPrompt: withStrategy(prompt),
           getState: () => ctx.getReadableState(),
           tools,
           maxSteps: AUTONOMOUS_CONFIG.CHECKUP_MAX_STEPS,
@@ -430,7 +435,7 @@ export async function runAutonomousAgent(config: AIAutonomousConfig): Promise<vo
       const { prompt, tools } = plugin.getAgentConfig!(ctx, 'main');
       await runAgent({
         model,
-        systemPrompt: prompt,
+        systemPrompt: withStrategy(prompt),
         getState: () => ctx.getReadableState(),
         tools,
         maxSteps: AUTONOMOUS_CONFIG.MAX_STEPS,
@@ -442,7 +447,7 @@ export async function runAutonomousAgent(config: AIAutonomousConfig): Promise<vo
       const { prompt, tools } = plugin.getAgentConfig!(ctx, mode);
       await runAgent({
         model,
-        systemPrompt: prompt,
+        systemPrompt: withStrategy(prompt),
         getState: () => ctx.getReadableState(),
         tools,
         maxSteps: AUTONOMOUS_CONFIG.MAX_STEPS,

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { DeckList } from '../../core';
+  import type { DeckList, DeckSelection } from '../../core';
   import { parsePTCGODeck } from '../../plugins/pokemon/cards';
   import { playSfx } from '../../lib/audio.svelte';
   import SettingsModal from './SettingsModal.svelte';
@@ -14,6 +14,7 @@
     name: string;
     deckList: DeckList;
     cardCount: number;
+    strategy: string;
   }
 
   interface PlaymatOption {
@@ -25,8 +26,7 @@
   interface Props {
     onStartGame: (options: {
       gameType: string;
-      player1Deck?: DeckList;
-      player2Deck?: DeckList;
+      decks?: DeckSelection[];
       testFlags: Record<string, boolean>;
       playmatImage: string;
       aiModel: string;
@@ -73,38 +73,52 @@
       return;
     }
 
-    // Load deck files using Vite's glob import
-    const deckModules = import.meta.glob('/src/plugins/pokemon/decks/*.txt', {
-      query: '?raw',
-      import: 'default',
-    });
+    // Fetch deck manifest from public directory
+    const basePath = `/${gameType}/decks`;
+    let deckNames: string[];
+    try {
+      const res = await fetch(`${basePath}/index.json`);
+      if (!res.ok) throw new Error(`Failed to fetch deck index: ${res.status}`);
+      deckNames = await res.json();
+    } catch (e) {
+      console.error('Failed to load deck index:', e);
+      loading = false;
+      return;
+    }
 
     const options: DeckOption[] = [];
 
-    // Load each deck file
-    for (const [path, loader] of Object.entries(deckModules)) {
+    // Fetch each deck file + optional strategy file in parallel
+    await Promise.all(deckNames.map(async (deckName) => {
       try {
-        const content = (await loader()) as string;
-        const filename = path.split('/').pop()?.replace('.txt', '') ?? 'Unknown';
-        const displayName = filename.charAt(0).toUpperCase() + filename.slice(1);
+        const encoded = encodeURIComponent(deckName);
+        const [deckRes, stratRes] = await Promise.all([
+          fetch(`${basePath}/${encoded}.txt`),
+          fetch(`${basePath}/${encoded}_strategy.txt`).catch(() => null),
+        ]);
+        if (!deckRes.ok) throw new Error(`HTTP ${deckRes.status}`);
+        const content = await deckRes.text();
+        const strategy = stratRes?.ok ? await stratRes.text() : '';
+        const displayName = deckName.charAt(0).toUpperCase() + deckName.slice(1);
 
         const { deckList, warnings } = parsePTCGODeck(content, displayName);
         const cardCount = deckList.cards.reduce((sum, c) => sum + c.count, 0);
 
         if (warnings.length > 0) {
-          console.warn(`Warnings parsing ${filename}:`, warnings);
+          console.warn(`Warnings parsing ${deckName}:`, warnings);
         }
 
         options.push({
-          id: filename,
+          id: deckName,
           name: displayName,
           deckList,
           cardCount,
+          strategy,
         });
       } catch (e) {
-        console.error(`Failed to load deck from ${path}:`, e);
+        console.error(`Failed to load deck ${deckName}:`, e);
       }
-    }
+    }));
 
     deckOptions = options;
     if (!player1Deck || !options.find(d => d.id === player1Deck)) {
@@ -118,7 +132,7 @@
 
   // Re-load decks when game type changes
   $effect(() => {
-    // Access gameType to make this effect reactive
+    gameType; // Access to make this effect reactive
     loading = true;
     deckOptions = [];
     testFlags = {};
@@ -137,8 +151,10 @@
       const selectedPlaymat = playmatOptions.find(p => p.id === playmatImage);
       onStartGame({
         gameType,
-        player1Deck: deck1.deckList,
-        player2Deck: deck2.deckList,
+        decks: [
+          { deckList: deck1.deckList, strategy: deck1.strategy },
+          { deckList: deck2.deckList, strategy: deck2.strategy },
+        ],
         testFlags,
         playmatImage: selectedPlaymat?.url ?? '',
         aiModel,
