@@ -105,85 +105,6 @@ export function toAISDKTools(tools: RunnableTool[], abort?: AbortController, ste
   return result;
 }
 
-/**
- * Create a fetch wrapper that:
- * 1. Serializes requests with a minimum delay between each one
- * 2. Intercepts 429 responses and retries with Retry-After awareness
- *
- * This handles rate limits transparently so the AI SDK's own retry loop
- * (which doesn't respect Retry-After) doesn't pile on more 429s.
- */
-function createRateLimitedFetch(minDelayMs: number, maxRetries = 3): typeof fetch {
-  let nextAllowedTime = 0;
-  let queue: Promise<void> = Promise.resolve();
-
-  // RPM tracker: rolling window of request timestamps
-  const requestTimestamps: number[] = [];
-  let logInterval: ReturnType<typeof setInterval> | null = null;
-
-  function trackRequest() {
-    const now = Date.now();
-    requestTimestamps.push(now);
-    if (!logInterval) {
-      logInterval = setInterval(() => {
-        const cutoff = Date.now() - 60000;
-        while (requestTimestamps.length > 0 && requestTimestamps[0] < cutoff) {
-          requestTimestamps.shift();
-        }
-        if (requestTimestamps.length > 0) {
-          console.log(`[rate-limit] RPM: ${requestTimestamps.length} requests in last 60s`);
-        } else {
-          clearInterval(logInterval!);
-          logInterval = null;
-        }
-      }, 10000);
-    }
-  }
-
-  const throttledFetch = ((input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const myTurn = queue.then(async () => {
-      const now = Date.now();
-      const wait = Math.max(0, nextAllowedTime - now);
-      if (wait > 0) {
-        console.log(`[rate-limit] waiting ${wait}ms before request`);
-        await new Promise(r => setTimeout(r, wait));
-      }
-      nextAllowedTime = Date.now() + minDelayMs;
-    });
-    queue = myTurn.catch(() => {});
-
-    return myTurn.then(async () => {
-      for (let attempt = 0; attempt <= maxRetries; attempt++) {
-        trackRequest();
-        const res = await fetch(input, init);
-        if (res.status === 400) {
-          const body = await res.clone().text();
-          console.error('[400 body]', body);
-        }
-        if (res.status !== 429) return res;
-
-        const retryAfter = res.headers.get('retry-after');
-        const waitMs = retryAfter
-          ? Math.ceil(parseFloat(retryAfter) * 1000)
-          : Math.min(2000 * Math.pow(2, attempt), 30000);
-
-        nextAllowedTime = Math.max(nextAllowedTime, Date.now() + waitMs);
-
-        if (attempt < maxRetries) {
-          console.warn(`[rate-limit] 429 received, retry ${attempt + 1}/${maxRetries} after ${waitMs}ms`);
-          await new Promise(r => setTimeout(r, waitMs));
-        } else {
-          console.warn(`[rate-limit] 429 received, all ${maxRetries} retries exhausted`);
-        }
-      }
-      trackRequest();
-      return fetch(input, init);
-    });
-  }) as typeof fetch;
-
-  return throttledFetch;
-}
-
 // ── Agent Runner ────────────────────────────────────────────────
 
 interface AgentConfig {
@@ -429,10 +350,9 @@ export async function runAutonomousAgent(config: AIAutonomousConfig): Promise<vo
 
     agent.update({ metadata: { model: modelId, provider } });
 
-    const rateLimitedFetch = createRateLimitedFetch(AI_CONFIG.MIN_REQUEST_INTERVAL_MS);
     const model = (provider === 'anthropic'
-      ? createAnthropic({ apiKey, fetch: rateLimitedFetch })(modelId)
-      : createFireworks({ apiKey, fetch: rateLimitedFetch })(modelId)) as any;
+      ? createAnthropic({ apiKey, baseURL: '/api/anthropic/v1' })(modelId)
+      : createFireworks({ apiKey })(modelId)) as any;
 
     /** Append deck strategy to a prompt if available. */
     const withStrategy = (prompt: string) =>

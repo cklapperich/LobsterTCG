@@ -570,6 +570,7 @@
     if (!gameState || aiThinking || !hasAI) return;
     const currentPlayer = gameState.activePlayer;
     const apiKey = import.meta.env[selectedModel.apiKeyEnv];
+    console.log('[DEBUG] apiKey env:', selectedModel.apiKeyEnv, 'value:', apiKey ? `${apiKey.slice(0, 8)}...` : 'MISSING');
     if (!apiKey) return;
     aiThinking = true;
     addLog('[AI] Thinking...');
