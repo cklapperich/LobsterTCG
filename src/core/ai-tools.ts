@@ -625,7 +625,7 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
     // ── End Turn ───────────────────────────────────────────────────
     tool({
       name: 'end_turn',
-      description: 'End your turn and pass to the opponent.',
+      description: 'End your turn and pass to the opponent. Never call in parallel, always call alone.',
       inputSchema: {
         type: 'object' as const,
         properties: {},
