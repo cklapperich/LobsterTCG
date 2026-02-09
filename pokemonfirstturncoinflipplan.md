@@ -24,7 +24,5 @@
   │    ← Called AFTER activePlayer already set to 0         │
   └─────────────────────────────────────────────────────────┘
 
-engine.ts line 140 hardcodes all the values
-
 Need to determine who goes first by doing a coni flip with @action_executor.ts 
 Then set the first player, which is currently hardcoded in gameSvelte.ts
