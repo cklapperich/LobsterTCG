@@ -100,6 +100,8 @@ function warnNoSupporterFirstTurn(state: PokemonState, action: Action): PreHookR
 }
 
 // Warning 2: Only one Energy attachment per turn
+// ONLY applies when toZone is active or bench (field zones). Moving energy
+// to discard, hand, staging, etc. is never restricted by this rule.
 function warnOneEnergyAttachment(state: PokemonState, action: Action): PreHookResult {
   if (action.allowed_by_card_effect) return { outcome: 'continue' };
 
@@ -122,11 +124,11 @@ function warnOneEnergyAttachment(state: PokemonState, action: Action): PreHookRe
     return { outcome: 'continue' };
   }
 
+  // Primary gate: only care about energy going TO field zones (active/bench)
+  if (!isFieldZone(toZone)) return { outcome: 'continue' };
+
   // Only hand → field counts as "normal" energy attachment
   if (!fromZone?.endsWith('_hand')) return { outcome: 'continue' };
-
-  // Only care about energy going to field zones
-  if (!isFieldZone(toZone)) return { outcome: 'continue' };
 
   const template = getTemplateForCard(state, cardInstanceId);
   if (!template || !isEnergy(template)) return { outcome: 'continue' };
@@ -152,7 +154,6 @@ function warnOneEnergyAttachment(state: PokemonState, action: Action): PreHookRe
     }
 
     if (!prevCardId || !prevToZone || !isFieldZone(prevToZone)) continue;
-    // Only count hand → field as a "normal" attachment
     if (!prevFromZone?.endsWith('_hand')) continue;
 
     const prevTemplate = getTemplateForCard(state, prevCardId);
