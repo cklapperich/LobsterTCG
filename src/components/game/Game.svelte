@@ -840,12 +840,16 @@
   }
 
   function handleRevealToOpponent() {
-    if (!gameState || !contextMenu || gameState.pendingDecision) return;
+    if (!gameState || !contextMenu) return;
+
     const zoneKey = contextMenu.zoneKey;
     const zone = gameState.zones[zoneKey];
     const cardNames = zone?.cards.map(c => c.template.name).join(', ') ?? '';
     const zoneName = zone?.config.name ?? zoneKey;
-    executeAction(gameState, revealHand(local, zoneKey));
+    const err_or_block_reason = executeAction(gameState, revealHand(local, zoneKey));
+    if (err_or_block_reason){
+      return;
+    }
     addLog(`[Player ${local + 1}] Revealed ${zoneName}: ${cardNames}`);
     playSfx('confirm');
 
