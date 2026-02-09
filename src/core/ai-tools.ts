@@ -51,6 +51,10 @@ export interface ToolContext {
   formatCardForSearch?: (template: CardTemplate) => string;
   /** Translate AI-perspective zone keys (your_hand, opponent_active) to internal keys (player2_hand, player1_active). */
   translateZoneKey?: (key: string) => string;
+  /** Create a deep-cloned snapshot of current game state, safe from Svelte proxy issues. */
+  createCheckpoint?: () => any;
+  /** Replace the entire game state with a previously checkpointed snapshot (used by rewind). */
+  restoreState?: (snapshot: any) => void;
 }
 
 /**
@@ -729,6 +733,25 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
       async run(input) {
         const count = input.drawCount ?? 7;
         return ctx.execute(mulligan(p, count));
+      },
+    }),
+
+    // ── Rewind ────────────────────────────────────────────────────
+    tool({
+      name: 'rewind',
+      description: 'Undo ALL actions you have taken this turn and start over with a different approach. Use when you realize you made a strategic mistake or went down a wrong path. This resets the game state to the start of your turn and clears your conversation history.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          reason: { type: 'string', description: 'What went wrong with the current approach' },
+          guidance: { type: 'string', description: 'What to do differently on the retry' },
+        },
+        required: ['reason', 'guidance'],
+      },
+      async run(input) {
+        // The actual state restoration and history clearing are handled by the
+        // signal mechanism in runAgent(). This tool just returns a confirmation.
+        return `Rewind requested: ${input.reason}. Will retry with guidance: ${input.guidance}`;
       },
     }),
   ];
