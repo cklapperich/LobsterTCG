@@ -51,5 +51,4 @@ export interface GameState<T extends CardTemplate = CardTemplate> {
   startedAt: number;
   lastActionAt: number;
   log: string[];
-  actionBlockedReason:string
 }

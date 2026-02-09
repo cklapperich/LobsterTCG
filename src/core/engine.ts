@@ -150,7 +150,6 @@ export function createGameState<T extends CardTemplate>(
     startedAt: now,
     lastActionAt: now,
     log: [],
-    actionBlockedReason:''
   };
 }
 
@@ -424,7 +423,6 @@ function executeMoveCardStack<T extends CardTemplate>(
     toZone.cards.push(...cards);
   }
 
-  state.log.push(`${action.player} has moved ${toZone.cards[-1].template.name}'s stack from ${fromZone.key} to ${toZone.key}`);
   consolidateCountersToTop(toZone);
 }
 
@@ -770,10 +768,6 @@ function executeSwapCardStacks<T extends CardTemplate>(
     zone2.cards.push(card);
   }
 
-  // if its a stack of cards, we only need to know the top of each stack!
-  state.log.push(`${action.player} has swapped ${zone2.cards[-1].template.name} stack with ${zone1.cards[-1].template.name}`);
-
-  //TODO: This could be a universal-to-all-games hook for anytime cards move zones.. but thats for later! 
   consolidateCountersToTop(zone1);
   consolidateCountersToTop(zone2);
 }
@@ -1026,13 +1020,13 @@ export function checkOpponentZone<T extends CardTemplate>(
 export function executeAction<T extends CardTemplate>(
   state: GameState<T>,
   action: Action
-): null | GameState<T> {
+): string | null {
   // Capacity pre-check (before recording in action history)
   if (!action.allowed_by_card_effect) {
     const blocked = checkZoneCapacity(state, action);
     if (blocked) {
       state.log.push(blocked);
-      return null;
+      return blocked;
     }
   }
 
@@ -1047,7 +1041,7 @@ export function executeAction<T extends CardTemplate>(
       const moveErr = executeMoveCard(state, action);
       if (moveErr) {
         state.log.push(moveErr);
-        return null;
+        return moveErr;
       }
       break;
     }
@@ -1097,7 +1091,7 @@ export function executeAction<T extends CardTemplate>(
       const decErr = executeCreateDecision(state, action);
       if (decErr) {
         state.log.push(decErr);
-        return null;
+        return decErr;
       }
       break;
     }
@@ -1105,7 +1099,7 @@ export function executeAction<T extends CardTemplate>(
       const resErr = executeResolveDecision(state, action);
       if (resErr) {
         state.log.push(resErr);
-        return null;
+        return resErr;
       }
       break;
     }
@@ -1113,7 +1107,7 @@ export function executeAction<T extends CardTemplate>(
       const rhErr = executeRevealHand(state, action);
       if (rhErr) {
         state.log.push(rhErr);
-        return null;
+        return rhErr;
       }
       break;
     }
@@ -1141,7 +1135,8 @@ export function executeAction<T extends CardTemplate>(
       state.log.push(action.message ?? `${action.name} declared`);
       break;
   }
-  return state;
+
+  return null;
 }
 
 // ============================================================================

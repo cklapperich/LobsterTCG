@@ -331,7 +331,7 @@ async function runAgent(config: AgentConfig): Promise<AgentResult> {
 
         stepCount++;
         lastText = result.text || lastText;
-4096
+
         // Accumulate response into history, then condense tool results
         const prevLen = history.length;
         for (const msg of result.response.messages) {
