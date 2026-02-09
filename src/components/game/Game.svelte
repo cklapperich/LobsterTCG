@@ -249,7 +249,7 @@
   }
 
   function handleCoinResult(result: 'heads' | 'tails') {
-    const label = aiThinking ? '[AI]' : `[Player ${(gameState?.activePlayer ?? 0) + 1}]`;
+    const label = `[Player ${(gameState?.activePlayer ?? 0) + 1}]`;
     addLog(`${label} Coin flip: ${result === 'heads' ? 'HEADS' : 'TAILS'}`);
   }
 

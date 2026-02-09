@@ -18,7 +18,7 @@ async function startSolitaireGame(): Promise<GameState<SolitaireCardTemplate>> {
   return createGameState<SolitaireCardTemplate>(config, 'player', 'none');
 }
 
-function getCardInfo(template: SolitaireCardTemplate): string {
+function getCardName(template: SolitaireCardTemplate): string {
   return template.name;
 }
 
@@ -91,7 +91,7 @@ function onActionPanelClick(
 export const plugin: GamePlugin<SolitaireCardTemplate> = {
   getPlaymat: getSolitairePlaymat,
   startGame: startSolitaireGame,
-  getCardInfo,
+  getCardName,
   getActionPanels,
   onActionPanelClick,
 };
