@@ -4,9 +4,8 @@ import { createFireworks } from '@ai-sdk/fireworks';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import type { GamePlugin } from '../core';
 import type { ToolContext, RunnableTool } from '../core/ai-tools';
-import { createSpawnSubagentTool } from './spawn-subagent';
 import { logStepFinish } from './logging';
-import { AI_CONFIG, PIPELINE_CONFIG, AUTONOMOUS_CONFIG, TERMINAL_TOOL_NAMES } from './constants';
+import { AI_CONFIG, AUTONOMOUS_CONFIG, TERMINAL_TOOL_NAMES, KEEP_LATEST_INFO_TOOL_NAMES, ALWAYS_PRESERVE_TOOL_NAMES } from './constants';
 import { startActiveObservation } from '@langfuse/tracing';
 
 export type AIProvider = 'fireworks' | 'anthropic';
@@ -50,17 +49,6 @@ export const MODEL_OPTIONS: ModelOption[] = [
   },
 ];
 
-export interface AITurnConfig {
-  context: ToolContext;
-  plugin: GamePlugin;
-  heuristics: string;
-  model?: string;
-  provider?: AIProvider;
-  apiKey: string;
-  logging?: boolean;
-  decisionMode?: boolean;
-  setupMode?: boolean;
-}
 
 /** Tools that signal the end of an AI turn — no further steps needed. */
 const TERMINAL_TOOLS = new Set<string>(TERMINAL_TOOL_NAMES);
@@ -180,7 +168,6 @@ interface AgentConfig {
   /** Called before every LLM call to get fresh readable state. */
   getState: () => string;
   /** Initial user message — task instructions only (state is the last message). */
-  initialMessage: string;
   tools: RunnableTool[];
   maxSteps: number;
   label: string;
@@ -193,24 +180,56 @@ interface AgentResult {
   aborted: boolean;
 }
 
+/** Set of tool names that share a single "keep latest" slot. */
+const KEEP_LATEST_SET = new Set<string>(KEEP_LATEST_INFO_TOOL_NAMES);
+/** Set of tool names whose results are always preserved. */
+const ALWAYS_PRESERVE_SET = new Set<string>(ALWAYS_PRESERVE_TOOL_NAMES);
+
 /**
  * Condense tool results in message history to save tokens.
- * Replaces verbose tool-result content with a short summary like
- * "[move_card succeeded]" or "[move_card failed: Card not found...]".
+ *
+ * Strategy:
+ * - peek/search_zone share a single "keep latest" slot: only the most recent
+ *   call is preserved, older ones are condensed. Rationale: peek and search
+ *   are mutually exclusive (searching invalidates peek positions).
+ * - coin_flip/dice_roll are always preserved (small output).
+ * - All other tool results are condensed to "[tool_name succeeded]".
+ *
  * Only processes messages from `fromIndex` onward.
  */
 function condenseToolResults(history: CoreMessage[], fromIndex: number): void {
+  // First pass: find the index of the most recent peek/search tool result
+  // across the ENTIRE history (not just fromIndex onward) so we preserve it.
+  let lastInfoToolIndex = -1;
+  for (let i = 0; i < history.length; i++) {
+    const msg = history[i];
+    if (msg.role === 'tool' && Array.isArray(msg.content)) {
+      for (const part of msg.content as any[]) {
+        if (part.type === 'tool-result' && KEEP_LATEST_SET.has(part.toolName)) {
+          lastInfoToolIndex = i;
+        }
+      }
+    }
+  }
+
+  // Second pass: condense from fromIndex onward
   for (let i = fromIndex; i < history.length; i++) {
     const msg = history[i];
     if (msg.role === 'tool' && Array.isArray(msg.content)) {
       for (const part of msg.content as any[]) {
-        if (part.type === 'tool-result') {
-          const raw = typeof part.result === 'string' ? part.result : JSON.stringify(part.result);
-          const isError = raw.toLowerCase().startsWith('error');
-          part.result = isError
-            ? `[${part.toolName} failed: ${raw.slice(0, 120)}]`
-            : `[${part.toolName} succeeded]`;
-        }
+        if (part.type !== 'tool-result') continue;
+
+        // Always preserve coin_flip / dice_roll
+        if (ALWAYS_PRESERVE_SET.has(part.toolName)) continue;
+
+        // Preserve the single most recent peek/search result
+        if (KEEP_LATEST_SET.has(part.toolName) && i === lastInfoToolIndex) continue;
+
+        const raw = typeof part.result === 'string' ? part.result : JSON.stringify(part.result);
+        const isError = raw.toLowerCase().startsWith('error');
+        part.result = isError
+          ? `[${part.toolName} failed: ${raw.slice(0, 120)}]`
+          : `[${part.toolName} succeeded]`;
       }
     }
   }
@@ -232,7 +251,7 @@ function condenseToolResults(history: CoreMessage[], fromIndex: number): void {
  */
 async function runAgent(config: AgentConfig): Promise<AgentResult> {
   return startActiveObservation(config.label, async (span) => {
-    const { model, systemPrompt, getState, initialMessage, tools, maxSteps, label, logging } = config;
+    const { model, systemPrompt, getState, tools, maxSteps, label, logging } = config;
     const abort = new AbortController();
     const sdkTools = tools.length > 0 ? toAISDKTools(tools, abort) : undefined;
     let stepCount = 0;
@@ -240,12 +259,12 @@ async function runAgent(config: AgentConfig): Promise<AgentResult> {
     let aborted = false;
 
     const history: CoreMessage[] = [
-      { role: 'user' as const, content: initialMessage },
+      { role: 'user' as const, content: systemPrompt },
     ];
 
     span.update({
-      input: { systemPrompt: systemPrompt.slice(0, 500), initialMessage },
-      metadata: { maxSteps, toolCount: tools.length },
+      input: { systemPrompt: systemPrompt },
+      metadata: { maxSteps, toolCount: tools.length, toolNames: tools.map(t => t.name) },
     });
 
     if (logging) {
@@ -262,18 +281,40 @@ async function runAgent(config: AgentConfig): Promise<AgentResult> {
           { role: 'user' as const, content: `[CURRENT GAME STATE]\n${freshState}` },
         ];
 
-        const result = await generateText({
-          model,
-          maxTokens: AI_CONFIG.MAX_TOKENS,
-          maxRetries: 0,
-          system: systemPrompt,
-          tools: sdkTools,
-          maxSteps: 1,
-          messages: messagesWithState,
-          onStepFinish: (s) => {
-            if (logging) logStepFinish(s);
-          },
-        });
+        const result = await startActiveObservation(`${label}/step-${step}`, async (gen) => {
+          gen.update({
+            input: { system: systemPrompt, messages: messagesWithState },
+          });
+
+          const res = await generateText({
+            model,
+            maxTokens: AI_CONFIG.MAX_TOKENS,
+            maxRetries: 0,
+            system: systemPrompt,
+            tools: sdkTools,
+            maxSteps: 1,
+            messages: messagesWithState,
+            onStepFinish: (s) => {
+              if (logging) logStepFinish(s);
+            },
+          });
+
+          gen.update({
+            output: {
+              text: res.text,
+              reasoning: res.reasoning,
+              toolCalls: res.toolCalls,
+              responseMessages: res.response.messages,
+            },
+            usageDetails: {
+              input: res.usage?.promptTokens ?? 0,
+              output: res.usage?.completionTokens ?? 0,
+              total: res.usage?.totalTokens ?? 0,
+            },
+          });
+
+          return res;
+        }, { asType: 'generation' });
 
         stepCount++;
         lastText = result.text || lastText;
@@ -291,8 +332,10 @@ async function runAgent(config: AgentConfig): Promise<AgentResult> {
           break;
         }
 
-        // No tool calls → model is done
-        if (!result.toolCalls || result.toolCalls.length === 0) break;
+        // No tool calls (e.g. thinking consumed all output tokens) → log and continue
+        if (!result.toolCalls || result.toolCalls.length === 0) {
+          if (logging) console.log(`%c[${label}] step ${step}: no tool calls, continuing`, 'color: #f80');
+        }
       }
     } catch (e: any) {
       if (logging) console.groupEnd();
@@ -301,225 +344,9 @@ async function runAgent(config: AgentConfig): Promise<AgentResult> {
     }
 
     if (logging) console.groupEnd();
-    span.update({ output: { stepCount, aborted } });
+    span.update({ output: { stepCount, aborted, finalHistory: history } });
     return { text: lastText, stepCount, aborted };
   }, { asType: 'span' });
-}
-
-// ── Shared Checkup Phase ────────────────────────────────────────
-
-async function runCheckupPhase(config: {
-  model: LanguageModelV1;
-  ctx: ToolContext;
-  plugin: GamePlugin;
-  checkupPrompt: string;
-  maxSteps: number;
-  logging?: boolean;
-  logPrefix: string;
-}): Promise<void> {
-  const { model, ctx, plugin, checkupPrompt, maxSteps, logging, logPrefix } = config;
-
-  let skip = false;
-  try {
-    skip = await plugin.shouldSkipStartOfTurn?.(ctx) ?? false;
-  } catch (e) {
-    console.warn(`[${logPrefix}] shouldSkipStartOfTurn hook failed:`, e);
-  }
-  if (skip) return;
-
-  try {
-    ctx.agentRole = 'checkup';
-    const tools = plugin.listTools!(ctx);
-    if (tools.length === 0) return;
-
-    await runAgent({
-      model,
-      systemPrompt: checkupPrompt,
-      getState: () => ctx.getReadableState(),
-      initialMessage: 'Perform the start-of-turn checkup, then call end_phase.',
-      tools,
-      maxSteps,
-      label: 'Checkup',
-      logging,
-    });
-  } catch (e) {
-    console.warn(`[${logPrefix}] Checkup agent failed, continuing:`, e);
-  }
-}
-
-// ── Single-Agent Turn Runner (setup/decision/turn) ──────────────
-
-export async function runAITurn(config: AITurnConfig): Promise<void> {
-  const turnType = config.setupMode ? 'setup' : config.decisionMode ? 'decision' : 'turn';
-  const modelId = config.model ?? AI_CONFIG.DEFAULT_MODEL;
-  const provider = config.provider ?? 'fireworks';
-
-  await startActiveObservation(`ai-turn:${turnType}`, async (agent) => {
-    agent.update({ metadata: { model: modelId, provider, turnType } });
-
-    const { context, plugin, heuristics, apiKey } = config;
-
-    const rateLimitedFetch = createRateLimitedFetch(AI_CONFIG.MIN_REQUEST_INTERVAL_MS);
-    const model = (provider === 'anthropic'
-      ? createAnthropic({ apiKey, fetch: rateLimitedFetch })(modelId)
-      : createFireworks({ apiKey, fetch: rateLimitedFetch })(modelId)) as any;
-
-    const gameTools = plugin.listTools!(context);
-    const subagentTool = createSpawnSubagentTool(model, gameTools, heuristics);
-    const allTools = [...gameTools, subagentTool];
-
-    const initialMessage = config.setupMode
-      ? 'Do your setup.'
-      : config.decisionMode
-      ? 'Your opponent has requested a decision. Read the pendingDecision field and recent log entries. Take the necessary actions, then call resolve_decision when done.'
-      : 'It\'s your turn. Take actions to advance toward winning. Call end_turn when done.';
-
-    await runAgent({
-      model,
-      systemPrompt: heuristics,
-      getState: () => context.getReadableState(),
-      initialMessage,
-      tools: allTools,
-      maxSteps: AI_CONFIG.MAX_STEPS,
-      label: turnType.charAt(0).toUpperCase() + turnType.slice(1),
-      logging: config.logging,
-    });
-  }, { asType: 'agent' });
-}
-
-// ── Multi-Agent Pipeline ────────────────────────────────────────
-
-export interface AIPipelineConfig {
-  context: ToolContext;
-  plugin: GamePlugin;
-  checkupPrompt: string;
-  plannerPrompt: string;
-  executorPrompt: string;
-  model?: string;
-  provider?: AIProvider;
-  apiKey: string;
-  logging?: boolean;
-}
-
-/**
- * Run a full AI turn as a 3-phase pipeline:
- *   1. Checkup Agent — handles poison/burn/sleep/draw
- *   2. Planner Agent — reads state, outputs a text plan (no tools)
- *   3. Executor Agent — receives plan, executes with tools
- *
- * Phases 2+3 loop with error recovery (max PIPELINE_CONFIG.MAX_RETRY_CYCLES retries).
- */
-export async function runAIPipeline(config: AIPipelineConfig): Promise<void> {
-  const modelId = config.model ?? AI_CONFIG.DEFAULT_MODEL;
-  const provider = config.provider ?? 'fireworks';
-
-  await startActiveObservation('ai-pipeline', async (chain) => {
-    const { context: ctx, plugin, apiKey } = config;
-
-    chain.update({ metadata: { model: modelId, provider } });
-
-    const rateLimitedFetch = createRateLimitedFetch(AI_CONFIG.MIN_REQUEST_INTERVAL_MS);
-    const model = (provider === 'anthropic'
-      ? createAnthropic({ apiKey, fetch: rateLimitedFetch })(modelId)
-      : createFireworks({ apiKey, fetch: rateLimitedFetch })(modelId)) as any;
-
-    // ── Phase 1: CHECKUP ──────────────────────────────────────────
-    await runCheckupPhase({
-      model, ctx, plugin,
-      checkupPrompt: config.checkupPrompt,
-      maxSteps: PIPELINE_CONFIG.CHECKUP_MAX_STEPS,
-      logging: config.logging,
-      logPrefix: 'AI Pipeline',
-    });
-
-    // ── Phases 2+3: PLANNER → EXECUTOR retry loop ─────────────────
-    let lastError: string | undefined;
-
-    for (let attempt = 0; attempt <= PIPELINE_CONFIG.MAX_RETRY_CYCLES; attempt++) {
-      // Phase 2: PLANNER (no tools, text-only output)
-      ctx.agentRole = 'planner';
-      const plannerTools = plugin.listTools!(ctx);
-
-      let plannerExtra = '';
-      if (lastError) {
-        plannerExtra = `\n\n⚠️ RETRY: The previous execution attempt failed with this error:\n${lastError}\nPlease adjust your plan to avoid this issue.`;
-      }
-
-      let planText = '';
-      try {
-        const planResult = await runAgent({
-          model,
-          systemPrompt: config.plannerPrompt,
-          getState: () => ctx.getReadableState(),
-          initialMessage: `Plan your turn. Output a numbered plan as text.${plannerExtra}`,
-          tools: plannerTools,
-          maxSteps: PIPELINE_CONFIG.PLANNER_MAX_STEPS,
-          label: attempt > 0 ? `Planner (retry ${attempt})` : 'Planner',
-          logging: config.logging,
-        });
-        planText = planResult.text;
-      } catch (e) {
-        console.warn('[AI Pipeline] Planner failed:', e);
-        planText = 'Execute your best available play and call end_turn.';
-      }
-
-      // Phase 3: EXECUTOR (full tools + request_replan)
-      ctx.agentRole = 'executor';
-      ctx.replanReason = undefined;
-      const executorTools = [
-        ...plugin.listTools!(ctx),
-        {
-          name: 'request_replan',
-          description: 'Abandon the current plan and return to the planner for a new one. Use when a coin flip, search result, or error makes the plan impossible to continue.',
-          parameters: { type: 'object' as const, properties: { reason: { type: 'string', description: 'Why the plan needs to change' } }, required: ['reason'] },
-          execute: (input: Record<string, any>) => { ctx.replanReason = input.reason; return 'Returning to planner...'; },
-        } satisfies RunnableTool,
-      ];
-
-      try {
-        const execResult = await runAgent({
-          model,
-          systemPrompt: config.executorPrompt,
-          getState: () => ctx.getReadableState(),
-          initialMessage: `Execute this plan:\n${planText}\n\nCall end_turn when done. If you can't proceed (coin flip failed, card not found, wrong tool used), call request_replan instead.`,
-          tools: executorTools,
-          maxSteps: PIPELINE_CONFIG.EXECUTOR_MAX_STEPS,
-          label: attempt > 0 ? `Executor (retry ${attempt})` : 'Executor',
-          logging: config.logging,
-        });
-
-        if (ctx.replanReason) {
-          lastError = ctx.replanReason;
-          if (attempt < PIPELINE_CONFIG.MAX_RETRY_CYCLES) {
-            console.warn(`[AI Pipeline] Executor requested replan: ${lastError}`);
-            continue;
-          }
-        }
-
-        if (execResult.aborted) break;
-
-        const state = ctx.getState();
-        if (state.activePlayer === 1) {
-          lastError = `Executor completed ${execResult.stepCount} steps without calling end_turn.`;
-          if (attempt < PIPELINE_CONFIG.MAX_RETRY_CYCLES) {
-            console.warn(`[AI Pipeline] ${lastError} Retrying...`);
-            continue;
-          }
-        }
-        break;
-      } catch (e: any) {
-        lastError = e?.message ?? String(e);
-        if (attempt < PIPELINE_CONFIG.MAX_RETRY_CYCLES) {
-          console.warn(`[AI Pipeline] Executor error, retrying: ${lastError}`);
-          continue;
-        }
-        console.error('[AI Pipeline] Executor failed after all retries:', e);
-        break;
-      }
-    }
-
-    ctx.agentRole = undefined;
-  }, { asType: 'chain' });
 }
 
 // ── Autonomous Agent ────────────────────────────────────────────
@@ -527,8 +354,6 @@ export async function runAIPipeline(config: AIPipelineConfig): Promise<void> {
 export interface AIAutonomousConfig {
   context: ToolContext;
   plugin: GamePlugin;
-  systemPrompt: string;
-  checkupPrompt: string;
   model?: string;
   provider?: AIProvider;
   apiKey: string;
@@ -536,12 +361,24 @@ export interface AIAutonomousConfig {
 }
 
 /**
- * Run a full AI turn as a single autonomous agent:
- *   1. Checkup phase (shared helper — limited tools, shouldSkipStartOfTurn)
+ * Determine the agent mode from game state and tool context.
+ */
+function resolveMode(ctx: ToolContext): 'setup' | 'startOfTurn' | 'main' | 'decision' {
+  if (ctx.isDecisionResponse) return 'decision';
+  if (ctx.getState().phase === 'setup') return 'setup';
+  return 'main';
+}
+
+/**
+ * Run a full AI turn as a single autonomous agent.
+ * Prompt and tools are determined automatically via plugin.getAgentConfig().
+ *
+ * For normal turns (playing phase, not decision):
+ *   1. Start-of-turn — skipped if plugin.shouldSkipStartOfTurn() returns true,
+ *      otherwise runs a short agent with the startOfTurn config
  *   2. Main turn — full tools, runs until end_turn or step budget exhausted
  *
- * State is refreshed in the system prompt before every LLM call,
- * so the agent always sees the real board after every action.
+ * For setup and decision modes: single agent call with the appropriate config.
  */
 export async function runAutonomousAgent(config: AIAutonomousConfig): Promise<void> {
   const modelId = config.model ?? AI_CONFIG.DEFAULT_MODEL;
@@ -557,32 +394,48 @@ export async function runAutonomousAgent(config: AIAutonomousConfig): Promise<vo
       ? createAnthropic({ apiKey, fetch: rateLimitedFetch })(modelId)
       : createFireworks({ apiKey, fetch: rateLimitedFetch })(modelId)) as any;
 
-    // ── Phase 1: CHECKUP ─────────────────────────────────────────
-    await runCheckupPhase({
-      model, ctx, plugin,
-      checkupPrompt: config.checkupPrompt,
-      maxSteps: AUTONOMOUS_CONFIG.CHECKUP_MAX_STEPS,
-      logging: config.logging,
-      logPrefix: 'AI Autonomous',
-    });
+    const mode = resolveMode(ctx);
+    const isNormalTurn = mode === 'main';
 
-    // ── Phase 2: MAIN TURN ───────────────────────────────────────
-    ctx.agentRole = undefined;
-    const gameTools = plugin.listTools!(ctx);
-    const subagentTool = createSpawnSubagentTool(model, gameTools, config.systemPrompt);
-    const allTools = [...gameTools, subagentTool];
+    // For normal turns: run start-of-turn first, then main turn
+    if (isNormalTurn) {
+      const skip = await plugin.shouldSkipStartOfTurn?.(ctx) ?? false;
 
-    await runAgent({
-      model,
-      systemPrompt: config.systemPrompt,
-      getState: () => ctx.getReadableState(),
-      initialMessage: 'It\'s your turn. Drawing and checkup are already done. Take actions to advance toward winning. Call end_turn when done.',
-      tools: allTools,
-      maxSteps: AUTONOMOUS_CONFIG.MAX_STEPS,
-      label: 'Autonomous',
-      logging: config.logging,
-    });
+      if (!skip) {
+        const { prompt, tools } = plugin.getAgentConfig!(ctx, 'startOfTurn');
+        await runAgent({
+          model,
+          systemPrompt: prompt,
+          getState: () => ctx.getReadableState(),
+          tools,
+          maxSteps: AUTONOMOUS_CONFIG.CHECKUP_MAX_STEPS,
+          label: 'StartOfTurn',
+          logging: config.logging,
+        });
+      }
 
-    ctx.agentRole = undefined;
+      const { prompt, tools } = plugin.getAgentConfig!(ctx, 'main');
+      await runAgent({
+        model,
+        systemPrompt: prompt,
+        getState: () => ctx.getReadableState(),
+        tools,
+        maxSteps: AUTONOMOUS_CONFIG.MAX_STEPS,
+        label: 'Main',
+        logging: config.logging,
+      });
+    } else {
+      // Setup or decision: single agent call
+      const { prompt, tools } = plugin.getAgentConfig!(ctx, mode);
+      await runAgent({
+        model,
+        systemPrompt: prompt,
+        getState: () => ctx.getReadableState(),
+        tools,
+        maxSteps: AUTONOMOUS_CONFIG.MAX_STEPS,
+        label: mode === 'decision' ? 'Decision' : 'Setup',
+        logging: config.logging,
+      });
+    }
   }, { asType: 'agent' });
 }

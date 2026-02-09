@@ -65,6 +65,7 @@ export type {
   PeekAction,
   MulliganAction,
   SwapCardStacksAction,
+  RearrangeZoneAction,
   DeclareAction,
 } from './action';
 

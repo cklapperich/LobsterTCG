@@ -28,6 +28,7 @@ import type {
   PeekAction,
   MulliganAction,
   SwapCardStacksAction,
+  RearrangeZoneAction,
   PlayerInfo,
   GameConfig,
   GameState,
@@ -772,6 +773,56 @@ function executeSwapCardStacks<T extends CardTemplate>(
 }
 
 // ============================================================================
+// Rearrange Zone Executor
+// ============================================================================
+
+function executeRearrangeZone<T extends CardTemplate>(
+  state: GameState<T>,
+  action: RearrangeZoneAction
+): string | null {
+  const zone = getZone(state, action.zoneId);
+  if (!zone) return `Zone not found: ${action.zoneId}`;
+
+  const n = action.cardInstanceIds.length;
+  if (n === 0) return null;
+
+  // Determine the slice of the zone being rearranged
+  const isTop = action.fromPosition === 'top';
+  const sliceStart = isTop ? zone.cards.length - n : 0;
+  const sliceEnd = isTop ? zone.cards.length : n;
+
+  // Validate all named cards exist in the slice
+  const sliceCards = zone.cards.slice(sliceStart, sliceEnd);
+  const sliceIdSet = new Set(sliceCards.map(c => c.instanceId));
+
+  for (const id of action.cardInstanceIds) {
+    if (!sliceIdSet.has(id)) {
+      return `Card ${id} not found in ${action.fromPosition} ${n} of zone "${action.zoneId}"`;
+    }
+  }
+
+  // Build a lookup from instanceId → card object
+  const cardMap = new Map(sliceCards.map(c => [c.instanceId, c]));
+
+  // Build the new ordered array
+  const reordered: CardInstance<T>[] = [];
+  for (const id of action.cardInstanceIds) {
+    reordered.push(cardMap.get(id)!);
+  }
+
+  // Splice the reordered cards back in.
+  // For "top": reordered[0] should be the new top (last in array), so reverse.
+  // For "bottom": reordered[0] should be the new bottom (first in array), keep as-is.
+  if (isTop) {
+    reordered.reverse();
+  }
+  zone.cards.splice(sliceStart, n, ...reordered);
+
+  consolidateCountersToTop(zone);
+  return null;
+}
+
+// ============================================================================
 // Decision Executors
 // ============================================================================
 
@@ -1072,6 +1123,14 @@ export function executeAction<T extends CardTemplate>(
     case ACTION_TYPES.SWAP_CARD_STACKS:
       executeSwapCardStacks(state, action);
       break;
+    case ACTION_TYPES.REARRANGE_ZONE: {
+      const reaErr = executeRearrangeZone(state, action);
+      if (reaErr) {
+        state.log.push(reaErr);
+        return reaErr;
+      }
+      break;
+    }
     case ACTION_TYPES.DECLARE_ACTION:
       state.log.push(action.message ?? `${action.name} declared`);
       break;

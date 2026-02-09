@@ -24,6 +24,7 @@ import type {
   PeekAction,
   MulliganAction,
   SwapCardStacksAction,
+  RearrangeZoneAction,
   DeclareAction,
 } from './types';
 import {
@@ -228,6 +229,15 @@ export function mulligan(player: PlayerIndex, drawCount: number = 7): MulliganAc
 
 export function swapCardStacks(player: PlayerIndex, zone1: string, zone2: string): SwapCardStacksAction {
   return { type: ACTION_TYPES.SWAP_CARD_STACKS, player, zone1, zone2 };
+}
+
+export function rearrangeZone(
+  player: PlayerIndex,
+  zoneKey: string,
+  cardInstanceIds: string[],
+  fromPosition: Position = POSITIONS.TOP
+): RearrangeZoneAction {
+  return { type: ACTION_TYPES.REARRANGE_ZONE, player, zoneId: zoneKey, cardInstanceIds, fromPosition };
 }
 
 export function declareAction(

@@ -25,7 +25,7 @@
   import { playSfx, playBgm, stopBgm, toggleMute, audioSettings } from '../../lib/audio.svelte';
   import { settings } from '../../lib/settings.svelte';
   import SettingsModal from './SettingsModal.svelte';
-  import { runAITurn, runAIPipeline, runAutonomousAgent, MODEL_OPTIONS } from '../../ai';
+  import { runAutonomousAgent, MODEL_OPTIONS } from '../../ai';
   import { contextMenuStore, openContextMenu, closeContextMenu as closeContextMenuStore } from './contextMenu.svelte';
   import { cardModalStore, openCardModal, closeCardModal as closeCardModalStore } from './cardModal.svelte';
 
@@ -574,30 +574,14 @@
     const { ctx } = createToolContext(getToolContextDeps());
 
     try {
-      if (aiMode === 'autonomous') {
-        await runAutonomousAgent({
-          context: ctx,
-          plugin,
-          systemPrompt: gameConfig.prompts?.autonomous ?? '',
-          checkupPrompt: gameConfig.prompts?.startOfTurn ?? '',
-          apiKey,
-          model: selectedModel.modelId,
-          provider: selectedModel.provider,
-          logging: true,
-        });
-      } else {
-        await runAIPipeline({
-          context: ctx,
-          plugin,
-          checkupPrompt: gameConfig.prompts?.startOfTurn ?? '',
-          plannerPrompt: gameConfig.prompts?.planner ?? '',
-          executorPrompt: gameConfig.prompts?.executor ?? '',
-          apiKey,
-          model: selectedModel.modelId,
-          provider: selectedModel.provider,
-          logging: true,
-        });
-      }
+      await runAutonomousAgent({
+        context: ctx,
+        plugin,
+        apiKey,
+        model: selectedModel.modelId,
+        provider: selectedModel.provider,
+        logging: true,
+      });
     } catch (e) {
       addLog(`[AI] Error: ${e}`);
     }
@@ -626,15 +610,13 @@
     const { ctx } = createToolContext(getToolContextDeps());
 
     try {
-      await runAITurn({
+      await runAutonomousAgent({
         context: ctx,
         plugin,
-        heuristics: gameConfig.prompts?.setup ?? '',
         apiKey,
         model: selectedModel.modelId,
         provider: selectedModel.provider,
         logging: true,
-        setupMode: true,
       });
     } catch (e) {
       addLog(`[AI] Error: ${e}`);
@@ -671,15 +653,13 @@
     const { ctx } = createToolContext(getToolContextDeps(), { isDecisionResponse: true });
 
     try {
-      await runAITurn({
+      await runAutonomousAgent({
         context: ctx,
         plugin,
-        heuristics: gameConfig.prompts?.decisionTurn ?? '',
         apiKey,
         model: selectedModel.modelId,
         provider: selectedModel.provider,
         logging: true,
-        decisionMode: true,
       });
     } catch (e) {
       addLog(`[AI] Error: ${e}`);

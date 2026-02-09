@@ -3,14 +3,6 @@ import type { GameState } from '../../core/types/game';
 import type { PlayerIndex } from '../../core/types/card';
 import { plugin, executeSetup, pokemonHooksPlugin, flipFieldCardsFaceUp } from './index';
 import { getTemplate } from './cards';
-import {
-  PROMPT_SETUP,
-  PROMPT_FULL_TURN,
-  PROMPT_START_OF_TURN,
-  PROMPT_PLANNER,
-  PROMPT_EXECUTOR,
-  PROMPT_AUTONOMOUS,
-} from './prompt-builder';
 
 export const pokemonConfig: GameTypeConfig = {
   id: 'pokemon-tcg',
@@ -27,14 +19,5 @@ export const pokemonConfig: GameTypeConfig = {
   },
   onSetupComplete: (state: GameState) => {
     flipFieldCardsFaceUp(state);
-  },
-
-  prompts: {
-    setup: PROMPT_SETUP,
-    decisionTurn: PROMPT_FULL_TURN,
-    startOfTurn: PROMPT_START_OF_TURN,
-    planner: PROMPT_PLANNER,
-    executor: PROMPT_EXECUTOR,
-    autonomous: PROMPT_AUTONOMOUS,
   },
 };

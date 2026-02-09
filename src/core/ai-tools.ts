@@ -25,6 +25,7 @@ import {
   revealHand,
   mulligan,
   swapCardStacks,
+  rearrangeZone,
 } from './action';
 import type { Visibility } from './types';
 
@@ -48,10 +49,6 @@ export interface ToolContext {
   isDecisionResponse?: boolean;
   /** Format a card template for search results. Plugin-provided for rich output. */
   formatCardForSearch?: (template: CardTemplate) => string;
-  /** Which pipeline phase this context is currently serving. */
-  agentRole?: 'checkup' | 'planner' | 'executor';
-  /** Set by request_replan tool — signals the executor wants to bail back to the planner. */
-  replanReason?: string;
   /** Translate AI-perspective zone keys (your_hand, opponent_active) to internal keys (player2_hand, player1_active). */
   translateZoneKey?: (key: string) => string;
 }
@@ -135,7 +132,7 @@ function tz(ctx: ToolContext, key: string): string {
  * being passed to action factories.
  *
  * Plugins can call this, filter out tools they don't want, and append
- * custom tools before returning from listTools().
+ * custom tools before returning from getAgentConfig().
  */
 export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
   const p = ctx.playerIndex;
@@ -493,7 +490,7 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
     // ── Peek ───────────────────────────────────────────────────────
     tool({
       name: 'peek',
-      description: 'Look at the top or bottom cards of a zone without changing visibility.',
+      description: 'Look at the top or bottom cards of a zone. Returns full card details and positions. Use after peek: move_card to take cards, rearrange_zone to reorder, shuffle to randomize.',
       inputSchema: {
         type: 'object' as const,
         properties: {
@@ -506,7 +503,93 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
       async run(input) {
         const count = input.count ?? 1;
         const from = input.fromPosition ?? 'top';
-        return ctx.execute(peek(p, tz(ctx, input.zone), count, from));
+        const zoneKey = tz(ctx, input.zone);
+        const displayKey = input.zone;
+
+        // Execute the peek action for logging/hooks
+        await ctx.execute(peek(p, zoneKey, count, from));
+
+        // Read peeked cards directly from state
+        const state = ctx.getState();
+        const zone = state.zones[zoneKey];
+        if (!zone || zone.cards.length === 0) return `Zone "${displayKey}" is empty`;
+
+        const actualCount = Math.min(count, zone.cards.length);
+        let peekedCards: typeof zone.cards;
+
+        if (from === 'top') {
+          // zone.cards: index 0 = bottom, end = top. Reverse so [0] = top of deck.
+          peekedCards = zone.cards.slice(zone.cards.length - actualCount).reverse();
+        } else {
+          peekedCards = zone.cards.slice(0, actualCount);
+        }
+
+        const lines: string[] = [];
+        lines.push(`Peeked at ${from} ${actualCount} of ${displayKey}:`);
+        lines.push('');
+
+        // Card references (full details)
+        if (ctx.formatCardForSearch) {
+          lines.push('=== CARD REFERENCES ===');
+          for (const card of peekedCards) {
+            lines.push(ctx.formatCardForSearch(card.template));
+          }
+          lines.push('');
+        }
+
+        // Position list
+        lines.push(`=== POSITION (${from} to ${from === 'top' ? 'deeper' : 'higher'}) ===`);
+        for (let i = 0; i < peekedCards.length; i++) {
+          const posLabel = from === 'top'
+            ? (i === 0 ? '(top of deck — drawn next)' : `(${i + 1} from top)`)
+            : (i === 0 ? '(bottom of deck)' : `(${i + 1} from bottom)`);
+          lines.push(`${i + 1}. ${peekedCards[i].template.name} ${posLabel}`);
+        }
+
+        // Action instructions
+        lines.push('');
+        lines.push('=== ACTIONS ===');
+        lines.push(`To take cards: move_card with fromZone="${displayKey}" and cardName="<name>"`);
+        lines.push(`To reorder: rearrange_zone with zone="${displayKey}" and cardNames in desired top-to-bottom order`);
+        lines.push(`To shuffle: shuffle with zone="${displayKey}"`);
+
+        return lines.join('\n');
+      },
+    }),
+
+    // ── Rearrange Zone ─────────────────────────────────────────────
+    tool({
+      name: 'rearrange_zone',
+      description: 'Reorder the top or bottom cards of a zone. Used after peeking to arrange cards in a specific order. Provide card names from top to bottom (first name = top of deck, drawn next).',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          zone: { type: 'string', description: 'Zone key (e.g. "your_deck")' },
+          cardNames: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Card names in desired order, from top to bottom',
+          },
+          from: {
+            type: 'string',
+            enum: [POSITIONS.TOP, POSITIONS.BOTTOM],
+            description: 'Which end of the zone to rearrange (default: top)',
+          },
+        },
+        required: ['zone', 'cardNames'],
+      },
+      async run(input) {
+        const zoneKey = tz(ctx, input.zone);
+        const from = input.from ?? 'top';
+        return ctx.execute((state) => {
+          const zone = state.zones[zoneKey];
+          if (!zone) throw new Error(`Zone "${input.zone}" not found`);
+
+          const cardIds = (input.cardNames as string[]).map(name =>
+            resolveCard(state, name, zoneKey)
+          );
+          return rearrangeZone(p, zoneKey, cardIds, from);
+        });
       },
     }),
 
