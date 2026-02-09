@@ -162,6 +162,14 @@ export interface SwapCardStacksAction extends BaseAction {
   zone2: string;
 }
 
+// Rearrange Zone Action - reorder cards within a zone
+export interface RearrangeZoneAction extends BaseAction {
+  type: typeof ACTION_TYPES.REARRANGE_ZONE;
+  zoneId: string;    // Zone key (e.g., "player2_deck")
+  cardInstanceIds: string[];  // Cards in desired order (first = top/bottom depending on fromPosition)
+  fromPosition: typeof POSITIONS.TOP | typeof POSITIONS.BOTTOM;
+}
+
 // Generic Declaration Action (plugin-defined subtypes via declarationType)
 export interface DeclareAction extends BaseAction {
   type: typeof ACTION_TYPES.DECLARE_ACTION;
@@ -196,4 +204,5 @@ export type Action =
   | PeekAction
   | MulliganAction
   | SwapCardStacksAction
+  | RearrangeZoneAction
   | DeclareAction;

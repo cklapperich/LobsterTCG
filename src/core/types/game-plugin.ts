@@ -52,8 +52,11 @@ export interface GamePlugin<T extends CardTemplate = CardTemplate> {
    */
   shouldSkipSetup?(ctx: ToolContext): Promise<boolean>;
 
-  /** Return Anthropic SDK-compatible tools for AI agents. */
-  listTools?(ctx: ToolContext): RunnableTool[];
+  /**
+   * Return the system prompt and tool set for a given AI agent mode.
+   * Colocates prompt + tools so they stay in sync.
+   */
+  getAgentConfig?(ctx: ToolContext, mode: 'setup' | 'startOfTurn' | 'main' | 'decision'): { prompt: string; tools: RunnableTool[] };
 
   /** Return action panels for the sidebar UI. */
   getActionPanels?(state: GameState<T>, player: PlayerIndex): ActionPanel[];

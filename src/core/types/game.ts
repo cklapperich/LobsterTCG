@@ -10,7 +10,6 @@ export interface Decision {
   revealedZones: string[];  // Zone keys of cards revealed with this decision (auto-hidden on resolve)
 }
 
-// Minimal player info (zones are now top-level)
 export interface PlayerInfo {
   index: PlayerIndex;
   id: string;
@@ -45,7 +44,7 @@ export interface GameState<T extends CardTemplate = CardTemplate> {
   turnNumber: number;
   activePlayer: PlayerIndex;
   zones: Record<string, Zone<T>>;  // flattened: "player1_hand", "player2_tableau_1", etc.
-  players: [PlayerInfo, PlayerInfo];  // minimal player info
+  players: [PlayerInfo, PlayerInfo]; 
   currentTurn: Turn;
   pendingDecision: Decision | null;
   result: GameResult | null;

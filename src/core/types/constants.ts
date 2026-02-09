@@ -23,12 +23,13 @@ export const ACTION_TYPES = {
   PEEK: 'peek',
   MULLIGAN: 'mulligan',
   SWAP_CARD_STACKS: 'swap_card_stacks',
+  REARRANGE_ZONE: 'rearrange_zone',
   DECLARE_ACTION:'declare_action'
 } as const;
 export type ActionType = typeof ACTION_TYPES[keyof typeof ACTION_TYPES];
 
 // Game Phases
-export const PHASES = { SETUP: 'setup', PLAYING: 'playing' } as const;
+export const PHASES = {DECISION: 'decision', SETUP: 'setup', PLAYING: 'playing' } as const;
 export type Phase = typeof PHASES[keyof typeof PHASES];
 
 // Action Sources

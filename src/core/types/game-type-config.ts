@@ -15,7 +15,6 @@ export interface GameTypeConfig {
   executeSetup: (state: GameState, playerIndex: PlayerIndex) => void;
   deckZoneId: string;              // 'deck' for Pokemon, 'stock' for solitaire
   getDeck?: () => DeckList;        // Fixed-deck games (solitaire)
-  prompts?: { setup?: string; decisionTurn?: string; startOfTurn?: string; planner?: string; executor?: string; autonomous?: string };
   playerCount: 1 | 2;
   needsDeckSelection: boolean;
   needsAIModel: boolean;
