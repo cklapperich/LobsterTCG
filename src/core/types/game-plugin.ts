@@ -19,7 +19,7 @@ export interface GamePlugin<T extends CardTemplate = CardTemplate> {
   startGame(): Promise<GameState<T>>;
 
   /** Get card info string for modals/tooltips */
-  getCardInfo(template: T): string;
+  getCardName(template: T): string;
 
   /** Get card back image URL (optional) */
   getCardBack?(): string;

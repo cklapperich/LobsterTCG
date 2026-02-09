@@ -165,33 +165,8 @@ export function executeSetup(state: GameState<CardTemplate>, playerIndex: Player
 
 }
 
-/**
- * Initialize a complete game with both players' decks loaded and setup complete.
- */
-export async function initializeGame(
-  player1Deck: DeckList,
-  player2Deck: DeckList,
-  getTemplate: (id: string) => CardTemplate | undefined,
-  player1Id: string = 'player1',
-  player2Id: string = 'player2'
-): Promise<PokemonGameState> {
-  const state = await startPokemonGame(player1Id, player2Id);
-
-  // Load decks
-  loadPlayerDeck(state, 0, player1Deck, getTemplate);
-  loadPlayerDeck(state, 1, player2Deck, getTemplate);
-
-  // Execute setup for both players
-  executeSetup(state, 0);
-  executeSetup(state, 1);
-
-  //TODO: flip coin to determine first player
-  
-  return state;
-}
-
 // Get card info string for modals
-export function getCardInfo(template: CardTemplate): string {
+export function getCardName(template: CardTemplate): string {
   return template.name ?? 'Unknown Card';
 }
 
@@ -405,7 +380,7 @@ async function shouldSkipStartOfTurn(ctx: ToolContext): Promise<boolean> {
 export const plugin: GamePlugin<PokemonCardTemplate> = {
   getPlaymat: getPokemonPlaymat,
   startGame: startPokemonGame,
-  getCardInfo,
+  getCardName,
   getCardBack,
   getCounterDefinitions,
   getCoinFront,
