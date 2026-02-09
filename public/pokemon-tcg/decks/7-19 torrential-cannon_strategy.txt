@@ -1,8 +1,2 @@
-Your win condition is Blastoise's Hydro Pump (60+ damage). Build Blastoise on bench while Golduck or Pidgeotto stall as active.
-Priority: Get Squirtle→Wartortle→Blastoise evolution chain going ASAP. Attach Water Energy to Blastoise on bench every turn.
-Golduck is your best early-game attacker (Fury Swipes for 30 avg, Hyper Beam for 50). Use Psyduck→Golduck as your opener if possible.
-Pidgeotto is a solid backup attacker with Mirror Move (copies opponent's last attack) and Whirlwind (40 + forces bench swap).
-Use Bill and Professor Oak aggressively to draw into evolution pieces. Energy Retrieval recovers discarded Water Energy.
-Switch and Gust of Wind let you pick favorable matchups — pull weak bench Pokemon active with Gust, or retreat your active with Switch.
-Potion keeps your Pokemon alive longer. PlusPower gives the extra 10 damage to secure KOs.
-Late game: a fully powered Blastoise with 4+ Water Energy deals massive damage with Hydro Pump.
+Your win condition is Blastoise and its pokemon power. Try to keep it safe and build it up. psyduck+golduck good opener.
+pidgey w/ collect or pidgeotto with air mail pokepower for drawing cards. Air mail is main purpose of pidgeotto/pidgey line, avoid playing pidgeot in most cases unless you have no choice, or evolve to pidgeto to retreat. Use pokepowers every turn.

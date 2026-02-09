@@ -249,27 +249,7 @@ I could either fix this myself and add the damage counters, or just flag the opp
 - Imagine you're playing a very casual friendly game of pokemon! This is 'kitchen table' Pokemon. 
 - The important thing is, the end game state is what it should have been anyways
 - You may even undo and redo the most recent action if you realize a different course would have been better stratetically.
-- Leaving the game in an incorrect state is much worse than breaking the rules slightly
-
-[AI] My Wartortle was knocked out by Rapidash's Agility attack (100 damage with weakness applied). I need to discard the KO'd Wartortle and promote a new Active Pokemon from my bench.
-
-Let me discard Wartortle and its attached Energy, then promote Pidgeot to Active:
-logging.ts:18 [tool] move_card {fromZone: 'your_active', toZone: 'your_discard', cardName: 'Wartortle'}
-logging.ts:18 [tool] move_card {fromZone: 'your_active', toZone: 'your_discard', cardName: 'Water Energy'}
-logging.ts:18 [tool] move_card {fromZone: 'your_active', toZone: 'your_discard', cardName: 'Water Energy'}
-logging.ts:18 [tool] swap_card_stacks {zone1: 'your_active', zone2: 'your_bench_1'}
-logging.ts:11 [thinking] I see there's an issue - the swap moved Squirtle to bench_1 instead of Pidgeot to active. Looking at the game state, it seems like the active zone had Squirtle in it (which was wrong - it should have been empty after I discarded Wartortle). Let me check the current state:
-
-[Your Active] Pidgeot — 130 HP before effects
-[Your Bench 1] Squirtle — 70 HP before effects — 140 damage
-
-Wait, the active shows Pidgeot now, and bench_1 shows Squirtle with 140 damage. That doesn't make sense - Squirtle shouldn't have 140 damage, and it shouldn't be on my bench.
-
-Actually, looking more carefully at the state, it seems like the swap worked but there's some confusion in the display. The active now shows Pidgeot which is correct. But bench_1 shows Squirtle with 140 damage which is wrong - that damage should have been on Wartortle which is now discarded.
-
-Let me remove those damage counters - they shouldnt be there. and I'll discard the squirtle - that was attached to the wartortle which was knocked out. This will fix the game state. 
-Pidgeot is now my active with 0 damage counters, which is correct and intended. Now I need to resolve the decision:
-logging.ts:18 [tool] resolve_decision {}
+- Leaving the game in an incorrect state is much worse than breaking the rules
 
 ## @ROLE_SETUP
 1. Check your hand for basic pokemon.
