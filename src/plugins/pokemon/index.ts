@@ -162,6 +162,7 @@ export function executeSetup(state: GameState<CardTemplate>, playerIndex: Player
       executeAction(state, moveCard(playerIndex, topCard.instanceId, deckKey, prizesKey));
     }
   }
+
 }
 
 /**
@@ -184,6 +185,8 @@ export async function initializeGame(
   executeSetup(state, 0);
   executeSetup(state, 1);
 
+  //TODO: flip coin to determine first player
+  
   return state;
 }
 
