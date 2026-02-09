@@ -54,19 +54,36 @@ export const MODEL_OPTIONS: ModelOption[] = [
 const TERMINAL_TOOLS = new Set<string>(TERMINAL_TOOL_NAMES);
 
 /**
+ * Mutable per-step state shared across parallel tool calls.
+ * When any tool errors/is blocked, `blocked` is set so subsequent
+ * tools in the same parallel batch are short-circuited.
+ */
+export interface StepState {
+  blocked: boolean;
+  blockReason?: string;
+}
+
+/**
  * Convert our RunnableTool[] array into the Record<string, CoreTool>
  * map that the Vercel AI SDK's generateText expects.
  *
  * When an AbortController is provided, terminal tools (end_turn, concede, etc.)
  * set the abort flag so the caller knows to stop looping.
+ *
+ * When a StepState is provided, a tool error/block terminates the entire
+ * parallel batch — subsequent tools return a cancellation message instead
+ * of executing. The caller resets `stepState.blocked` between steps.
  */
-export function toAISDKTools(tools: RunnableTool[], abort?: AbortController): ToolSet {
+export function toAISDKTools(tools: RunnableTool[], abort?: AbortController, stepState?: StepState): ToolSet {
   const result: ToolSet = {};
   for (const t of tools) {
     result[t.name] = {
       description: t.description,
       parameters: jsonSchema(t.parameters as any),
       execute: async (args: Record<string, any>) => {
+        if (stepState?.blocked) {
+          return `Cancelled: a prior action in this parallel batch was blocked (${stepState.blockReason}). All remaining actions have been cancelled. Review the error and adjust your plan.`;
+        }
         try {
           const res = await t.execute(args);
           if (abort && TERMINAL_TOOLS.has(t.name)) {
@@ -76,6 +93,10 @@ export function toAISDKTools(tools: RunnableTool[], abort?: AbortController): To
         } catch (e: any) {
           const msg = e?.message ?? String(e);
           console.warn(`[AI] Tool "${t.name}" error:`, msg);
+          if (stepState) {
+            stepState.blocked = true;
+            stepState.blockReason = msg;
+          }
           return `Error: ${msg}`;
         }
       },
@@ -257,7 +278,8 @@ async function runAgent(config: AgentConfig): Promise<AgentResult> {
   return startActiveObservation(config.label, async (span) => {
     const { model, systemPrompt, getState, tools, maxSteps, label, logging } = config;
     const abort = new AbortController();
-    const sdkTools = tools.length > 0 ? toAISDKTools(tools, abort) : undefined;
+    const stepState: StepState = { blocked: false };
+    const sdkTools = tools.length > 0 ? toAISDKTools(tools, abort, stepState) : undefined;
     let stepCount = 0;
     let lastText = '';
     let aborted = false;
@@ -276,6 +298,10 @@ async function runAgent(config: AgentConfig): Promise<AgentResult> {
 
     try {
       for (let step = 0; step < maxSteps; step++) {
+        // Reset chain-termination flag — each step gets a clean slate
+        stepState.blocked = false;
+        stepState.blockReason = undefined;
+
         // Fresh state as the last message (ephemeral, not stored in history)
         const freshState = getState();
         const messagesWithState: CoreMessage[] = [
@@ -414,7 +440,7 @@ export async function runAutonomousAgent(config: AIAutonomousConfig): Promise<vo
 
     const mode = resolveMode(ctx);
     const isNormalTurn = mode === 'main';
-
+    console.log(mode);
     // For normal turns: run start-of-turn first, then main turn
     if (isNormalTurn) {
       const skip = await plugin.shouldSkipStartOfTurn?.(ctx) ?? false;

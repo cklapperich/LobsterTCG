@@ -49,11 +49,11 @@
 
     17. add a little buzzing noise for normally-illegal stuff, unless it comes from staging
 
-    18. disable all hooks when moving a card FROM staging to somewhere else??
-
     17. the 'find pokemon' system is suspicious, verify it needs to be that complex
 
     18. System states auto-ended turn even when AI called end_turn
+
+    18. disable all hooks when moving a card FROM staging to somewhere else??
 
     20. double-check evolution timing hooks: '[AI] Moved Gogoat from hand to bench_1
     Action blocked: Already attached an Energy this turn. Set allowed_by_card_effect if a card effect permits this.'
@@ -63,6 +63,7 @@
     in hooks.ts
 
     21. Evolution hook: cant play a basic on a basic!
+    22. hook bug: tools not sorted to bottom
 
 24. bug: not all moves getting logged. the AI did this sucesfully. we need to log when we do swap_card_stacks
 

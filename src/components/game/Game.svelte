@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Playmat, CardInstance, CardTemplate, GameState, CounterDefinition, DeckList, DeckSelection, ZoneConfig, Action, ActionExecutor } from '../../core';
+  import type { Playmat, CardInstance, CardTemplate, GameState, CounterDefinition, DeckSelection, ZoneConfig, Action, ActionExecutor } from '../../core';
   import { executeAction, shuffle, moveCard, VISIBILITY, flipCard, endTurn, loadDeck, getCardName, findCardInZones, toReadableState, PluginManager, setOrientation, createDecision, resolveDecision, revealHand, mulligan as mulliganAction, PHASES, ACTION_TYPES } from '../../core';
   import { GAME_TYPES } from '../../game-types';
   import PlaymatGrid from './PlaymatGrid.svelte';
@@ -786,6 +786,16 @@
     requestInput = '';
   }
 
+  function handleFixMistakes() {
+    if (!gameState || aiThinking || gameState.pendingDecision) return;
+    const opp = opponent(local);
+    const msg = 'Analyze the game state to determine what went wrong. Then, fix your mistakes and restore the game to a correct state.';
+    executeAction(gameState, createDecision(local, opp, msg));
+    gameState = { ...gameState };
+    playSfx('confirm');
+    controllers[opp].handleDecision();
+  }
+
   // Counter handlers
   function handleCounterDrop(counterId: string, cardInstanceId: string) {
     if (!gameState) return;
@@ -1048,6 +1058,13 @@
             disabled={!gameState || aiThinking || !!gameState.pendingDecision}
           >
             REQUEST
+          </button>
+          <button
+            class="gbc-btn sidebar-btn"
+            onclick={handleFixMistakes}
+            disabled={!gameState || aiThinking || !!gameState.pendingDecision}
+          >
+            FIX
           </button>
           {/if}
           <button
