@@ -629,14 +629,11 @@
       addLog('[AI] Setup auto-ended (AI did not call end_turn)');
     }
 
-    // After AI setup turn, check if phase transitioned to playing
-    if (gameState && gameState.phase === PHASES.PLAYING && gameState.turnNumber === 1) {
-      await gameConfig.onSetupComplete?.(gameState, createExecutor());
-      gameState = { ...gameState };
-    }
+    // Setup→playing transition: coin flip + dispatch to winner.
+    // Keep aiThinking=true through the transition so UI stays locked during coin flip.
+    if (await handlePostSetupTransition()) return;
 
     aiThinking = false;
-
   }
 
   /**
@@ -703,6 +700,23 @@
     executeEndTurnInner();
   }
 
+  /** Handle setup→playing transition: onSetupComplete (coin flip), then dispatch to winner. */
+  async function handlePostSetupTransition(): Promise<boolean> {
+    if (!gameState || gameState.phase !== PHASES.PLAYING || gameState.turnNumber !== 1) return false;
+    // onSetupComplete may return a PlayerIndex to override who goes first.
+    // We apply it here (not inside the callback) because addLog causes
+    // gameState reassignment, making the callback's `state` ref stale.
+    const firstPlayer = await gameConfig.onSetupComplete?.(gameState, createExecutor());
+    if (firstPlayer !== undefined) {
+      gameState.activePlayer = firstPlayer;
+      gameState.currentTurn.activePlayer = firstPlayer;
+    }
+    aiThinking = false;
+    gameState = { ...gameState };
+    controllers[gameState.activePlayer].takeTurn();
+    return true;
+  }
+
   async function executeEndTurnInner() {
     if (!gameState) return;
     const currentPlayer = gameState.activePlayer;
@@ -716,21 +730,13 @@
     addLog(logMsg);
     playSfx('confirm');
 
-    // Check if setup just transitioned to playing
-    if (wasSetup && gameState.phase === PHASES.PLAYING && gameState.turnNumber === 1) {
-      await gameConfig.onSetupComplete?.(gameState, createExecutor());
-      gameState = { ...gameState };
-      return; // Human's turn 1 — no AI trigger
-    }
+    // Setup just completed → coin flip + dispatch to winner
+    if (wasSetup && await handlePostSetupTransition()) return;
 
-    // During setup, dispatch to the next player's controller
+    // Still in setup or normal play → dispatch to next player
     if (gameState.phase === PHASES.SETUP) {
       controllers[gameState.activePlayer].takeSetupTurn();
-      return;
-    }
-
-    // Normal play: dispatch to the next player's controller
-    if (gameState.phase === PHASES.PLAYING) {
+    } else if (gameState.phase === PHASES.PLAYING) {
       controllers[gameState.activePlayer].takeTurn();
     }
   }

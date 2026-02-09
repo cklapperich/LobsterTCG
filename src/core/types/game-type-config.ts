@@ -19,8 +19,9 @@ export interface GameTypeConfig {
   needsDeckSelection: boolean;
   needsAIModel: boolean;
   testOptions?: { id: string; label: string }[];
-  /** Called after setup phase transitions to playing. E.g. Pokemon flips field cards face-up. */
-  onSetupComplete?: (state: GameState, executor: ActionExecutor) => void | Promise<void>;
+  /** Called after setup phase transitions to playing. E.g. Pokemon flips field cards face-up.
+   *  May return a PlayerIndex to override who goes first (e.g. from a coin flip). */
+  onSetupComplete?: (state: GameState, executor: ActionExecutor) => PlayerIndex | void | Promise<PlayerIndex | void>;
   /** Called to inject test cards into the game state during init. */
   injectTestCards?: (state: GameState, testId: string, playerIndex: PlayerIndex) => void;
 }
