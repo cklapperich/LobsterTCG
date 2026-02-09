@@ -34,7 +34,7 @@ export type {
 } from './constants';
 
 // Deck types
-export type { DeckEntry, DeckList } from './deck';
+export type { DeckEntry, DeckList, DeckSelection } from './deck';
 
 // Zone types
 export type { ZoneConfig, Zone } from './zone';
