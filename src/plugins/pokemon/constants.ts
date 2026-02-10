@@ -64,6 +64,14 @@ export const DAMAGE_COUNTER_VALUES: Record<string, number> = {
   [COUNTER_IDS.DAMAGE_100]: 100,
 };
 
+// AI-friendly counter type names → internal counter IDs
+// AI sees "damage" instead of raw denominations; always maps to x10 counter
+export const AI_COUNTER_TYPES: Record<string, string> = {
+  damage: COUNTER_IDS.DAMAGE_10,
+  burn: COUNTER_IDS.BURN,
+  poison: COUNTER_IDS.POISON,
+} as const;
+
 // Counters that should not go on Trainers
 export const TRAINER_BLOCKED_COUNTERS = [
   COUNTER_IDS.DAMAGE_10, COUNTER_IDS.DAMAGE_50, COUNTER_IDS.DAMAGE_100,

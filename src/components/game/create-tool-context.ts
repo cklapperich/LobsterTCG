@@ -20,6 +20,8 @@ export interface ToolContextDeps {
   createCheckpoint: () => any;
   /** Replace game state with a previously checkpointed snapshot. */
   restoreState: (snapshot: any) => void;
+  /** Plugin-provided list of counter types visible to the AI. */
+  counterTypes?: string[];
 }
 
 /**
@@ -44,6 +46,7 @@ export function createToolContext(
     getReadableState: () => deps.getReadableState(aiPlayer),
     createCheckpoint: () => deps.createCheckpoint(),
     restoreState: (snapshot) => deps.restoreState(snapshot),
+    counterTypes: deps.counterTypes,
     execute: (actionOrFactory) => {
       const result = queue.then(async () => {
         const currentState = deps.getState();

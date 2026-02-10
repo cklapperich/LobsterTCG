@@ -45,6 +45,7 @@ import {
   CARD_FLAGS,
   UNLIMITED_CAPACITY,
 } from './types';
+import { gameLog, systemLog } from './game-log';
 
 
 // ============================================================================
@@ -588,7 +589,7 @@ function executeEndTurn<T extends CardTemplate>(
     const creator = state.pendingDecision.createdBy;
     state.pendingDecision = null;
     state.activePlayer = creator;
-    state.log.push('Decision auto-resolved (end_turn called during decision)');
+    systemLog(state, 'Decision auto-resolved (end_turn called during decision)');
     return;
   }
 
@@ -840,7 +841,7 @@ function executeCreateDecision<T extends CardTemplate>(
     revealedZones: [],
   };
   state.activePlayer = action.targetPlayer;
-  state.log.push(`Decision requested: ${action.message ?? 'Action needed'} (Player ${action.targetPlayer + 1} to respond)`);
+  systemLog(state, `Decision requested: ${action.message ?? 'Action needed'} (Player ${action.targetPlayer + 1} to respond)`);
   return null;
 }
 
@@ -905,8 +906,8 @@ function executeRevealHand<T extends CardTemplate>(
       }
       revealedZones.push(opponentZoneKey);
       const opponentCardNames = opponentZone.cards.map(c => c.template.name).join(', ');
-      state.log.push(`Player ${action.player + 1} ${zoneName}: ${playerCardNames}`);
-      state.log.push(`Opponent ${zoneName}: ${opponentCardNames}`);
+      systemLog(state, `Player ${action.player + 1} ${zoneName}: ${playerCardNames}`);
+      systemLog(state, `Opponent ${zoneName}: ${opponentCardNames}`);
     }
   }
 
@@ -1025,7 +1026,7 @@ export function executeAction<T extends CardTemplate>(
   if (!action.allowed_by_card_effect) {
     const blocked = checkZoneCapacity(state, action);
     if (blocked) {
-      state.log.push(blocked);
+      gameLog(state, blocked);
       return blocked;
     }
   }
@@ -1040,7 +1041,7 @@ export function executeAction<T extends CardTemplate>(
     case ACTION_TYPES.MOVE_CARD: {
       const moveErr = executeMoveCard(state, action);
       if (moveErr) {
-        state.log.push(moveErr);
+        gameLog(state, moveErr);
         return moveErr;
       }
       break;
@@ -1090,7 +1091,7 @@ export function executeAction<T extends CardTemplate>(
     case ACTION_TYPES.CREATE_DECISION: {
       const decErr = executeCreateDecision(state, action);
       if (decErr) {
-        state.log.push(decErr);
+        gameLog(state, decErr);
         return decErr;
       }
       break;
@@ -1098,7 +1099,7 @@ export function executeAction<T extends CardTemplate>(
     case ACTION_TYPES.RESOLVE_DECISION: {
       const resErr = executeResolveDecision(state, action);
       if (resErr) {
-        state.log.push(resErr);
+        gameLog(state, resErr);
         return resErr;
       }
       break;
@@ -1106,7 +1107,7 @@ export function executeAction<T extends CardTemplate>(
     case ACTION_TYPES.REVEAL_HAND: {
       const rhErr = executeRevealHand(state, action);
       if (rhErr) {
-        state.log.push(rhErr);
+        gameLog(state, rhErr);
         return rhErr;
       }
       break;
@@ -1126,13 +1127,13 @@ export function executeAction<T extends CardTemplate>(
     case ACTION_TYPES.REARRANGE_ZONE: {
       const reaErr = executeRearrangeZone(state, action);
       if (reaErr) {
-        state.log.push(reaErr);
+        gameLog(state, reaErr);
         return reaErr;
       }
       break;
     }
     case ACTION_TYPES.DECLARE_ACTION:
-      state.log.push(action.message ?? `${action.name} declared`);
+      gameLog(state, action.message ?? `${action.name} declared`);
       break;
   }
 

@@ -36,6 +36,9 @@ export type {
   CustomActionRegistration,
 } from './plugin';
 
+// Re-export game log
+export { gameLog, systemLog } from './game-log';
+
 // Re-export readable state conversion
 export { toReadableState, resolveCardName, formatCardInventory } from './readable';
 export type { ReadableCard, ReadableZone, ReadableGameState, ReadableAction, ReadableTurn } from './readable';

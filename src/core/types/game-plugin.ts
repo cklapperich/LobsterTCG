@@ -36,6 +36,9 @@ export interface GamePlugin<T extends CardTemplate = CardTemplate> {
   /** Format a card template for search results (AI consumption). Falls back to JSON if not provided. */
   formatCardForSearch?(template: T): string;
 
+  /** Return the list of counter type IDs visible to the AI agent. */
+  getAICounterTypes?(): string[];
+
   /**
    * Called before the start-of-turn agent runs in the pipeline.
    * Return true to skip the agent — the hook should handle any mandatory

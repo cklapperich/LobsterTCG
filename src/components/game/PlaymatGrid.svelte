@@ -161,7 +161,8 @@
       {@const isMidZone = isStagingZone || isStadiumZone}
       {@const isP1Field = slotToPlayer[slot.id] === 0 && !isHandZone}
       {@const isPublic = zone.config.defaultVisibility[0] && zone.config.defaultVisibility[1]}
-      {@const isBrowsable = onBrowse && isPublic && (slot.stackDirection === 'none' || !slot.stackDirection)}
+      {@const isMaxOne = zone.config.maxCards === 1}
+      {@const isBrowsable = onBrowse && isPublic && !isMaxOne && (slot.stackDirection === 'none' || !slot.stackDirection)}
       <div
         class="grid-slot"
         class:hand-zone={isHandZone}

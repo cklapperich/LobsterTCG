@@ -51,6 +51,8 @@ export interface ToolContext {
   formatCardForSearch?: (template: CardTemplate) => string;
   /** Translate AI-perspective zone keys (your_hand, opponent_active) to internal keys (player2_hand, player1_active). */
   translateZoneKey?: (key: string) => string;
+  /** Plugin-provided list of counter types the AI can use (shown as enum in tool schema). */
+  counterTypes?: string[];
   /** Create a deep-cloned snapshot of current game state, safe from Svelte proxy issues. */
   createCheckpoint?: () => any;
   /** Replace the entire game state with a previously checkpointed snapshot (used by rewind). */
@@ -389,7 +391,7 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
         properties: {
           cardName: { type: 'string', description: 'Name of the card' },
           zone: { type: 'string', description: 'Zone key the card is in (e.g. "opponent_active")' },
-          counterType: { type: 'string', description: 'Counter type (e.g. "10" for 10-damage counter, "poison")' },
+          counterType: { type: 'string', ...(ctx.counterTypes && { enum: ctx.counterTypes }), description: 'Counter type' },
           amount: { type: 'number', description: 'Number of counters to add (default 1)' },
           allowed_by_card_effect: { type: 'boolean', description: 'Set true when a card effect permits bypassing normal rules' },
         },
@@ -417,7 +419,7 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
         properties: {
           cardName: { type: 'string', description: 'Name of the card' },
           zone: { type: 'string', description: 'Zone key the card is in' },
-          counterType: { type: 'string', description: 'Counter type to remove' },
+          counterType: { type: 'string', ...(ctx.counterTypes && { enum: ctx.counterTypes }), description: 'Counter type to remove' },
           amount: { type: 'number', description: 'Number of counters to remove (default 1)' },
         },
         required: ['cardName', 'zone', 'counterType'],
@@ -428,29 +430,6 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
           const cardId = resolveCard(state, input.cardName, zone);
           const amount = input.amount ?? 1;
           return removeCounter(p, cardId, input.counterType, amount);
-        });
-      },
-    }),
-
-    // ── Set Counter ────────────────────────────────────────────────
-    tool({
-      name: 'set_counter',
-      description: 'Set a counter on a card to a specific value.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          cardName: { type: 'string', description: 'Name of the card' },
-          zone: { type: 'string', description: 'Zone key the card is in' },
-          counterType: { type: 'string', description: 'Counter type to set' },
-          value: { type: 'number', description: 'New counter value (0 removes the counter)' },
-        },
-        required: ['cardName', 'zone', 'counterType', 'value'],
-      },
-      async run(input) {
-        const zone = tz(ctx, input.zone);
-        return ctx.execute((state) => {
-          const cardId = resolveCard(state, input.cardName, zone);
-          return setCounter(p, cardId, input.counterType, input.value);
         });
       },
     }),
