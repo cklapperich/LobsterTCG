@@ -219,11 +219,14 @@
     gameState = { ...gameState };
   }
 
-  // Try an action through plugin hooks + capacity checks
+  // Try an action through plugin hooks + capacity checks.
+  // Snapshot gameState before hooks to avoid Svelte 5 $state proxy issues
+  // (Object.values/entries on deeply nested proxied objects can silently drop properties).
   function tryAction(action: Action): string | null {
     if (!gameState) return 'No game state';
 
-    const preResult = pluginManager.runPreHooks(gameState, action);
+    const snapshot = $state.snapshot(gameState) as GameState<CardTemplate>;
+    const preResult = pluginManager.runPreHooks(snapshot, action);
     if (preResult.outcome === 'block') {
       const reason = `Action blocked: ${preResult.reason ?? 'Unknown'}`;
       gameState.log.push(reason);
@@ -243,7 +246,7 @@
       return blocked;
     }
 
-    // Run post-hooks (e.g., setup face-down, trainer text logging)
+    // Run post-hooks on the live state (they may mutate it)
     pluginManager.runPostHooks(gameState, action, gameState);
 
     gameState = { ...gameState };
