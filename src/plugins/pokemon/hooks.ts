@@ -188,8 +188,8 @@ function warnEvolutionChain(state: PokemonState, action: Action): PreHookResult 
     return { outcome: 'continue' };
   }
 
-  // Only validate hand → field (skip staging resolution, promotions, etc.)
-  if (!fromZone?.endsWith('_hand')) return { outcome: 'continue' };
+  // Skip staging resolution (trainer effects moving cards through staging)
+  if (fromZone === 'staging') return { outcome: 'continue' };
   if (!isFieldZone(toZone)) return { outcome: 'continue' };
 
   const template = getTemplateForCard(state, cardInstanceId);
@@ -303,8 +303,8 @@ function warnPokemonPlacement(state: PokemonState, action: Action): PreHookResul
     return { outcome: 'continue' };
   }
 
-  // Only validate hand → field (skip staging resolution, promotions, etc.)
-  if (!fromZone?.endsWith('_hand')) return { outcome: 'continue' };
+  // Skip staging resolution (trainer effects moving cards through staging)
+  if (fromZone === 'staging') return { outcome: 'continue' };
   if (!isFieldZone(toZone)) return { outcome: 'continue' };
 
   const template = getTemplateForCard(state, cardInstanceId);
@@ -577,6 +577,18 @@ function logMulliganMessage(state: PokemonState, action: Action): PostHookResult
 
 // ── Declare Action Hooks ─────────────────────────────────────────
 
+/** Pre-hook: cannot end turn with cards still in the staging zone. */
+function warnStagingNotEmpty(state: PokemonState, action: Action): PreHookResult {
+  if (action.type !== ACTION_TYPES.END_TURN) return { outcome: 'continue' };
+
+  const staging = state.zones['staging'];
+  if (staging && staging.cards.length > 0) {
+    return blockOrWarn(action, 'Cannot end turn with cards still in the staging zone. Resolve or discard them first.');
+  }
+
+  return { outcome: 'continue' };
+}
+
 /** Pre-hook: the player who goes first (turnNumber <= 1) cannot attack. */
 function warnAttackFirstTurn(state: PokemonState, action: Action): PreHookResult {
   if (action.type !== ACTION_TYPES.DECLARE_ACTION) return { outcome: 'continue' };
@@ -770,6 +782,9 @@ export const pokemonHooksPlugin: Plugin<PokemonCardTemplate> = {
     [ACTION_TYPES.DECLARE_ACTION]: [
       { hook: warnAttackFirstTurn, priority: 90 },
       { hook: warnAttackEnergyCost, priority: 100 },
+    ],
+    [ACTION_TYPES.END_TURN]: [
+      { hook: warnStagingNotEmpty, priority: 90 },
     ],
   },
 };

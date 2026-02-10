@@ -10,6 +10,7 @@ import {
   declareAction,
   setOrientation,
   moveCardStack,
+  moveCard,
 } from '../../core';
 import { type RunnableTool, type ToolContext } from '../../core/ai-tools';
 import { ZONE_IDS } from './zones';
@@ -95,6 +96,52 @@ export function createEndPhaseTool(description: string = 'Signal that this phase
   });
 }
 
+/** Create the attach_energy tool with a dynamic description tracking usage. */
+export function createAttachEnergyTool(ctx: ToolContext): RunnableTool {
+  const p = ctx.playerIndex;
+  const handKey = `player${p + 1}_${ZONE_IDS.HAND}`;
+  let usedThisTurn = false;
+
+  const attachTool: any = {
+    name: 'attach_energy',
+    parameters: {
+      type: 'object' as const,
+      properties: {
+        cardName: { type: 'string', description: 'Name of the energy card in your hand (e.g. "Fire Energy")' },
+        toZone: { type: 'string', description: 'Field zone to attach energy to (e.g. "your_active", "your_bench_1")' },
+      },
+      required: ['cardName', 'toZone'],
+    },
+    async execute(input: any) {
+      const toZone = tzp(ctx, input.toZone);
+      const result = await ctx.execute((state) => {
+        const cardId = input.cardName.startsWith(INSTANCE_ID_PREFIX)
+          ? input.cardName
+          : resolveCardName(state, input.cardName, handKey);
+        return moveCard(p, cardId, handKey, toZone);
+      });
+      // Mark as used only if the action succeeded (not blocked by hooks)
+      if (!result.startsWith('Action blocked:') && !result.startsWith('Error:')) {
+        usedThisTurn = true;
+      }
+      return result;
+    },
+  };
+
+  Object.defineProperty(attachTool, 'description', {
+    get: () => {
+      if (usedThisTurn) {
+        return '[ALREADY USED THIS TURN] Attach 1 energy from hand to a Pokemon. Your manual energy attachment has been used. For card-effect energy, use move_card with allowed_by_card_effect=true.';
+      }
+      return 'Attach 1 energy card from your hand to a Pokemon on your field. You get 1 manual energy attachment per turn.';
+    },
+    enumerable: true,
+    configurable: true,
+  });
+
+  return attachTool as RunnableTool;
+}
+
 /** Create all Pokemon-specific custom tools (attacks, abilities, retreat, discard, status). */
 export function createPokemonCustomTools(ctx: ToolContext): RunnableTool[] {
   const p = ctx.playerIndex;
@@ -163,6 +210,9 @@ export function createPokemonCustomTools(ctx: ToolContext): RunnableTool[] {
 
   // Status condition tool
   tools.push(createSetStatusTool(ctx));
+
+  // Manual energy attachment (1 per turn, dynamic description)
+  tools.push(createAttachEnergyTool(ctx));
 
   // Discard all cards from a zone
   tools.push(tool({

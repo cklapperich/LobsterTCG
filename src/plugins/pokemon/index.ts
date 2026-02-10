@@ -18,6 +18,7 @@ import {
   ORIENTATIONS,
 } from '../../core';
 import type { ToolContext } from '../../core/ai-tools';
+import type { ActionExecutor } from '../../core/action-executor';
 import { ZONE_IDS } from './zones';
 import type { PokemonCardTemplate } from './cards';
 import {
@@ -391,6 +392,20 @@ export const plugin: GamePlugin<PokemonCardTemplate> = {
   getActionPanels,
   onActionPanelClick,
 };
+
+/**
+ * Post-setup: flip field cards face-up, coin flip to determine first player.
+ */
+export async function onSetupComplete(state: GameState<CardTemplate>, executor: ActionExecutor): Promise<PlayerIndex> {
+  flipFieldCardsFaceUp(state);
+
+  // Coin flip to determine who goes first (return winner, don't mutate —
+  // addLog causes gameState reassignment which makes `state` ref stale)
+  const isHeads = await executor.flipCoin();
+  const firstPlayer: PlayerIndex = isHeads ? 0 : 1;
+  executor.addLog(`Coin flip: ${isHeads ? 'HEADS' : 'TAILS'} — Player ${firstPlayer + 1} goes first!`);
+  return firstPlayer;
+}
 
 // Re-exports
 export { pokemonHooksPlugin, modifyReadableState } from './hooks';

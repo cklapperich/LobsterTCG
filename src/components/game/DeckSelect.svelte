@@ -98,7 +98,8 @@
         ]);
         if (!deckRes.ok) throw new Error(`HTTP ${deckRes.status}`);
         const content = await deckRes.text();
-        const strategy = stratRes?.ok ? await stratRes.text() : '';
+        const stratIsText = stratRes?.ok && !stratRes.headers.get('content-type')?.includes('text/html');
+        const strategy = stratIsText ? await stratRes.text() : '';
         const displayName = deckName.charAt(0).toUpperCase() + deckName.slice(1);
 
         const { deckList, warnings } = parsePTCGODeck(content, displayName);

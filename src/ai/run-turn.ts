@@ -95,8 +95,7 @@ export function toAISDKTools(
 ): ToolSet {
   const result: ToolSet = {};
   for (const t of tools) {
-    result[t.name] = {
-      description: t.description,
+    const sdkTool: any = {
       parameters: jsonSchema(t.parameters as any),
       execute: async (args: Record<string, any>) => {
         if (stepState?.blocked) {
@@ -104,7 +103,8 @@ export function toAISDKTools(
         }
         try {
           const res = await t.execute(args);
-          if (abort && TERMINAL_TOOLS.has(t.name)) {
+          const wasBlocked = typeof res === 'string' && (res.startsWith('Action blocked:') || res.startsWith('Error:'));
+          if (abort && TERMINAL_TOOLS.has(t.name) && !wasBlocked) {
             abort.abort();
           }
           // Handle rewind: set signal, block batch, restore state
@@ -130,6 +130,12 @@ export function toAISDKTools(
         }
       },
     };
+    // Use getter so dynamic descriptions (e.g. attach_energy) refresh each step
+    Object.defineProperty(sdkTool, 'description', {
+      get() { return t.description; },
+      enumerable: true,
+    });
+    result[t.name] = sdkTool;
   }
   return result;
 }
@@ -206,9 +212,9 @@ function condenseToolResults(history: CoreMessage[], fromIndex: number): void {
         if (KEEP_LATEST_SET.has(part.toolName) && i === lastInfoToolIndex) continue;
 
         const raw = typeof part.result === 'string' ? part.result : JSON.stringify(part.result);
-        const isError = raw.toLowerCase().startsWith('error');
+        const isError = raw.startsWith('Error:') || raw.startsWith('Action blocked:') || raw.startsWith('Cancelled:');
         part.result = isError
-          ? `[${part.toolName} failed: ${raw.slice(0, 120)}]`
+          ? `[${part.toolName} failed: ${raw.slice(0, 200)}]`
           : `[${part.toolName} succeeded]`;
       }
     }

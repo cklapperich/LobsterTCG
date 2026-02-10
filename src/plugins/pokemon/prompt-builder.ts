@@ -82,7 +82,7 @@ const MODE_CONFIGS: Record<AgentMode, ModeConfig> = {
     sections: [
       'INTRO', 'ROLE_SETUP', 'TURN_STRUCTURE_SETUP',
       'ZONE_LAYOUT', 'KEY_RULES',
-      'TOOL_USAGE', 'DECISIONS', 'KINDNESS', 'STRATEGY_PLANNING',
+      'TOOL_USAGE', 'DECISIONS', 'ERROR_CORRECTION', 'STRATEGY_PLANNING',
     ],
     coreToolFilter: 'include',
     coreTools: [
@@ -108,7 +108,7 @@ const MODE_CONFIGS: Record<AgentMode, ModeConfig> = {
     sections: [
       'INTRO', 'ROLE_CHECKUP', 'TURN_STRUCTURE_CHECKUP', 'WIN_CONDITIONS',
       'ZONE_LAYOUT', 'KEY_RULES', 'STATUS_CONDITIONS', 'DAMAGE',
-      'TOOL_USAGE', 'DECISIONS', 'KINDNESS',
+      'TOOL_USAGE', 'DECISIONS', 'ERROR_CORRECTION',
     ],
     coreToolFilter: 'include',
     coreTools: [
@@ -131,7 +131,7 @@ const MODE_CONFIGS: Record<AgentMode, ModeConfig> = {
     sections: [
       'INTRO', 'ROLE_FULLTURN', 'TURN_STRUCTURE_MAIN', 'WIN_CONDITIONS',
       'ZONE_LAYOUT', 'KEY_RULES', 'STATUS_CONDITIONS', 'DAMAGE',
-      'TOOL_USAGE', 'PEEK_AND_SEARCH', 'DECISIONS', 'KINDNESS', 'STRATEGY_PLANNING',
+      'TOOL_USAGE', 'PEEK_AND_SEARCH', 'DECISIONS', 'ERROR_CORRECTION', 'STRATEGY_PLANNING',
     ],
     coreToolFilter: 'exclude',
     coreTools: [
@@ -146,7 +146,7 @@ const MODE_CONFIGS: Record<AgentMode, ModeConfig> = {
     sections: [
       'INTRO', 'ROLE_DECISION', 'TURN_STRUCTURE_DECISION', 'WIN_CONDITIONS',
       'ZONE_LAYOUT', 'KEY_RULES', 'STATUS_CONDITIONS', 'DAMAGE',
-      'TOOL_USAGE', 'PEEK_AND_SEARCH', 'DECISIONS', 'KINDNESS', 'STRATEGY_PLANNING',
+      'TOOL_USAGE', 'PEEK_AND_SEARCH', 'DECISIONS', 'ERROR_CORRECTION', 'STRATEGY_PLANNING',
     ],
     coreToolFilter: 'exclude',
     coreTools: [
