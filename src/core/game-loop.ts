@@ -4,6 +4,7 @@ import type { GameEventType } from './types';
 import type { ReadableGameState } from './readable';
 import { toReadableState } from './readable';
 import { executeAction, checkOpponentZone } from './engine';
+import { gameLog } from './game-log';
 import type { PluginManager } from './plugin';
 
 type GameEventListener<T extends CardTemplate = CardTemplate> = (
@@ -81,7 +82,7 @@ export class GameLoop<T extends CardTemplate = CardTemplate> {
     if (this.pluginManager) {
       const blockReason = this.pluginManager.validateAction(this.state, action);
       if (blockReason) {
-        this.state.log.push(`Action blocked: ${blockReason}`);
+        gameLog(this.state, `Action blocked: ${blockReason}`);
         this.emit(GAME_EVENTS.ACTION_BLOCKED, { state: this.state, action, reason: blockReason });
         return;
       }
@@ -91,11 +92,11 @@ export class GameLoop<T extends CardTemplate = CardTemplate> {
     const opponentCheck = checkOpponentZone(this.state, action);
     if (opponentCheck) {
       if (opponentCheck.shouldBlock) {
-        this.state.log.push(`Action blocked: ${opponentCheck.reason}`);
+        gameLog(this.state, `Action blocked: ${opponentCheck.reason}`);
         this.emit(GAME_EVENTS.ACTION_BLOCKED, { state: this.state, action, reason: opponentCheck.reason });
         return;
       } else {
-        this.state.log.push(`Warning: ${opponentCheck.reason}`);
+        gameLog(this.state, `Warning: ${opponentCheck.reason}`);
       }
     }
 
@@ -112,12 +113,12 @@ export class GameLoop<T extends CardTemplate = CardTemplate> {
     if (this.pluginManager) {
       const preResult = this.pluginManager.runPreHooks(this.state, action);
       if (preResult.outcome === 'block') {
-        this.state.log.push(`Action blocked: ${preResult.reason ?? 'Unknown reason'}`);
+        gameLog(this.state, `Action blocked: ${preResult.reason ?? 'Unknown reason'}`);
         this.emit(GAME_EVENTS.ACTION_BLOCKED, { state: this.state, action, reason: preResult.reason });
         return;
       }
       if (preResult.outcome === 'warn') {
-        this.state.log.push(`Warning: ${preResult.reason}`);
+        gameLog(this.state, `Warning: ${preResult.reason}`);
       }
       if (preResult.outcome === 'replace') {
         const originalAction = action;

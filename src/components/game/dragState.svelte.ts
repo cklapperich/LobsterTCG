@@ -1,5 +1,5 @@
 import type { CardInstance, CardTemplate, Visibility, GameState } from '../../core';
-import { executeAction, moveCard, moveCardStack, checkOpponentZone, zoneVisibility, type PluginManager } from '../../core';
+import { executeAction, moveCard, moveCardStack, checkOpponentZone, zoneVisibility, gameLog, type PluginManager } from '../../core';
 import { playSfx } from '../../lib/audio.svelte';
 import { playerFromZoneKey } from './player-config';
 
@@ -90,11 +90,11 @@ export function executeDrop(
   const opponentCheck = checkOpponentZone(gameState, action);
   if (opponentCheck) {
     if (opponentCheck.shouldBlock) {
-      gameState.log.push(`Action blocked: ${opponentCheck.reason}`);
+      gameLog(gameState, `Action blocked: ${opponentCheck.reason}`);
       dragStore.current = null;
       return null;
     } else {
-      gameState.log.push(`Warning: ${opponentCheck.reason}`);
+      gameLog(gameState, `Warning: ${opponentCheck.reason}`);
     }
   }
 
@@ -102,7 +102,7 @@ export function executeDrop(
   if (pluginManager) {
     const preResult = pluginManager.runPreHooks(gameState, action);
     if (preResult.outcome === 'block') {
-      gameState.log.push(`Action blocked: ${preResult.reason ?? 'Unknown'}`);
+      gameLog(gameState, `Action blocked: ${preResult.reason ?? 'Unknown'}`);
       dragStore.current = null;
       return null;
     }
@@ -110,7 +110,7 @@ export function executeDrop(
       Object.assign(action, preResult.action);
     }
     if (preResult.outcome === 'warn') {
-      gameState.log.push(`Warning: ${preResult.reason}`);
+      gameLog(gameState, `Warning: ${preResult.reason}`);
     }
   }
 
@@ -119,7 +119,7 @@ export function executeDrop(
     const fromZone = gameState.zones[dragStore.current.fromZoneKey];
     const toZone = gameState.zones[toZoneKey];
     if (toZone && toZone.config.maxCards !== -1 && toZone.cards.length >= toZone.config.maxCards) {
-      gameState.log.push(`Move blocked: ${toZone.config.name} is full (${toZone.config.maxCards}/${toZone.config.maxCards} cards)`);
+      gameLog(gameState, `Move blocked: ${toZone.config.name} is full (${toZone.config.maxCards}/${toZone.config.maxCards} cards)`);
       dragStore.current = null;
       return null;
     }
@@ -192,11 +192,11 @@ export function executeStackDrop(
   const opponentCheck = checkOpponentZone(gameState, action);
   if (opponentCheck) {
     if (opponentCheck.shouldBlock) {
-      gameState.log.push(`Action blocked: ${opponentCheck.reason}`);
+      gameLog(gameState, `Action blocked: ${opponentCheck.reason}`);
       dragStore.current = null;
       return null;
     } else {
-      gameState.log.push(`Warning: ${opponentCheck.reason}`);
+      gameLog(gameState, `Warning: ${opponentCheck.reason}`);
     }
   }
 
@@ -204,7 +204,7 @@ export function executeStackDrop(
   if (pluginManager) {
     const preResult = pluginManager.runPreHooks(gameState, action);
     if (preResult.outcome === 'block') {
-      gameState.log.push(`Action blocked: ${preResult.reason ?? 'Unknown'}`);
+      gameLog(gameState, `Action blocked: ${preResult.reason ?? 'Unknown'}`);
       dragStore.current = null;
       return null;
     }
@@ -212,7 +212,7 @@ export function executeStackDrop(
       Object.assign(action, preResult.action);
     }
     if (preResult.outcome === 'warn') {
-      gameState.log.push(`Warning: ${preResult.reason}`);
+      gameLog(gameState, `Warning: ${preResult.reason}`);
     }
   }
 
@@ -221,7 +221,7 @@ export function executeStackDrop(
     const fromZone = gameState.zones[fromZoneKey];
     const toZone = gameState.zones[toZoneKey];
     if (toZone && toZone.config.maxCards !== -1 && toZone.cards.length + pileCardIds.length > toZone.config.maxCards) {
-      gameState.log.push(`Move blocked: ${toZone.config.name} is full`);
+      gameLog(gameState, `Move blocked: ${toZone.config.name} is full`);
       dragStore.current = null;
       return null;
     }

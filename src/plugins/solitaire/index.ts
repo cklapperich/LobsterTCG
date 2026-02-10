@@ -1,5 +1,5 @@
 import type { GamePlugin, GameState, PlayerIndex, Playmat, ActionPanel, Action } from '../../core';
-import { loadPlaymat, createGameState, VISIBILITY, executeAction } from '../../core';
+import { loadPlaymat, createGameState, VISIBILITY, executeAction, gameLog } from '../../core';
 import { moveCard } from '../../core';
 import type { SolitaireCardTemplate } from './cards';
 import { ZONE_IDS } from './zones';
@@ -66,7 +66,7 @@ function onActionPanelClick(
       if (movedCard) {
         movedCard.visibility = VISIBILITY.PUBLIC;
       }
-      state.log.push(`[Player 1] Drew ${topCard.template.name} from stock`);
+      gameLog(state, `Drew ${topCard.template.name} from stock`);
       return; // Direct mutation path
     }
   }
@@ -83,7 +83,7 @@ function onActionPanelClick(
       card.visibility = VISIBILITY.HIDDEN;
       stock.cards.push(card);
     }
-    state.log.push('[Player 1] Reset stock from waste');
+    gameLog(state, 'Reset stock from waste');
     return; // Direct mutation path
   }
 }

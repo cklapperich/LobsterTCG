@@ -74,7 +74,6 @@ interface ModeConfig {
   /** Optional extra tools specific to this mode (e.g. set_status, end_phase). */
   extras?: (ctx: ToolContext) => RunnableTool[];
 }
-
 // ── Declarative Mode Configs ─────────────────────────────────────
 
 const MODE_CONFIGS: Record<AgentMode, ModeConfig> = {

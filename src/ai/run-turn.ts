@@ -5,7 +5,7 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import type { GamePlugin } from '../core';
 import type { ToolContext, RunnableTool } from '../core/ai-tools';
 import { logStepFinish } from './logging';
-import { AI_CONFIG, AUTONOMOUS_CONFIG, TERMINAL_TOOL_NAMES, KEEP_LATEST_INFO_TOOL_NAMES, ALWAYS_PRESERVE_TOOL_NAMES } from './constants';
+import { AI_CONFIG, AUTONOMOUS_CONFIG, TERMINAL_TOOL_NAMES, KEEP_LATEST_INFO_TOOL_NAMES } from './constants';
 import { startActiveObservation } from '@langfuse/tracing';
 
 export type AIProvider = 'fireworks' | 'anthropic';
@@ -104,6 +104,11 @@ export function toAISDKTools(
         try {
           const res = await t.execute(args);
           const wasBlocked = typeof res === 'string' && (res.startsWith('Action blocked:') || res.startsWith('Error:'));
+          // Propagate block to stepState so remaining parallel tools are cancelled
+          if (wasBlocked && stepState) {
+            stepState.blocked = true;
+            stepState.blockReason = typeof res === 'string' ? res : String(res);
+          }
           if (abort && TERMINAL_TOOLS.has(t.name) && !wasBlocked) {
             abort.abort();
           }
@@ -121,7 +126,7 @@ export function toAISDKTools(
           return res;
         } catch (e: any) {
           const msg = e?.message ?? String(e);
-          console.warn(`[AI] Tool "${t.name}" error:`, msg);
+          console.warn(`[Player 2] Tool "${t.name}" error:`, msg);
           if (stepState) {
             stepState.blocked = true;
             stepState.blockReason = msg;
@@ -166,26 +171,19 @@ interface AgentResult {
   aborted: boolean;
 }
 
-/** Set of tool names that share a single "keep latest" slot. */
+/** Info tools that share a single "keep latest" slot (only the most recent is preserved). */
 const KEEP_LATEST_SET = new Set<string>(KEEP_LATEST_INFO_TOOL_NAMES);
-/** Set of tool names whose results are always preserved. */
-const ALWAYS_PRESERVE_SET = new Set<string>(ALWAYS_PRESERVE_TOOL_NAMES);
 
 /**
  * Condense tool results in message history to save tokens.
  *
- * Strategy:
- * - peek/search_zone share a single "keep latest" slot: only the most recent
- *   call is preserved, older ones are condensed. Rationale: peek and search
- *   are mutually exclusive (searching invalidates peek positions).
- * - coin_flip/dice_roll are always preserved (small output).
- * - All other tool results are condensed to "[tool_name succeeded]".
- *
- * Only processes messages from `fromIndex` onward.
+ * Only peek/search_zone are condensed: they share a single "keep latest" slot
+ * where only the most recent call is preserved (searching invalidates peek positions).
+ * All other tool results are left untouched so the AI retains full context
+ * (including block messages, error details, and effect text).
  */
 function condenseToolResults(history: CoreMessage[], fromIndex: number): void {
-  // First pass: find the index of the most recent peek/search tool result
-  // across the ENTIRE history (not just fromIndex onward) so we preserve it.
+  // Find the index of the most recent peek/search tool result across ENTIRE history
   let lastInfoToolIndex = -1;
   for (let i = 0; i < history.length; i++) {
     const msg = history[i];
@@ -198,24 +196,15 @@ function condenseToolResults(history: CoreMessage[], fromIndex: number): void {
     }
   }
 
-  // Second pass: condense from fromIndex onward
+  // Condense only older peek/search results
   for (let i = fromIndex; i < history.length; i++) {
     const msg = history[i];
     if (msg.role === 'tool' && Array.isArray(msg.content)) {
       for (const part of msg.content as any[]) {
         if (part.type !== 'tool-result') continue;
-
-        // Always preserve coin_flip / dice_roll
-        if (ALWAYS_PRESERVE_SET.has(part.toolName)) continue;
-
-        // Preserve the single most recent peek/search result
-        if (KEEP_LATEST_SET.has(part.toolName) && i === lastInfoToolIndex) continue;
-
-        const raw = typeof part.result === 'string' ? part.result : JSON.stringify(part.result);
-        const isError = raw.startsWith('Error:') || raw.startsWith('Action blocked:') || raw.startsWith('Cancelled:');
-        part.result = isError
-          ? `[${part.toolName} failed: ${raw.slice(0, 200)}]`
-          : `[${part.toolName} succeeded]`;
+        if (!KEEP_LATEST_SET.has(part.toolName)) continue;
+        if (i === lastInfoToolIndex) continue;
+        part.result = `[${part.toolName} — superseded by newer call]`;
       }
     }
   }

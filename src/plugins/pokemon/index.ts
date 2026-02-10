@@ -11,6 +11,8 @@ import {
   concede as concedeAction,
   executeAction,
   declareAction,
+  gameLog,
+  systemLog,
 
   VISIBILITY,
   zoneVisibility,
@@ -33,6 +35,7 @@ import {
   COUNTER_CATEGORIES,
   SETUP,
   POKEMON_DECLARATION_TYPES,
+  AI_COUNTER_TYPES,
 } from './constants';
 
 // Import counter images
@@ -196,7 +199,7 @@ export function autoMulligan(state: GameState<CardTemplate>, playerIndex: Player
     // Shuffle and redraw 7
     executeAction(state, shuffleAction(playerIndex, deckKey));
     executeAction(state, { type: ACTION_TYPES.DRAW, player: playerIndex, count: SETUP.HAND_SIZE });
-    state.log.push(`Player ${playerIndex + 1} mulliganed (no Basic Pokemon)`);
+    gameLog(state, 'Mulliganed (no Basic Pokemon)');
   }
   return count;
 }
@@ -232,7 +235,7 @@ export function flipFieldCardsFaceUp(state: GameState<CardTemplate>): void {
       }
     }
   }
-  state.log.push('All Pokemon flipped face-up!');
+  systemLog(state, 'All Pokemon flipped face-up!');
 }
 
 // ── Action Panels ────────────────────────────────────────────────
@@ -411,6 +414,7 @@ export const plugin: GamePlugin<PokemonCardTemplate> = {
   getCoinFront,
   getCoinBack,
   formatCardForSearch: (template) => formatCardReference(template as any).join('\n'),
+  getAICounterTypes: () => Object.values(AI_COUNTER_TYPES),
   shouldSkipStartOfTurn,
   getAgentConfig,
   getActionPanels,
