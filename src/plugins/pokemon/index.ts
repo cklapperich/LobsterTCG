@@ -295,6 +295,22 @@ function getActionPanels(state: GameState<PokemonCardTemplate>, player: PlayerIn
     emptyMessage: 'No abilities',
   });
 
+  // STADIUM panel — shows only if a card is in the stadium zone
+  const stadiumZone = state.zones[ZONE_IDS.STADIUM];
+  const stadiumCard = stadiumZone?.cards.at(-1);
+  if (stadiumCard) {
+    const stadiumTemplate = getCardTemplate(stadiumCard.template.id);
+    panels.push({
+      id: 'stadium',
+      title: 'ACTIVE STADIUM',
+      buttons: [{
+        id: 'view-stadium',
+        label: stadiumTemplate?.name ?? 'Stadium Card',
+        tooltip: 'Click to view stadium card details',
+      }],
+    });
+  }
+
   return panels;
 }
 
@@ -310,6 +326,14 @@ function onActionPanelClick(state: GameState<PokemonCardTemplate>, player: Playe
     const zone = state.zones[zoneKey];
     const cardName = zone?.cards.at(-1)?.template?.name ?? 'Pokemon';
     return declareAction(player, POKEMON_DECLARATION_TYPES.ABILITY, abilityName, { cardName }, `${cardName} used ability: ${abilityName}`);
+  }
+  if (panelId === 'stadium') {
+    const stadiumZone = state.zones[ZONE_IDS.STADIUM];
+    const stadiumCard = stadiumZone?.cards.at(-1);
+    const cardName = stadiumCard?.template?.name ?? 'Stadium Card';
+    const cardText = (stadiumCard?.template as PokemonCardTemplate)?.rules?.join(' ') ?? '';
+    const message = cardText ? `Activated stadium: ${cardName}. ${cardText}` : `Activated stadium: ${cardName}.`;
+    return declareAction(player, POKEMON_DECLARATION_TYPES.STADIUM, buttonId, undefined, message);
   }
   return undefined;
 }
