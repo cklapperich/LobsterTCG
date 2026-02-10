@@ -114,8 +114,8 @@
     gameState && plugin.getActionPanels ? plugin.getActionPanels(gameState, local) : []
   );
 
-  // Grid panels (attacks + abilities) vs sidebar panels
-  const GRID_PANEL_IDS = new Set(['attacks', 'abilities']);
+  // Grid panels (attacks + abilities + stadium) vs sidebar panels
+  const GRID_PANEL_IDS = new Set(['attacks', 'abilities', 'stadium']);
   const gridPanels = $derived(actionPanels.filter(p => GRID_PANEL_IDS.has(p.id)));
   const sidebarPanels = $derived(actionPanels.filter(p => !GRID_PANEL_IDS.has(p.id)));
 

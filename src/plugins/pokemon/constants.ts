@@ -87,6 +87,7 @@ export const POKEMON_DECLARATION_TYPES = {
   ATTACK: 'attack',
   ABILITY: 'ability',
   RETREAT: 'retreat',
+  STADIUM: 'stadium',
 } as const;
 
 // Narrative display limits
