@@ -65,7 +65,8 @@ export function describeAction(
     case ACTION_TYPES.SEARCH_ZONE:
       return null;
     case ACTION_TYPES.DECLARE_ACTION:
-      return `${action.message ?? `${action.name} declared`}`;
+      // Core executor already logs this in engine.ts — returning here would double-log
+      return null;
     default:
       return null;
   }

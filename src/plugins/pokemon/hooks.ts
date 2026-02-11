@@ -495,10 +495,19 @@ function warnAttackEnergyCost(state: PokemonState, action: Action): PreHookResul
   if (totalAttached < attack.cost.length) {
     const costStr = attack.cost.join('/');
     const activeName = topCard.template.name ?? 'Active Pokemon';
-    return blockOrWarn(
-      action,
-      `${activeName} needs ${attack.cost.length} energy for ${attack.name} (cost: ${costStr}, attached: ${totalAttached}).`,
-    );
+    const reason = `${activeName} needs ${attack.cost.length} energy for ${attack.name} (cost: ${costStr}, attached: ${totalAttached}).`;
+
+    if (action.source === ACTION_SOURCES.AI) {
+      // Custom suffix — don't use generic blockOrWarn suffixes.
+      // Special energy cards (e.g. Double Colorless) may satisfy multi-energy costs
+      // with fewer cards, so this is never a definitive block.
+      const suffix = ' Verify that the attached energy satisfies the full cost (some energy cards provide multiple energy). If it does, retry with allowed_by_card_effect=true.';
+      if (_aiEnforcement === 'strict') {
+        return { outcome: 'block', reason: reason + suffix };
+      }
+      return { outcome: 'warn', reason: reason + suffix };
+    }
+    return { outcome: 'warn', reason };
   }
 
   return { outcome: 'continue' };

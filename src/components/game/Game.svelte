@@ -83,9 +83,9 @@
       awaitDecisionResolution: () => new Promise<void>(r => { pendingDecisionResolve = r; }),
     };
     const aiCtrl: PlayerController = {
-      takeTurn: () => triggerAITurn(),
-      takeSetupTurn: () => triggerAISetupTurn(),
-      handleDecision: () => triggerAIDecisionTurn(),
+      takeTurn: () => runAIPhase('turn'),
+      takeSetupTurn: () => runAIPhase('setup'),
+      handleDecision: () => runAIPhase('decision'),
       awaitDecisionResolution: async () => {},
     };
     const builders: Record<string, () => PlayerController> = {
@@ -310,39 +310,40 @@
   // Counter name resolver for describeAction
   const counterNameResolver: CounterNameResolver = (id: string) => getCounterById(id)?.name ?? id;
 
+  /** Load decks, run setup, inject test cards, and init the log. */
+  function initializeGameState(state: GameState<CardTemplate>) {
+    const deck1 = player1Deck ?? gameConfig.getDeck?.();
+    if (deck1 && gameConfig.getTemplate) {
+      loadDeck(state, 0, `player1_${gameConfig.deckZoneId}`, deck1, gameConfig.getTemplate, false);
+    }
+    if (gameConfig.playerCount === 2 && player2Deck && gameConfig.getTemplate) {
+      loadDeck(state, 1, `player2_${gameConfig.deckZoneId}`, player2Deck, gameConfig.getTemplate, false);
+    }
+
+    gameConfig.executeSetup(state, 0);
+    if (gameConfig.playerCount === 2) {
+      gameConfig.executeSetup(state, 1);
+    }
+
+    if (gameConfig.injectTestCards) {
+      for (const [testId, enabled] of Object.entries(testFlags)) {
+        if (enabled) {
+          gameConfig.injectTestCards(state, testId, 0);
+          if (gameConfig.playerCount === 2) {
+            gameConfig.injectTestCards(state, testId, 1);
+          }
+        }
+      }
+    }
+
+    state.log = ['Game started — Setup Phase'];
+  }
+
   onMount(async () => {
     try {
       playmat = await plugin.getPlaymat();
       gameState = await plugin.startGame();
-
-      // Load deck(s): use getDeck() for fixed-deck games, props for selectable
-      const deck1 = player1Deck ?? gameConfig.getDeck?.();
-      if (deck1 && gameConfig.getTemplate) {
-        loadDeck(gameState, 0, `player1_${gameConfig.deckZoneId}`, deck1, gameConfig.getTemplate, false);
-      }
-      if (gameConfig.playerCount === 2 && player2Deck && gameConfig.getTemplate) {
-        loadDeck(gameState, 1, `player2_${gameConfig.deckZoneId}`, player2Deck, gameConfig.getTemplate, false);
-      }
-
-      // Execute setup
-      gameConfig.executeSetup(gameState, 0);
-      if (gameConfig.playerCount === 2) {
-        gameConfig.executeSetup(gameState, 1);
-      }
-
-      // Test card injection
-      if (gameConfig.injectTestCards) {
-        for (const [testId, enabled] of Object.entries(testFlags)) {
-          if (enabled) {
-            gameConfig.injectTestCards(gameState, testId, 0);
-            if (gameConfig.playerCount === 2) {
-              gameConfig.injectTestCards(gameState, testId, 1);
-            }
-          }
-        }
-      }
-
-      gameState.log = ['Game started — Setup Phase'];
+      initializeGameState(gameState);
       gameState = { ...gameState };
       loading = false;
       if (hasAI) playBgm();
@@ -488,34 +489,7 @@
 
   function resetGame() {
     plugin.startGame().then((state) => {
-      // Load deck(s)
-      const deck1 = player1Deck ?? gameConfig.getDeck?.();
-      if (deck1 && gameConfig.getTemplate) {
-        loadDeck(state, 0, `player1_${gameConfig.deckZoneId}`, deck1, gameConfig.getTemplate, false);
-      }
-      if (gameConfig.playerCount === 2 && player2Deck && gameConfig.getTemplate) {
-        loadDeck(state, 1, `player2_${gameConfig.deckZoneId}`, player2Deck, gameConfig.getTemplate, false);
-      }
-
-      // Execute setup
-      gameConfig.executeSetup(state, 0);
-      if (gameConfig.playerCount === 2) {
-        gameConfig.executeSetup(state, 1);
-      }
-
-      // Test card injection
-      if (gameConfig.injectTestCards) {
-        for (const [testId, enabled] of Object.entries(testFlags)) {
-          if (enabled) {
-            gameConfig.injectTestCards(state, testId, 0);
-            if (gameConfig.playerCount === 2) {
-              gameConfig.injectTestCards(state, testId, 1);
-            }
-          }
-        }
-      }
-
-      state.log = ['Game started — Setup Phase'];
+      initializeGameState(state);
       gameState = state;
       previewCard = null;
       closeContextMenuStore();
@@ -577,16 +551,24 @@
     };
   }
 
-  async function triggerAITurn() {
-    if (!gameState || aiThinking || !hasAI) return;
-    const currentPlayer = gameState.activePlayer;
-    const apiKey = import.meta.env[selectedModel.apiKeyEnv];
-    console.log('[DEBUG] apiKey env:', selectedModel.apiKeyEnv, 'value:', apiKey ? `${apiKey.slice(0, 8)}...` : 'MISSING');
-    if (!apiKey) return;
-    aiThinking = true;
-    addLog('Thinking...');
+  type AIPhase = 'turn' | 'setup' | 'decision';
 
-    const { ctx } = createToolContext(getToolContextDeps());
+  async function runAIPhase(phase: AIPhase) {
+    if (!gameState || aiThinking || !hasAI) return;
+    const apiKey = import.meta.env[selectedModel.apiKeyEnv];
+    if (!apiKey) return;
+
+    const currentPlayer = phase === 'decision'
+      ? (gameState.pendingDecision?.targetPlayer ?? gameState.activePlayer)
+      : gameState.activePlayer;
+
+    aiThinking = true;
+    addLog(phase === 'decision' ? 'Responding to decision...' : phase === 'setup' ? 'Setting up...' : 'Thinking...');
+
+    const { ctx } = createToolContext(
+      getToolContextDeps(),
+      phase === 'decision' ? { isDecisionResponse: true } : undefined
+    );
 
     try {
       await runAutonomousAgent({
@@ -602,93 +584,26 @@
       addLog(`Error: ${e}`);
     }
 
-    // Safety net: if AI didn't end its turn (e.g. hit maxSteps), auto-end
-    if (gameState?.activePlayer === currentPlayer && gameState.phase === PHASES.PLAYING) {
-      executeAction(gameState, endTurn(currentPlayer));
-      gameState = { ...gameState };
-      addLog('Turn auto-ended (AI did not call end_turn)');
+    // Safety nets: auto-complete if AI didn't call the expected concluding action
+    if (phase === 'decision') {
+      if (gameState?.pendingDecision) {
+        executeAction(gameState, resolveDecision(currentPlayer));
+        gameState = { ...gameState };
+        addLog('Decision auto-resolved (AI did not call resolve_decision)');
+      }
+    } else {
+      const expectedPhase = phase === 'setup' ? PHASES.SETUP : PHASES.PLAYING;
+      if (gameState?.activePlayer === currentPlayer && gameState.phase === expectedPhase) {
+        executeAction(gameState, endTurn(currentPlayer));
+        gameState = { ...gameState };
+        addLog(`${phase === 'setup' ? 'Setup' : 'Turn'} auto-ended (AI did not call end_turn)`);
+      }
     }
+
+    // Setup→playing transition: coin flip + dispatch to winner
+    if (phase === 'setup' && await handlePostSetupTransition()) return;
 
     aiThinking = false;
-  }
-
-  /**
-   * Trigger the AI's setup turn (place initial Pokemon face-down).
-   */
-  async function triggerAISetupTurn() {
-    if (!gameState || aiThinking || !hasAI) return;
-    const currentPlayer = gameState.activePlayer;
-    const apiKey = import.meta.env[selectedModel.apiKeyEnv];
-    if (!apiKey) return;
-    aiThinking = true;
-    addLog('Setting up...');
-
-    const { ctx } = createToolContext(getToolContextDeps());
-
-    try {
-      await runAutonomousAgent({
-        context: ctx,
-        plugin,
-        apiKey,
-        model: selectedModel.modelId,
-        provider: selectedModel.provider,
-        deckStrategy: decks?.[currentPlayer]?.strategy,
-        logging: true,
-      });
-    } catch (e) {
-      addLog(`Error: ${e}`);
-    }
-
-    // Safety net: if AI didn't end its setup turn, auto-end
-    if (gameState?.activePlayer === currentPlayer && gameState.phase === PHASES.SETUP) {
-      executeAction(gameState, endTurn(currentPlayer));
-      gameState = { ...gameState };
-      addLog('Setup auto-ended (AI did not call end_turn)');
-    }
-
-    // Setup→playing transition: coin flip + dispatch to winner.
-    // Keep aiThinking=true through the transition so UI stays locked during coin flip.
-    if (await handlePostSetupTransition()) return;
-
-    aiThinking = false;
-  }
-
-  /**
-   * Trigger a decision mini-turn for the AI (human created the decision).
-   */
-  async function triggerAIDecisionTurn() {
-    if (!gameState || aiThinking || !hasAI) return;
-    const decisionTarget = gameState.pendingDecision?.targetPlayer ?? gameState.activePlayer;
-    const apiKey = import.meta.env[selectedModel.apiKeyEnv];
-    if (!apiKey) return;
-    aiThinking = true;
-    addLog('Responding to decision...');
-
-    const { ctx } = createToolContext(getToolContextDeps(), { isDecisionResponse: true });
-
-    try {
-      await runAutonomousAgent({
-        context: ctx,
-        plugin,
-        apiKey,
-        model: selectedModel.modelId,
-        provider: selectedModel.provider,
-        deckStrategy: decks?.[decisionTarget]?.strategy,
-        logging: true,
-      });
-    } catch (e) {
-      addLog(`Error: ${e}`);
-    }
-
-    // Safety net: if AI didn't call resolve_decision, auto-resolve
-    if (gameState?.pendingDecision) {
-      executeAction(gameState, resolveDecision(decisionTarget));
-      gameState = { ...gameState };
-      addLog('Decision auto-resolved (AI did not call resolve_decision)');
-    }
-
-    aiThinking = false;
-
   }
 
   function handleMulligan() {
