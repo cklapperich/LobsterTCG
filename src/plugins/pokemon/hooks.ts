@@ -62,7 +62,7 @@ export function getAiEnforcement(): 'strict' | 'lenient' {
  */
 function blockOrWarn(action: Action, reason: string, level: 'hard' | 'soft' = 'soft'): PreHookResult {
   const BLOCK_SUFFIX = ' This action was NOT executed. If a card effect permits this, retry with allowed_by_card_effect=true. Otherwise, undo your actions and try a different approach.';
-  const WARN_SUFFIX = ' Double-check that a card effect allowed this. If no card effect allowed this, undo your actions.';
+  const WARN_SUFFIX = ' (Note: this was allowed to proceed. If a card effect permits this, pass allowed_by_card_effect=true next time to suppress this warning.)';
 
   if (action.source === ACTION_SOURCES.AI) {
     if (level === 'hard' || _aiEnforcement === 'strict') {
@@ -113,7 +113,7 @@ function warnOneSupporter(state: PokemonState, action: Action): PreHookResult {
   // Check if a Supporter was already played (hand → staging) this turn
   for (const prev of state.currentTurn.actions) {
     if (isSupporterPlayed(state, prev)) {
-      return blockOrWarn(action, 'Already played a Supporter this turn (limit 1).');
+      return blockOrWarn(action, 'Already played a Supporter this turn (limit 1).', 'hard');
     }
   }
 
@@ -651,7 +651,7 @@ function warnStagingNotEmpty(state: PokemonState, action: Action): PreHookResult
 
   const staging = state.zones['staging'];
   if (staging && staging.cards.length > 0) {
-    return blockOrWarn(action, 'Cannot end turn with cards still in the staging zone. Resolve or discard them first.');
+    return blockOrWarn(action, 'Cannot end turn with cards still in the staging zone. Resolve or discard them first.', 'hard');
   }
 
   return { outcome: 'continue' };
@@ -663,7 +663,7 @@ function warnAttackFirstTurn(state: PokemonState, action: Action): PreHookResult
   if ((action as DeclareAction).declarationType !== POKEMON_DECLARATION_TYPES.ATTACK) return { outcome: 'continue' };
   if (action.allowed_by_card_effect) return { outcome: 'continue' };
   if (state.turnNumber <= 1) {
-    return blockOrWarn(action, 'Cannot attack on the first turn of the game.');
+    return blockOrWarn(action, 'Cannot attack on the first turn of the game.', 'hard');
   }
   return { outcome: 'continue' };
 }

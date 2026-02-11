@@ -101,8 +101,20 @@ export function createToolContext(
           if (stateNow.pendingDecision) {
             const target = stateNow.pendingDecision.targetPlayer;
             if (deps.isLocal(target)) {
+              const logBefore = stateNow.log?.length ?? 0;
               executor.playSfx('decisionRequested');
               await deps.controllers[target].awaitDecisionResolution();
+
+              // Return informative result so AI knows the decision resolved
+              // and doesn't mistake the fresh game state for a new turn.
+              const stateAfter = deps.getState();
+              const newEntries = (stateAfter.log ?? []).slice(logBefore);
+              const opponentActions = newEntries.length > 0
+                ? ` Opponent actions: ${newEntries.join('; ')}.`
+                : '';
+
+              await new Promise(r => setTimeout(r, ACTION_DELAY_MS));
+              return `Decision resolved.${opponentActions} Continue your turn from where you left off — do NOT restart or re-draw.`;
             }
           }
         }
