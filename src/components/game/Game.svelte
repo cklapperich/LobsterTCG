@@ -115,6 +115,17 @@
   // Counter definitions from plugin
   const counterDefinitions = $derived<CounterDefinition[]>(plugin.getCounterDefinitions?.() ?? []);
 
+  // Markers from plugin (GX / VSTAR)
+  const markers = $derived(
+    gameState && plugin.getMarkers ? plugin.getMarkers(gameState, local) : []
+  );
+
+  function handleMarkerClick(markerId: string) {
+    if (!gameState || !plugin.onMarkerClick) return;
+    plugin.onMarkerClick(gameState, local, markerId);
+    gameState = { ...gameState };
+  }
+
   // Action panels from plugin (for local player)
   const actionPanels = $derived(
     gameState && plugin.getActionPanels ? plugin.getActionPanels(gameState, local) : []
@@ -998,6 +1009,8 @@
           <CounterTray
             counters={counterDefinitions}
             onCounterReturn={handleCounterReturn}
+            {markers}
+            onMarkerClick={handleMarkerClick}
           />
         {/if}
 

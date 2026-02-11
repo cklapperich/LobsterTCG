@@ -98,5 +98,11 @@ export const POKEMON_DECLARATION_TYPES = {
   STADIUM: 'stadium',
 } as const;
 
+// GX / VSTAR marker IDs
+export const MARKER_IDS = {
+  GX: 'gx',
+  VSTAR: 'vstar',
+} as const;
+
 // Narrative display limits
 export const NARRATIVE = { RECENT_LOG_LIMIT: 15, DISCARD_DISPLAY_LIMIT: 10 } as const;

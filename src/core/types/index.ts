@@ -89,7 +89,7 @@ export type {
 } from './playmat';
 
 // Game plugin interface
-export type { GamePlugin } from './game-plugin';
+export type { GamePlugin, MarkerState } from './game-plugin';
 
 // Game type config
 export type { GameTypeConfig } from './game-type-config';

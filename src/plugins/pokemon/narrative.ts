@@ -4,6 +4,7 @@ import { isFieldZone } from './helpers';
 import { SUPERTYPES, COUNTER_IDS, NARRATIVE, FIRST_EVOLUTION_TURN, FIRST_SUPPORTER_TURN } from './constants';
 import { toAIPerspective } from './zone-perspective';
 import type { PlayerIndex } from '../../core/types';
+import type { PokemonPluginState } from './plugin-state';
 
 /**
  * Convert a ReadableGameState into a compact narrative text format for AI consumption.
@@ -42,6 +43,18 @@ export function formatNarrativeState(readable: ReadableGameState): string {
   }
   const restrictionStr = turnRestrictions.length > 0 ? ` | ${turnRestrictions.join(', ')}` : '';
   lines.push(`Turn ${readable.turnNumber} | Player ${readable.activePlayer + 1}'s turn | Phase: ${readable.phase}${restrictionStr}`);
+
+  // GX / VSTAR marker status
+  const ps = readable.pluginState as Partial<PokemonPluginState> | undefined;
+  if (ps?.gxUsed || ps?.vstarUsed) {
+    const gx = ps.gxUsed ?? [false, false];
+    const vstar = ps.vstarUsed ?? [false, false];
+    const myGX = gx[aiIdx] ? 'Used' : 'Available';
+    const myVSTAR = vstar[aiIdx] ? 'Used' : 'Available';
+    const oppGX = gx[aiIdx === 0 ? 1 : 0] ? 'Used' : 'Available';
+    const oppVSTAR = vstar[aiIdx === 0 ? 1 : 0] ? 'Used' : 'Available';
+    lines.push(`GX: ${myGX} | VSTAR: ${myVSTAR} | Opponent GX: ${oppGX} | Opponent VSTAR: ${oppVSTAR}`);
+  }
 
   if (readable.pendingDecision) {
     const d = readable.pendingDecision;
