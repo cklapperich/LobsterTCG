@@ -171,7 +171,6 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
           fromZone: { type: 'string', description: 'Zone key (e.g. "your_hand")' },
           toZone: { type: 'string', description: 'Zone key to move the card to (e.g. "your_active")' },
           toPosition: { type: 'string', enum: ['top', 'bottom'], description: '"top" = top of zone (default), "bottom" = bottom of zone' },
-          allowed_by_card_effect: { type: 'boolean', description: 'Set true when a card effect permits bypassing normal rules (e.g. extra energy attachment, evolution on first turn)' },
         },
         required: ['fromZone', 'toZone'],
       },
@@ -182,10 +181,7 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
           const cardId = input.cardName
             ? resolveCard(state, input.cardName, fromZone)
             : resolveCardByPosition(state, fromZone);
-          return {
-            ...moveCard(p, cardId, fromZone, toZone, input.toPosition ?? 'top'),
-            ...(input.allowed_by_card_effect && { allowed_by_card_effect: true }),
-          };
+          return moveCard(p, cardId, fromZone, toZone, input.toPosition ?? 'top');
         });
       },
     }),
@@ -200,7 +196,6 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
           fromZone: { type: 'string', description: 'Zone key to move all cards from (e.g. "your_active")' },
           toZone: { type: 'string', description: 'Zone key to move the cards to (e.g. "your_discard")' },
           toPosition: { type: 'string', enum: ['top', 'bottom'], description: '"top" = top of zone (default), "bottom" = bottom of zone' },
-          allowed_by_card_effect: { type: 'boolean', description: 'Set true when a card effect permits bypassing normal rules' },
         },
         required: ['fromZone', 'toZone'],
       },
@@ -211,10 +206,7 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
         if (!zone) return `Error: zone "${input.fromZone}" not found`;
         if (zone.cards.length === 0) return `Error: zone "${input.fromZone}" is empty`;
         const cardIds = zone.cards.map(c => c.instanceId);
-        return ctx.execute({
-          ...moveCardStack(p, cardIds, fromZone, toZone, input.toPosition ?? 'top'),
-          ...(input.allowed_by_card_effect && { allowed_by_card_effect: true }),
-        });
+        return ctx.execute(moveCardStack(p, cardIds, fromZone, toZone, input.toPosition ?? 'top'));
       },
     }),
 
@@ -249,7 +241,6 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
           },
           zone: { type: 'string', description: 'Target zone key (e.g. "your_deck")' },
           position: { type: 'string', enum: [POSITIONS.TOP, POSITIONS.BOTTOM], description: 'Place on top or bottom of the zone' },
-          allowed_by_card_effect: { type: 'boolean', description: 'Set true when a card effect permits bypassing normal rules' },
         },
         required: ['cardNames', 'zone', 'position'],
       },
@@ -265,10 +256,7 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
             }
             throw new Error(`Card "${name}" not found in any zone`);
           });
-          return {
-            ...placeOnZone(p, cardIds, zone, input.position),
-            ...(input.allowed_by_card_effect && { allowed_by_card_effect: true }),
-          };
+          return placeOnZone(p, cardIds, zone, input.position);
         });
       },
     }),
@@ -392,7 +380,6 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
           zone: { type: 'string', description: 'Zone key the card is in (e.g. "opponent_active")' },
           counterType: { type: 'string', ...(ctx.counterTypes && { enum: ctx.counterTypes }), description: 'Counter type' },
           amount: { type: 'number', description: 'Number of counters to add (default 1)' },
-          allowed_by_card_effect: { type: 'boolean', description: 'Set true when a card effect permits bypassing normal rules' },
         },
         required: ['cardName', 'zone', 'counterType'],
       },
@@ -401,10 +388,7 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
         return ctx.execute((state) => {
           const cardId = resolveCard(state, input.cardName, zone);
           const amount = input.amount ?? 1;
-          return {
-            ...addCounter(p, cardId, input.counterType, amount),
-            ...(input.allowed_by_card_effect && { allowed_by_card_effect: true }),
-          };
+          return addCounter(p, cardId, input.counterType, amount);
         });
       },
     }),

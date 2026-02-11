@@ -5,7 +5,7 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import type { GamePlugin } from '../core';
 import type { ToolContext, RunnableTool } from '../core/ai-tools';
 import { logStepFinish } from './logging';
-import { AI_CONFIG, AUTONOMOUS_CONFIG, TERMINAL_TOOL_NAMES, KEEP_LATEST_INFO_TOOL_NAMES } from './constants';
+import { AI_CONFIG, TERMINAL_TOOL_NAMES, KEEP_LATEST_INFO_TOOL_NAMES } from './constants';
 import { startActiveObservation } from '@langfuse/tracing';
 
 export type AIProvider = 'fireworks' | 'anthropic';
@@ -101,38 +101,28 @@ export function toAISDKTools(
         if (stepState?.blocked) {
           return `Cancelled: a prior action in this parallel batch was blocked (${stepState.blockReason}). All remaining actions have been cancelled. Review the error and adjust your plan.`;
         }
-        try {
-          const res = await t.execute(args);
-          const wasBlocked = typeof res === 'string' && (res.startsWith('Action blocked:') || res.startsWith('Error:'));
-          // Propagate block to stepState so remaining parallel tools are cancelled
-          if (wasBlocked && stepState) {
-            stepState.blocked = true;
-            stepState.blockReason = typeof res === 'string' ? res : String(res);
-          }
-          if (abort && TERMINAL_TOOLS.has(t.name) && !wasBlocked) {
-            abort.abort();
-          }
-          // Handle rewind: set signal, block batch, restore state
-          if (t.name === 'rewind' && rewindSignal) {
-            rewindSignal.triggered = true;
-            rewindSignal.reason = args.reason ?? '';
-            rewindSignal.guidance = args.guidance ?? '';
-            if (stepState) {
-              stepState.blocked = true;
-              stepState.blockReason = 'Rewind triggered — remaining actions cancelled';
-            }
-            restoreCheckpoint?.();
-          }
-          return res;
-        } catch (e: any) {
-          const msg = e?.message ?? String(e);
-          console.warn(`[Player 2] Tool "${t.name}" error:`, msg);
+        const res = await t.execute(args);
+        if (abort && TERMINAL_TOOLS.has(t.name)) {
+          abort.abort();
+
+          // NEW: Block subsequent parallel tools in this step
           if (stepState) {
             stepState.blocked = true;
-            stepState.blockReason = msg;
+            stepState.blockReason = `${t.name} executed - turn ending`;
           }
-          return `Error: ${msg}`;
         }
+        // Handle rewind: set signal, block batch, restore state
+        if (t.name === 'rewind' && rewindSignal) {
+          rewindSignal.triggered = true;
+          rewindSignal.reason = args.reason ?? '';
+          rewindSignal.guidance = args.guidance ?? '';
+          if (stepState) {
+            stepState.blocked = true;
+            stepState.blockReason = 'Rewind triggered — remaining actions cancelled';
+          }
+          restoreCheckpoint?.();
+        }
+        return res;
       },
     };
     // Use getter so dynamic descriptions (e.g. attach_energy) refresh each step
@@ -155,9 +145,10 @@ interface AgentConfig {
   getState: () => string;
   /** Initial user message — task instructions only (state is the last message). */
   tools: RunnableTool[];
-  maxSteps: number;
   label: string;
   logging?: boolean;
+  /** AbortController for coordinating termination across planner and subagents. */
+  abort?: AbortController;
   /** Checkpoint for rewind support. When provided, the AI can call `rewind` to restore state. */
   checkpoint?: {
     snapshot: any;
@@ -224,10 +215,11 @@ function condenseToolResults(history: CoreMessage[], fromIndex: number): void {
  * (refreshed every call) rather than stored in the history. Previous
  * tool results are condensed to short summaries to keep context lean.
  */
+const MAX_STEPS = 1000;
 async function runAgent(config: AgentConfig): Promise<AgentResult> {
   return startActiveObservation(config.label, async (span) => {
-    const { model, systemPrompt, getState, tools, maxSteps, label, logging, checkpoint } = config;
-    const abort = new AbortController();
+    const { model, systemPrompt, getState, tools, label, logging, abort: configAbort, checkpoint } = config;
+    const abort = configAbort ?? new AbortController();
     const stepState: StepState = { blocked: false };
 
     // Rewind support
@@ -248,7 +240,7 @@ async function runAgent(config: AgentConfig): Promise<AgentResult> {
 
     span.update({
       input: { systemPrompt: systemPrompt },
-      metadata: { maxSteps, toolCount: tools.length, toolNames: tools.map(t => t.name) },
+      metadata: {toolCount: tools.length, toolNames: tools.map(t => t.name) },
     });
 
     if (logging) {
@@ -256,136 +248,179 @@ async function runAgent(config: AgentConfig): Promise<AgentResult> {
       console.log('%c[system]', 'color: #88f', systemPrompt.slice(0, 200) + '...');
     }
 
-    try {
-      for (let step = 0; step < maxSteps; step++) {
-        // Reset chain-termination flag — each step gets a clean slate
-        stepState.blocked = false;
-        stepState.blockReason = undefined;
+    for (let step = 0; step < MAX_STEPS; step++) {
+      // Reset chain-termination flag — each step gets a clean slate
+      stepState.blocked = false;
+      stepState.blockReason = undefined;
 
-        // Fresh state as the last message (ephemeral, not stored in history)
-        const freshState = getState();
-        const messagesWithState: CoreMessage[] = [
-          ...history,
-          { role: 'user' as const, content: `[CURRENT GAME STATE]\n${freshState}` },
-        ];
+      // Fresh state as the last message (ephemeral, not stored in history)
+      const freshState = getState();
+      const messagesWithState: CoreMessage[] = [
+        ...history,
+        { role: 'user' as const, content: `[CURRENT GAME STATE]\n${freshState}` },
+      ];
 
-        const result = await startActiveObservation(`${label}/step-${step}`, async (gen) => {
-          gen.update({
-            input: { system: systemPrompt, messages: messagesWithState },
-          });
+      const result = await startActiveObservation(`${label}/step-${step}`, async (gen) => {
+        gen.update({
+          input: { system: systemPrompt, messages: messagesWithState },
+        });
 
-          const stream = streamText({
-            model,
-            maxTokens: AI_CONFIG.MAX_TOKENS,
-            maxRetries: 0,
-            system: systemPrompt,
-            tools: sdkTools,
-            maxSteps: 1,
-            messages: messagesWithState,
-            onStepFinish: (s: any) => {
-              if (logging) logStepFinish(s);
-            },
-          });
+        const stream = streamText({
+          model,
+          maxTokens: AI_CONFIG.MAX_TOKENS,
+          maxRetries: 0,
+          system: systemPrompt,
+          tools: sdkTools,
+          maxSteps: 1,
+          messages: messagesWithState,
+          onStepFinish: (s: any) => {
+            if (logging) logStepFinish(s);
+          },
+        });
 
-          // Drain the stream (executes tools, resolves all DelayedPromise properties)
-          await stream.consumeStream();
+        // Drain the stream (executes tools, resolves all DelayedPromise properties)
+        await stream.consumeStream();
 
-          const res = {
-            text: await stream.text,
-            reasoning: await stream.reasoning,
-            toolCalls: await stream.toolCalls,
-            response: await stream.response,
-            usage: await stream.usage,
-          };
+        const res = {
+          text: await stream.text,
+          reasoning: await stream.reasoning,
+          toolCalls: await stream.toolCalls,
+          response: await stream.response,
+          usage: await stream.usage,
+        };
 
-          gen.update({
-            output: {
-              text: res.text,
-              reasoning: res.reasoning,
-              toolCalls: res.toolCalls,
-              responseMessages: res.response.messages,
-            },
-            usageDetails: {
-              input: res.usage?.promptTokens ?? 0,
-              output: res.usage?.completionTokens ?? 0,
-              total: res.usage?.totalTokens ?? 0,
-            },
-          });
+        gen.update({
+          output: {
+            text: res.text,
+            reasoning: res.reasoning,
+            toolCalls: res.toolCalls,
+            responseMessages: res.response.messages,
+          },
+          usageDetails: {
+            input: res.usage?.promptTokens ?? 0,
+            output: res.usage?.completionTokens ?? 0,
+            total: res.usage?.totalTokens ?? 0,
+          },
+        });
 
-          return res;
-        }, { asType: 'generation' });
+        return res;
+      }, { asType: 'generation' });
 
-        stepCount++;
-        lastText = result.text || lastText;
+      stepCount++;
+      lastText = result.text || lastText;
 
-        // ── Rewind detection (check BEFORE accumulating history) ──
-        if (rewindSignal.triggered) {
-          rewindCount++;
+      // ── Rewind detection (check BEFORE accumulating history) ──
+      if (rewindSignal.triggered) {
+        rewindCount++;
+        if (logging) {
+          console.log(
+            `%c[${label}] REWIND #${rewindCount}: ${rewindSignal.reason}`,
+            'color: #f44',
+          );
+        }
+
+        if (rewindCount > MAX_REWINDS) {
+          // Over limit — accumulate history normally, inject denial
           if (logging) {
-            console.log(
-              `%c[${label}] REWIND #${rewindCount}: ${rewindSignal.reason}`,
-              'color: #f44',
-            );
+            console.log(`%c[${label}] Max rewinds (${MAX_REWINDS}) exceeded, continuing`, 'color: #f80');
           }
-
-          if (rewindCount > MAX_REWINDS) {
-            // Over limit — accumulate history normally, inject denial
-            if (logging) {
-              console.log(`%c[${label}] Max rewinds (${MAX_REWINDS}) exceeded, continuing`, 'color: #f80');
-            }
-            const prevLen = history.length;
-            for (const msg of result.response.messages) {
-              history.push(msg as CoreMessage);
-            }
-            condenseToolResults(history, prevLen);
-            history.push({
-              role: 'user' as const,
-              content: `[REWIND DENIED] Maximum rewind limit (${MAX_REWINDS}) reached. You must continue with the current game state. Guidance: ${rewindSignal.guidance}`,
-            });
-          } else {
-            // Successful rewind — clear history, inject guidance
-            history.length = 0;
-            history.push({
-              role: 'user' as const,
-              content: `[REWIND APPLIED] Your previous actions have been undone. Reason: ${rewindSignal.reason}\n\nGuidance for this attempt: ${rewindSignal.guidance}`,
-            });
+          const prevLen = history.length;
+          for (const msg of result.response.messages) {
+            history.push(msg as CoreMessage);
           }
-
-          // Reset signal
-          rewindSignal.triggered = false;
-          rewindSignal.reason = '';
-          rewindSignal.guidance = '';
-          continue;
+          condenseToolResults(history, prevLen);
+          history.push({
+            role: 'user' as const,
+            content: `[REWIND DENIED] Maximum rewind limit (${MAX_REWINDS}) reached. You must continue with the current game state. Guidance: ${rewindSignal.guidance}`,
+          });
+        } else {
+          // Successful rewind — clear history, inject guidance
+          history.length = 0;
+          history.push({
+            role: 'user' as const,
+            content: `[REWIND APPLIED] Your previous actions have been undone. Reason: ${rewindSignal.reason}\n\nGuidance for this attempt: ${rewindSignal.guidance}`,
+          });
         }
 
-        // Accumulate response into history, then condense tool results
-        const prevLen = history.length;
-        for (const msg of result.response.messages) {
-          history.push(msg as CoreMessage);
-        }
-        condenseToolResults(history, prevLen);
-
-        // Terminal tool called (end_turn, concede, etc.)
-        if (abort.signal.aborted) {
-          aborted = true;
-          break;
-        }
-
-        // No tool calls (e.g. thinking consumed all output tokens) → log and continue
-        if (!result.toolCalls || result.toolCalls.length === 0) {
-          if (logging) console.log(`%c[${label}] step ${step}: no tool calls, continuing`, 'color: #f80');
-        }
+        // Reset signal
+        rewindSignal.triggered = false;
+        rewindSignal.reason = '';
+        rewindSignal.guidance = '';
+        continue;
       }
-    } catch (e: any) {
-      if (logging) console.groupEnd();
-      span.update({ level: 'ERROR', statusMessage: e?.message ?? String(e) });
-      throw e;
+
+      // Accumulate response into history, then condense tool results
+      const prevLen = history.length;
+      for (const msg of result.response.messages) {
+        history.push(msg as CoreMessage);
+      }
+      condenseToolResults(history, prevLen);
+
+      // Terminal tool called (end_turn, concede, etc.)
+      if (abort.signal.aborted) {
+        aborted = true;
+        break;
+      }
+
+      // No tool calls = subagent has completed its instructions
+      // Break normally (not aborted) so planner can continue
+      if (!result.toolCalls || result.toolCalls.length === 0) {
+        if (logging) console.log(`%c[${label}] step ${step}: no tool calls, task complete`, 'color: #f80');
+        break;
+      }
     }
 
     if (logging) console.groupEnd();
     span.update({ output: { stepCount, aborted, rewindCount, finalHistory: history } });
     return { text: lastText, stepCount, aborted };
   }, { asType: 'span' });
+}
+
+// ── Subagent Tool ───────────────────────────────────────────────
+
+/**
+ * Create the launch_subagent tool for the planner to delegate tasks.
+ */
+function createLaunchSubagentTool(opts: {
+  executorModel: LanguageModelV1;
+  executorSystemPrompt: string;
+  executorTools: RunnableTool[];
+  getState: () => string;
+  plannerAbort: AbortController;
+  logging?: boolean;
+  deckStrategy?: string;
+}): RunnableTool {
+  return {
+    name: 'launch_subagent',
+    description: 'Launch an executor subagent to perform a specific task. Provide clear, concrete instructions with card names and zones. The subagent will execute mechanically and return when complete or when end_turn is called.',
+    parameters: {
+      type: 'object',
+      properties: {
+        instructions: {
+          type: 'string',
+          description: 'Clear, concrete instructions for the executor. Include specific card names, zones, and actions."',
+        },
+      },
+      required: ['instructions'],
+    },
+    async execute(input: Record<string, any>) {
+      const { executorModel, executorSystemPrompt, executorTools, getState, plannerAbort, logging} = opts;
+      const instructions = input.instructions as string;
+
+      const fullPrompt = `${executorSystemPrompt}\n\n## TASK INSTRUCTIONS\n${instructions}`;
+      
+      const result = await runAgent({
+        model: executorModel,
+        systemPrompt: fullPrompt,
+        getState,
+        tools: executorTools,
+        label: 'Executor',
+        logging,
+        abort: plannerAbort,
+      });
+      return `Subagent completed. Steps used: ${result.stepCount}. Summary: ${result.text || 'Task finished'}`;
+    },
+  };
 }
 
 // ── Autonomous Agent ────────────────────────────────────────────
@@ -396,6 +431,12 @@ export interface AIAutonomousConfig {
   model?: string;
   provider?: AIProvider;
   apiKey: string;
+  aiMode?: 'autonomous' | 'pipeline';
+  planner?: {
+    model: string;
+    provider: AIProvider;
+    apiKey: string;
+  };
   deckStrategy?: string;
   logging?: boolean;
 }
@@ -451,26 +492,56 @@ export async function runAutonomousAgent(config: AIAutonomousConfig): Promise<vo
           systemPrompt: withStrategy(prompt),
           getState: () => ctx.getReadableState(),
           tools,
-          maxSteps: AUTONOMOUS_CONFIG.CHECKUP_MAX_STEPS,
           label: 'StartOfTurn',
           logging: config.logging,
         });
       }
 
-      const { prompt, tools } = plugin.getAgentConfig!(ctx, 'main');
-      const mainCheckpoint = ctx.createCheckpoint && ctx.restoreState
-        ? { snapshot: ctx.createCheckpoint(), restore: ctx.restoreState }
-        : undefined;
-      await runAgent({
-        model,
-        systemPrompt: withStrategy(prompt),
-        getState: () => ctx.getReadableState(),
-        tools,
-        maxSteps: AUTONOMOUS_CONFIG.MAX_STEPS,
-        label: 'Main',
-        logging: config.logging,
-        checkpoint: mainCheckpoint,
-      });
+      // ── Main phase: FORK ──
+      if (config.aiMode === 'pipeline' && config.planner) {
+        const { model: planModelId, provider: planProvider, apiKey: planApiKey } = config.planner;
+        const plannerModel = (planProvider === 'anthropic'
+          ? createAnthropic({ apiKey: planApiKey, baseURL: '/api/anthropic/v1' })(planModelId)
+          : createFireworks({ apiKey: planApiKey })(planModelId)) as any;
+
+        const { prompt: execPrompt, tools: execTools } = plugin.getAgentConfig!(ctx, 'executor');
+        const { prompt: planPrompt } = plugin.getAgentConfig!(ctx, 'planner');
+        const plannerAbort = new AbortController();
+        const launchTool = createLaunchSubagentTool({
+          executorModel: model,  // executor model (from dropdown)
+          executorSystemPrompt: execPrompt,
+          executorTools: execTools,
+          getState: () => ctx.getReadableState(),
+          plannerAbort,
+          logging: config.logging,
+          deckStrategy,
+        });
+        await runAgent({
+          model: plannerModel,
+          systemPrompt: withStrategy(planPrompt),
+          getState: () => ctx.getReadableState(),
+          // TODO: give it an end turn tool as well
+          tools: [launchTool],
+          label: 'Planner',
+          logging: config.logging,
+          abort: plannerAbort,
+        });
+      } else {
+        // Autonomous: existing single-agent path
+        const { prompt, tools } = plugin.getAgentConfig!(ctx, 'main');
+        const mainCheckpoint = ctx.createCheckpoint && ctx.restoreState
+          ? { snapshot: ctx.createCheckpoint(), restore: ctx.restoreState }
+          : undefined;
+        await runAgent({
+          model,
+          systemPrompt: withStrategy(prompt),
+          getState: () => ctx.getReadableState(),
+          tools,
+          label: 'Main',
+          logging: config.logging,
+          checkpoint: mainCheckpoint,
+        });
+      }
     } else if (mode === 'decision') {
       const { prompt, tools } = plugin.getAgentConfig!(ctx, 'decision');
       const decisionCheckpoint = ctx.createCheckpoint && ctx.restoreState
@@ -481,7 +552,6 @@ export async function runAutonomousAgent(config: AIAutonomousConfig): Promise<vo
         systemPrompt: withStrategy(prompt),
         getState: () => ctx.getReadableState(),
         tools,
-        maxSteps: AUTONOMOUS_CONFIG.MAX_STEPS,
         label: 'Decision',
         logging: config.logging,
         checkpoint: decisionCheckpoint,
@@ -494,7 +564,6 @@ export async function runAutonomousAgent(config: AIAutonomousConfig): Promise<vo
         systemPrompt: withStrategy(prompt),
         getState: () => ctx.getReadableState(),
         tools,
-        maxSteps: AUTONOMOUS_CONFIG.MAX_STEPS,
         label: 'Setup',
         logging: config.logging,
       });

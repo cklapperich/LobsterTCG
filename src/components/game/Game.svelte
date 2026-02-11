@@ -36,12 +36,13 @@
     testFlags?: Record<string, boolean>;
     playmatImage?: string;
     aiModel?: string;
-    aiMode?: string;
+    aiMode?: 'autonomous' | 'pipeline';
+    plannerModel?: string;
     playerConfig?: PlayerConfig;
     onBackToMenu?: () => void;
   }
 
-  let { gameType, decks, testFlags = {}, playmatImage, aiModel, playerConfig = DEFAULT_CONFIG, onBackToMenu }: Props = $props();
+  let { gameType, decks, testFlags = {}, playmatImage, aiModel, aiMode = 'autonomous', plannerModel, playerConfig = DEFAULT_CONFIG, onBackToMenu }: Props = $props();
 
   // Convenience accessors for player decks
   const player1Deck = $derived(decks?.[0]?.deckList);
@@ -56,6 +57,11 @@
 
   // Resolve model config from selected model ID
   const selectedModel = $derived(MODEL_OPTIONS.find(m => m.id === aiModel) ?? MODEL_OPTIONS[0]);
+  const selectedPlannerModel = $derived(
+    aiMode === 'pipeline' && plannerModel
+      ? (MODEL_OPTIONS.find(m => m.id === plannerModel) ?? MODEL_OPTIONS.find(m => m.id === 'sonnet-4.5') ?? MODEL_OPTIONS[0])
+      : undefined
+  );
 
   // Plugin manager for warnings/hooks
   const pluginManager = new PluginManager<CardTemplate>();
@@ -588,6 +594,12 @@
         apiKey,
         model: selectedModel.modelId,
         provider: selectedModel.provider,
+        aiMode,
+        planner: selectedPlannerModel ? {
+          model: selectedPlannerModel.modelId,
+          provider: selectedPlannerModel.provider,
+          apiKey: import.meta.env[selectedPlannerModel.apiKeyEnv],
+        } : undefined,
         deckStrategy: decks?.[currentPlayer]?.strategy,
         logging: true,
       });

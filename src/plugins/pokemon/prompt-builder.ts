@@ -57,7 +57,7 @@ export function buildPrompt(...keys: string[]): string {
 
 // ── Types ────────────────────────────────────────────────────────
 
-export type AgentMode = 'setup' | 'startOfTurn' | 'main' | 'decision';
+export type AgentMode = 'setup' | 'startOfTurn' | 'main' | 'decision' | 'planner' | 'executor';
 
 interface ModeConfig {
   /** Prompt section keys composed via buildPrompt(). */
@@ -81,7 +81,7 @@ const MODE_CONFIGS: Record<AgentMode, ModeConfig> = {
     sections: [
       'INTRO', 'ROLE_SETUP', 'TURN_STRUCTURE_SETUP',
       'ZONE_LAYOUT', 'KEY_RULES',
-      'TOOL_USAGE', 'DECISIONS', 'ERROR_CORRECTION', 'STRATEGY_PLANNING',
+      'TOOL_USAGE', 'STRATEGY_PLANNING',
     ],
     coreToolFilter: 'include',
     coreTools: [
@@ -107,7 +107,7 @@ const MODE_CONFIGS: Record<AgentMode, ModeConfig> = {
     sections: [
       'INTRO', 'ROLE_CHECKUP', 'TURN_STRUCTURE_CHECKUP', 'WIN_CONDITIONS',
       'ZONE_LAYOUT', 'KEY_RULES', 'STATUS_CONDITIONS', 'DAMAGE',
-      'TOOL_USAGE', 'DECISIONS', 'ERROR_CORRECTION',
+      'TOOL_USAGE', 'DECISIONS',
     ],
     coreToolFilter: 'include',
     coreTools: [
@@ -130,7 +130,7 @@ const MODE_CONFIGS: Record<AgentMode, ModeConfig> = {
     sections: [
       'INTRO', 'ROLE_FULLTURN', 'TURN_STRUCTURE_MAIN', 'WIN_CONDITIONS',
       'ZONE_LAYOUT', 'KEY_RULES', 'STATUS_CONDITIONS', 'DAMAGE',
-      'TOOL_USAGE', 'PEEK_AND_SEARCH', 'DECISIONS', 'ERROR_CORRECTION', 'STRATEGY_PLANNING',
+      'TOOL_USAGE', 'PEEK_AND_SEARCH', 'DECISIONS', 'STRATEGY_PLANNING',
     ],
     coreToolFilter: 'exclude',
     coreTools: [
@@ -145,13 +145,37 @@ const MODE_CONFIGS: Record<AgentMode, ModeConfig> = {
     sections: [
       'INTRO', 'ROLE_DECISION', 'TURN_STRUCTURE_DECISION', 
       'ZONE_LAYOUT', 'STATUS_CONDITIONS', 'DAMAGE',
-      'TOOL_USAGE', 'PEEK_AND_SEARCH', 'DECISIONS', 'ERROR_CORRECTION',
+      'TOOL_USAGE', 'PEEK_AND_SEARCH', 'DECISIONS',
     ],
     coreToolFilter: 'exclude',
     coreTools: [
       ACTION_TYPES.END_TURN,
       ACTION_TYPES.CREATE_DECISION,
       ACTION_TYPES.SEARCH_ZONE,
+      ACTION_TYPES.MULLIGAN,
+      ...HIDDEN_DEFAULT_TOOLS,
+    ],
+    addCustomTools: true,
+  },
+
+  planner: {
+    sections: [
+      'INTRO', 'ROLE_PLANNER', 'TURN_STRUCTURE_MAIN', 
+      'WIN_CONDITIONS', 'ZONE_LAYOUT', 'KEY_RULES', 
+      'STATUS_CONDITIONS', 'DAMAGE', 'STRATEGY_PLANNING',
+    ],
+    coreToolFilter: 'include',
+    coreTools: [],  // launch_subagent added externally by run-turn.ts
+    addCustomTools: false,
+  },
+
+  executor: {
+    sections: [
+      'ROLE_EXECUTOR', 'ZONE_LAYOUT', 'TOOL_USAGE', 'PEEK_AND_SEARCH',
+    ],
+    coreToolFilter: 'exclude',
+    coreTools: [
+      ACTION_TYPES.RESOLVE_DECISION,
       ACTION_TYPES.MULLIGAN,
       ...HIDDEN_DEFAULT_TOOLS,
     ],
