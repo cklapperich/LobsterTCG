@@ -121,7 +121,7 @@
   );
 
   // Grid panels (attacks + abilities + stadium) vs sidebar panels
-  const GRID_PANEL_IDS = new Set(['attacks', 'abilities', 'stadium']);
+  const GRID_PANEL_IDS = new Set(['stadium']);
   const gridPanels = $derived(actionPanels.filter(p => GRID_PANEL_IDS.has(p.id)));
   const sidebarPanels = $derived(actionPanels.filter(p => !GRID_PANEL_IDS.has(p.id)));
 
@@ -534,6 +534,7 @@
   let showSettings = $state(false);
 
   // Debug modal
+  let showFullLog = $state(false);
   let showDebugModal = $state(false);
   let debugJson = $state('');
   let debugNarrative = $state('');
@@ -792,16 +793,6 @@
   function handleRequestCancel() {
     showRequestModal = false;
     requestInput = '';
-  }
-
-  function handleFixMistakes() {
-    if (!gameState || aiThinking || gameState.pendingDecision) return;
-    const opp = opponent(local);
-    const msg = 'Analyze the game state to determine what went wrong. Then, fix your mistakes and restore the game to a correct state.';
-    executeAction(gameState, createDecision(local, opp, msg));
-    gameState = { ...gameState };
-    playSfx('confirm');
-    controllers[opp].handleDecision();
   }
 
   // Counter handlers
@@ -1067,13 +1058,6 @@
           >
             REQUEST
           </button>
-          <button
-            class="gbc-btn sidebar-btn"
-            onclick={handleFixMistakes}
-            disabled={!gameState || !canLocalAct || !!gameState.pendingDecision}
-          >
-            FIX
-          </button>
           {/if}
           <button
             class="gbc-btn sidebar-btn"
@@ -1095,13 +1079,6 @@
           {/if}
         </div>
 
-        {#if sidebarPanels.length > 0}
-          <ActionPanelView
-            panels={sidebarPanels}
-            onButtonClick={handleActionPanelClick}
-          />
-        {/if}
-
         {#if counterDefinitions.length > 0}
           <CounterTray
             counters={counterDefinitions}
@@ -1109,8 +1086,15 @@
           />
         {/if}
 
+        {#if sidebarPanels.length > 0}
+          <ActionPanelView
+            panels={sidebarPanels}
+            onButtonClick={handleActionPanelClick}
+          />
+        {/if}
+
         <div class="gbc-panel log-panel">
-          <div class="text-gbc-yellow text-[0.9rem] text-center mb-2 py-1 px-2 bg-gbc-border">LOG</div>
+          <button class="log-header-btn" onclick={() => { showFullLog = true; playSfx('cursor'); }}>LOG</button>
           <div class="log-content" bind:this={logContainer}>
             {#each logEntries as entry}
               <div class="log-entry text-[0.7rem]" class:text-gbc-yellow={entry.startsWith('Warning:')} class:text-gbc-light={!entry.startsWith('Warning:')}>{entry}</div>
@@ -1275,6 +1259,23 @@
     </div>
   {/if}
 
+  <!-- Full Log Modal -->
+  {#if showFullLog}
+    <div class="debug-overlay" onclick={() => showFullLog = false} onkeydown={(e) => e.key === 'Escape' && (showFullLog = false)} role="button" tabindex="-1">
+      <div class="debug-modal gbc-panel" onclick={(e) => e.stopPropagation()} onkeydown={() => {}} role="dialog" tabindex="-1">
+        <div class="flex items-center justify-between mb-2 py-1 px-2 bg-gbc-border">
+          <span class="text-gbc-yellow text-[0.5rem]">FULL LOG</span>
+          <button class="gbc-btn text-[0.45rem] py-0.5 px-2" onclick={() => showFullLog = false}>CLOSE</button>
+        </div>
+        <div class="debug-json">
+          {#each logEntries as entry}
+            <div class="log-entry text-[0.7rem]" class:text-gbc-yellow={entry.startsWith('Warning:')} class:text-gbc-light={!entry.startsWith('Warning:')}>{entry}</div>
+          {/each}
+        </div>
+      </div>
+    </div>
+  {/if}
+
   <!-- Debug Modal -->
   {#if showDebugModal}
     <div class="debug-overlay" onclick={() => showDebugModal = false} onkeydown={(e) => e.key === 'Escape' && (showDebugModal = false)} role="button" tabindex="-1">
@@ -1385,6 +1386,15 @@
 
   .log-panel {
     @apply max-lg:w-auto flex flex-col flex-1 min-h-0;
+  }
+
+  .log-header-btn {
+    @apply w-full text-gbc-yellow text-[0.9rem] text-center mb-2 py-1 px-2 bg-gbc-border border-none font-retro cursor-pointer;
+    transition: background-color 0.1s, color 0.1s;
+  }
+
+  .log-header-btn:hover {
+    @apply bg-gbc-green text-gbc-dark-green;
   }
 
   .log-content {

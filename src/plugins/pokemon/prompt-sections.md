@@ -89,7 +89,7 @@ Shared zones:
 - **Supporter Limit**: Only 1 Supporter per turn — use one every turn if possible
 - **Promotion**: When your Active Pokemon is knocked out, promote a Benched Pokemon to Active immediately
 - **Retreat Cost**: Retreat requires discarding the exact number of attached Energy cards specified on the card
-- **Prize Cards**: When you knock out an enemy Pokemon, take 1 prize card (move from any non-empty prize zone to hand)
+- **Prize Cards**: When you knock out an enemy Pokemon, take 1 of YOUR OWN prize cards (move from your_prizes_N to your_hand)
 - **Weakness & Resistance**: Check the card's weakness/resistance in the CARD REFERENCE section. Apply weakness (×2 damage) or resistance (-20 or -30) AFTER calculating base damage. The COMBAT NOTES section highlights active matchups each turn.
 - **Damage Counters** 1 counter = 10 damage. Deal 30 damage = place 3 damage counters.
 
@@ -163,10 +163,19 @@ When executing an attack:
 - When a Pokemon is KO'd (damage ≥ HP), move it and all attached cards to discard
 - Use either `discard_pokemon_cards` (bulk) or multiple `move_card` calls (individual)
 - Never leave attached cards behind in the zone
-- After KO'ing opponent's Pokemon: take 1 prize card (move from their prizes to your hand)
+- After KO'ing opponent's Pokemon: take 1 of YOUR OWN prize cards (move from your_prizes_N to your_hand — NOT from opponent's prizes)
 - After your Pokemon is KO'd: opponent takes 1 prize, you must promote a Benched Pokemon to Active
 
 **Important:** Cards should never be left behind when moving a Pokemon unless an effect specifically says otherwise.
+
+**Trainer Card Resolution:**
+1. Move Trainer from hand → `staging` (its card text is logged automatically — read it)
+2. Resolve the effect as written on the card
+3. Move found/searched cards to the destination the card text specifies (e.g., "put them into your hand" → move to `your_hand`)
+4. After effects are fully resolved, move only the Trainer card from `staging` → `your_discard`
+5. If you searched your deck, `shuffle` afterward
+
+**Critical:** Only the Trainer card itself goes to discard. Cards found by its effect go where the card text says — do NOT discard them.
 
 ## @PEEK_AND_SEARCH
 ### Peeking and Searching
