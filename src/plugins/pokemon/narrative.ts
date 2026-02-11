@@ -1,7 +1,7 @@
 import type { ReadableGameState, ReadableZone, ReadableCard, ReadableTurn } from '../../core/readable';
 import { ACTION_TYPES } from '../../core/types/constants';
 import { isFieldZone } from './helpers';
-import { SUPERTYPES, COUNTER_IDS, NARRATIVE } from './constants';
+import { SUPERTYPES, COUNTER_IDS, NARRATIVE, FIRST_EVOLUTION_TURN, FIRST_SUPPORTER_TURN } from './constants';
 import { toAIPerspective } from './zone-perspective';
 import type { PlayerIndex } from '../../core/types';
 
@@ -32,7 +32,16 @@ export function formatNarrativeState(readable: ReadableGameState): string {
 
   // Header
   lines.push('=== GAME STATE ===');
-  lines.push(`Turn ${readable.turnNumber} | Player ${readable.activePlayer + 1}'s turn | Phase: ${readable.phase}`);
+  const turnRestrictions: string[] = [];
+  if (readable.turnNumber <= FIRST_SUPPORTER_TURN) {
+    turnRestrictions.push('NO SUPPORTERS');
+    turnRestrictions.push('NO ATTACKING');
+  }
+  if (readable.turnNumber <= FIRST_EVOLUTION_TURN) {
+    turnRestrictions.push('NO EVOLUTION');
+  }
+  const restrictionStr = turnRestrictions.length > 0 ? ` | ${turnRestrictions.join(', ')}` : '';
+  lines.push(`Turn ${readable.turnNumber} | Player ${readable.activePlayer + 1}'s turn | Phase: ${readable.phase}${restrictionStr}`);
 
   if (readable.pendingDecision) {
     const d = readable.pendingDecision;
