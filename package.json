@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
-    "count": "git ls-files '*.ts' '*.svelte' '*.sql' '*.html' | xargs wc -l",
+    "count": "git ls-files -z '*.ts' '*.svelte' '*.sql' '*.html' | xargs -0 grep -v '^[[:space:]]*$' | grep -cv '^[[:space:]]*//'",
     "test": "vitest run"
   },
   "devDependencies": {

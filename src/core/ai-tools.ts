@@ -8,7 +8,6 @@ import {
   shuffle,
   addCounter,
   removeCounter,
-  setCounter,
   coinFlip,
   diceRoll,
   endTurn,
