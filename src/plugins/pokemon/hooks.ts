@@ -1,9 +1,10 @@
-import type { Action, GameState, MoveCardAction, MoveCardStackAction, AddCounterAction, DeclareAction } from '../../core/types';
+import type { Action, GameState, AddCounterAction, DeclareAction } from '../../core/types';
 import { VISIBILITY, ACTION_TYPES, PHASES, CARD_FLAGS, ACTION_SOURCES } from '../../core/types';
-import type { PreHookResult, PostHookResult, Plugin } from '../../core/plugin/types';
+import type { PreHookResult, PostHookResult, Plugin, PrioritizedPreHook, PrioritizedPostHook } from '../../core/plugin/types';
 import type { PokemonCardTemplate } from './cards';
 import { getTemplate } from './cards';
 import { findCardInZones, consolidateCountersToTop } from '../../core/engine';
+import { unpackMoveAction } from '../../core/action-utils';
 import { gameLog, systemLog } from '../../core/game-log';
 import {
   isSupporter,
@@ -17,7 +18,6 @@ import {
   isFieldZone,
   isStadiumZone,
 } from './helpers';
-import { getTemplate as getCardTemplate } from './cards';
 import { ZONE_IDS } from './zones';
 import type { ReadableGameState } from '../../core/readable';
 import { formatNarrativeState } from './narrative';
@@ -79,30 +79,15 @@ function getTemplateForCard(state: PokemonState, cardInstanceId: string): Pokemo
   return getTemplate(result.card.template.id) ?? null;
 }
 
+// ── Pre-Hooks: Move Card Rules ──────────────────────────────────────
+
 // Warning 1: Only one Supporter per turn
 // Only hand → staging counts as "playing" a Supporter.
 function isSupporterPlayed(state: PokemonState, action: Action): boolean {
-  let cardInstanceId: string;
-  let fromZone: string | undefined;
-  let toZone: string | undefined;
-
-  if (action.type === ACTION_TYPES.MOVE_CARD) {
-    const a = action as MoveCardAction;
-    cardInstanceId = a.cardInstanceId;
-    fromZone = a.fromZone;
-    toZone = a.toZone;
-  } else if (action.type === ACTION_TYPES.MOVE_CARD_STACK) {
-    const a = action as MoveCardStackAction;
-    cardInstanceId = a.cardInstanceIds[0];
-    fromZone = a.fromZone;
-    toZone = a.toZone;
-    if (!cardInstanceId) return false;
-  } else {
-    return false;
-  }
-
-  if (!fromZone?.endsWith('_hand') || toZone !== 'staging') return false;
-  const template = getTemplateForCard(state, cardInstanceId);
+  const move = unpackMoveAction(action);
+  if (!move) return false;
+  if (!move.fromZone.endsWith('_hand') || move.toZone !== 'staging') return false;
+  const template = getTemplateForCard(state, move.cardId);
   return !!template && isSupporter(template);
 }
 
@@ -110,7 +95,6 @@ function warnOneSupporter(state: PokemonState, action: Action): PreHookResult {
   if (action.allowed_by_card_effect) return { outcome: 'continue' };
   if (!isSupporterPlayed(state, action)) return { outcome: 'continue' };
 
-  // Check if a Supporter was already played (hand → staging) this turn
   for (const prev of state.currentTurn.actions) {
     if (isSupporterPlayed(state, prev)) {
       return blockOrWarn(action, 'Already played a Supporter this turn (limit 1).', 'hard');
@@ -138,58 +122,24 @@ function warnNoSupporterFirstTurn(state: PokemonState, action: Action): PreHookR
 function warnOneEnergyAttachment(state: PokemonState, action: Action): PreHookResult {
   if (action.allowed_by_card_effect) return { outcome: 'continue' };
 
-  let cardInstanceId: string;
-  let toZone: string;
-  let fromZone: string | undefined;
+  const move = unpackMoveAction(action);
+  if (!move) return { outcome: 'continue' };
 
-  if (action.type === ACTION_TYPES.MOVE_CARD) {
-    const moveAction = action as MoveCardAction;
-    cardInstanceId = moveAction.cardInstanceId;
-    toZone = moveAction.toZone;
-    fromZone = moveAction.fromZone;
-  } else if (action.type === ACTION_TYPES.MOVE_CARD_STACK) {
-    const stackAction = action as MoveCardStackAction;
-    cardInstanceId = stackAction.cardInstanceIds[0];
-    toZone = stackAction.toZone;
-    fromZone = stackAction.fromZone;
-    if (!cardInstanceId) return { outcome: 'continue' };
-  } else {
-    return { outcome: 'continue' };
-  }
+  if (!isFieldZone(move.toZone)) return { outcome: 'continue' };
+  if (!move.fromZone.endsWith('_hand')) return { outcome: 'continue' };
 
-  // Primary gate: only care about energy going TO field zones (active/bench)
-  if (!isFieldZone(toZone)) return { outcome: 'continue' };
-
-  // Only hand → field counts as "normal" energy attachment
-  if (!fromZone?.endsWith('_hand')) return { outcome: 'continue' };
-
-  const template = getTemplateForCard(state, cardInstanceId);
+  const template = getTemplateForCard(state, move.cardId);
   if (!template || !isEnergy(template)) return { outcome: 'continue' };
 
   // Check if an energy was already attached (hand → field) this turn
   for (const prev of state.currentTurn.actions) {
     if (prev.allowed_by_card_effect) continue;
 
-    let prevCardId: string | undefined;
-    let prevToZone: string | undefined;
-    let prevFromZone: string | undefined;
+    const prevMove = unpackMoveAction(prev);
+    if (!prevMove || !isFieldZone(prevMove.toZone)) continue;
+    if (!prevMove.fromZone.endsWith('_hand')) continue;
 
-    if (prev.type === ACTION_TYPES.MOVE_CARD) {
-      const m = prev as MoveCardAction;
-      prevCardId = m.cardInstanceId;
-      prevToZone = m.toZone;
-      prevFromZone = m.fromZone;
-    } else if (prev.type === ACTION_TYPES.MOVE_CARD_STACK) {
-      const s = prev as MoveCardStackAction;
-      prevCardId = s.cardInstanceIds[0];
-      prevToZone = s.toZone;
-      prevFromZone = s.fromZone;
-    }
-
-    if (!prevCardId || !prevToZone || !isFieldZone(prevToZone)) continue;
-    if (!prevFromZone?.endsWith('_hand')) continue;
-
-    const prevTemplate = getTemplateForCard(state, prevCardId);
+    const prevTemplate = getTemplateForCard(state, prevMove.cardId);
     if (prevTemplate && isEnergy(prevTemplate)) {
       return blockOrWarn(action, 'Already attached an Energy from hand this turn (limit 1).', 'hard');
     }
@@ -202,37 +152,19 @@ function warnOneEnergyAttachment(state: PokemonState, action: Action): PreHookRe
 function warnEvolutionChain(state: PokemonState, action: Action): PreHookResult {
   if (action.allowed_by_card_effect) return { outcome: 'continue' };
 
-  let cardInstanceId: string;
-  let toZone: string;
-  let fromZone: string | undefined;
+  const move = unpackMoveAction(action);
+  if (!move) return { outcome: 'continue' };
 
-  if (action.type === ACTION_TYPES.MOVE_CARD) {
-    const a = action as MoveCardAction;
-    cardInstanceId = a.cardInstanceId;
-    toZone = a.toZone;
-    fromZone = a.fromZone;
-  } else if (action.type === ACTION_TYPES.MOVE_CARD_STACK) {
-    const a = action as MoveCardStackAction;
-    cardInstanceId = a.cardInstanceIds.at(-1)!;
-    toZone = a.toZone;
-    fromZone = a.fromZone;
-    if (!cardInstanceId) return { outcome: 'continue' };
-  } else {
-    return { outcome: 'continue' };
-  }
+  if (!move.fromZone.endsWith('_hand')) return { outcome: 'continue' };
+  if (!isFieldZone(move.toZone)) return { outcome: 'continue' };
 
-  // Only validate hand → field (staging, deck, discard moves are card effects)
-  if (!fromZone?.endsWith('_hand')) return { outcome: 'continue' };
-  if (!isFieldZone(toZone)) return { outcome: 'continue' };
-
-  const template = getTemplateForCard(state, cardInstanceId);
+  const template = getTemplateForCard(state, move.topCardId);
   if (!template || !isEvolution(template)) return { outcome: 'continue' };
   if (!template.evolveFrom) return { outcome: 'continue' };
 
-  // Check target zone for a matching pre-evolution
-  const zone = state.zones[toZone];
+  const zone = state.zones[move.toZone];
   if (!zone || zone.cards.length === 0) {
-    return blockOrWarn(action, `Cannot evolve ${template.name} — no ${template.evolveFrom} found in ${zone?.config.name ?? toZone}.`);
+    return blockOrWarn(action, `Cannot evolve ${template.name} — no ${template.evolveFrom} found in ${zone?.config.name ?? move.toZone}.`);
   }
 
   const hasPreEvolution = zone.cards.some((card) => {
@@ -251,39 +183,20 @@ function warnEvolutionChain(state: PokemonState, action: Action): PreHookResult 
 function warnEvolutionTiming(state: PokemonState, action: Action): PreHookResult {
   if (action.allowed_by_card_effect) return { outcome: 'continue' };
 
-  let cardInstanceId: string;
-  let toZone: string;
-  let fromZone: string | undefined;
+  const move = unpackMoveAction(action);
+  if (!move) return { outcome: 'continue' };
 
-  if (action.type === ACTION_TYPES.MOVE_CARD) {
-    const a = action as MoveCardAction;
-    cardInstanceId = a.cardInstanceId;
-    toZone = a.toZone;
-    fromZone = a.fromZone;
-  } else if (action.type === ACTION_TYPES.MOVE_CARD_STACK) {
-    const a = action as MoveCardStackAction;warnEvolutionTiming
-    cardInstanceId = a.cardInstanceIds.at(-1)!;
-    toZone = a.toZone;
-    fromZone = a.fromZone;
-    if (!cardInstanceId) return { outcome: 'continue' };
-  } else {
-    return { outcome: 'continue' };
-  }
+  if (!move.fromZone.endsWith('_hand')) return { outcome: 'continue' };
+  if (!isFieldZone(move.toZone)) return { outcome: 'continue' };
 
-  // Only validate hand → field (skip staging resolution, promotions, etc.)
-  if (!fromZone?.endsWith('_hand')) return { outcome: 'continue' };
-  if (!isFieldZone(toZone)) return { outcome: 'continue' };
-
-  const template = getTemplateForCard(state, cardInstanceId);
+  const template = getTemplateForCard(state, move.topCardId);
   if (!template || !isEvolution(template)) return { outcome: 'continue' };
 
-  // First turn for either player (turn 1 = player 0's first, turn 2 = player 1's first)
   if (state.turnNumber <= FIRST_EVOLUTION_TURN) {
     return blockOrWarn(action, 'Cannot evolve on the first turn.', 'hard');
   }
 
-  // Check if the top Pokemon (the one being evolved from) was played/evolved this turn
-  const zone = state.zones[toZone];
+  const zone = state.zones[move.toZone];
   if (zone) {
     const topCard = zone.cards.at(-1);
     if (topCard?.flags.includes(CARD_FLAGS.PLAYED_THIS_TURN)) {
@@ -305,7 +218,6 @@ function warnCountersOnTrainers(state: PokemonState, action: Action): PreHookRes
 
   if (template.supertype !== SUPERTYPES.TRAINER) return { outcome: 'continue' };
 
-  // Block damage and status counters on trainers
   if ((TRAINER_BLOCKED_COUNTERS as readonly string[]).includes(counterAction.counterType)) {
     return blockOrWarn(action, `Cannot place ${counterAction.counterType} counters on a Trainer card.`);
   }
@@ -314,36 +226,24 @@ function warnCountersOnTrainers(state: PokemonState, action: Action): PreHookRes
 }
 
 // Warning 6: Pokemon placement — basics on empty only, evolutions on occupied only
+// Only applies to single card moves — stack moves preserve existing validity.
 function warnPokemonPlacement(state: PokemonState, action: Action): PreHookResult {
   if (action.allowed_by_card_effect) return { outcome: 'continue' };
+  if (action.type !== ACTION_TYPES.MOVE_CARD) return { outcome: 'continue' };
 
-  let cardInstanceId: string;
-  let toZone: string;
-  let fromZone: string | undefined;
+  const move = unpackMoveAction(action);
+  if (!move) return { outcome: 'continue' };
 
-  if (action.type === ACTION_TYPES.MOVE_CARD) {
-    const a = action as MoveCardAction;
-    cardInstanceId = a.cardInstanceId;
-    toZone = a.toZone;
-    fromZone = a.fromZone;
-  } else {
-    // move_card_stack: skip — if the stack was valid in its source zone, it's valid in the destination.
-    return { outcome: 'continue' };
-  }
+  if (move.fromZone === 'staging') return { outcome: 'continue' };
+  if (!isFieldZone(move.toZone)) return { outcome: 'continue' };
 
-  // Skip staging resolution (trainer effects moving cards through staging)
-  if (fromZone === 'staging') return { outcome: 'continue' };
-  if (!isFieldZone(toZone)) return { outcome: 'continue' };
-
-  const template = getTemplateForCard(state, cardInstanceId);
+  const template = getTemplateForCard(state, move.cardId);
   if (!template) return { outcome: 'continue' };
-
-  // Only validate Pokemon cards — energy/tools handled by other hooks
   if (template.supertype !== SUPERTYPES.POKEMON) return { outcome: 'continue' };
 
-  const zone = state.zones[toZone];
+  const zone = state.zones[move.toZone];
   const isEmpty = !zone || zone.cards.length === 0;
-  const zoneName = zone?.config.name ?? toZone;
+  const zoneName = zone?.config.name ?? move.toZone;
 
   if (isBasicPokemon(template)) {
     if (!isEmpty) {
@@ -352,7 +252,6 @@ function warnPokemonPlacement(state: PokemonState, action: Action): PreHookResul
     return { outcome: 'continue' };
   }
 
-  // Non-basic (Stage 1, Stage 2) on empty zone
   if (isEmpty) {
     return blockOrWarn(action, `Cannot place ${template.name} (${template.subtypes.join('/')}) on empty ${zoneName.toLowerCase()}. Only Basic Pokemon can be placed on empty zones.`);
   }
@@ -360,198 +259,23 @@ function warnPokemonPlacement(state: PokemonState, action: Action): PreHookResul
   return { outcome: 'continue' };
 }
 
-
-// Post-hook: Stamp PLAYED_THIS_TURN on cards placed from hand onto field zones.
-// This powers warnEvolutionTiming — a Pokemon played this turn cannot evolve.
-// Covers normal play AND scooped-then-replayed cards (e.g. Devolution Spray → replay).
-function stampPlayedThisTurn(state: PokemonState, action: Action): PostHookResult {
-  let cardIds: string[] = [];
-  let fromZone: string | undefined;
-  let toZone: string | undefined;
-
-  if (action.type === ACTION_TYPES.MOVE_CARD) {
-    const a = action as MoveCardAction;
-    cardIds = [a.cardInstanceId];
-    fromZone = a.fromZone;
-    toZone = a.toZone;
-  } else if (action.type === ACTION_TYPES.MOVE_CARD_STACK) {
-    const a = action as MoveCardStackAction;
-    cardIds = a.cardInstanceIds;
-    fromZone = a.fromZone;
-    toZone = a.toZone;
-  }
-
-  if (!fromZone?.endsWith('_hand') || !toZone || !isFieldZone(toZone)) return {};
-
-  const mutableState = state as GameState<PokemonCardTemplate>;
-  const zone = mutableState.zones[toZone];
-  if (!zone) return {};
-
-  for (const id of cardIds) {
-    const card = zone.cards.find(c => c.instanceId === id);
-    if (!card || card.flags.includes(CARD_FLAGS.PLAYED_THIS_TURN)) continue;
-    // Only stamp Pokemon — energy/tools from hand shouldn't block evolution
-    const template = getTemplateForCard(state, card.instanceId);
-    if (template?.supertype !== SUPERTYPES.POKEMON) continue;
-    card.flags.push(CARD_FLAGS.PLAYED_THIS_TURN);
-  }
-
-  return {};
-}
-
-// Post-hook: During setup, cards placed on field zones are face-down (hidden from both players)
-function setupFaceDown(state: PokemonState, action: Action): PostHookResult {
-  if (state.phase !== PHASES.SETUP) return {};
-
-  let toZone: string | undefined;
-  let cardIds: string[] = [];
-
-  if (action.type === ACTION_TYPES.MOVE_CARD) {
-    const a = action as MoveCardAction;
-    toZone = a.toZone;
-    cardIds = [a.cardInstanceId];
-  } else if (action.type === ACTION_TYPES.MOVE_CARD_STACK) {
-    const a = action as MoveCardStackAction;
-    toZone = a.toZone;
-    cardIds = a.cardInstanceIds;
-  }
-
-  if (!toZone || !isFieldZone(toZone)) return {};
-
-  const mutableState = state as GameState<PokemonCardTemplate>;
-  const zone = mutableState.zones[toZone];
-  if (!zone) return {};
-
-  for (const id of cardIds) {
-    const card = zone.cards.find(c => c.instanceId === id);
-    if (card) card.visibility = VISIBILITY.HIDDEN;
-  }
-
-  return {};
-}
-
-// Post-hook: Log trainer card text when played to staging
-function logTrainerText(state: PokemonState, action: Action): PostHookResult {
-  let cardInstanceId: string;
-  let fromZone: string | undefined;
-  let toZone: string | undefined;
-
-  if (action.type === ACTION_TYPES.MOVE_CARD) {
-    const a = action as MoveCardAction;
-    cardInstanceId = a.cardInstanceId;
-    fromZone = a.fromZone;
-    toZone = a.toZone;
-  } else if (action.type === ACTION_TYPES.MOVE_CARD_STACK) {
-    const a = action as MoveCardStackAction;
-    cardInstanceId = a.cardInstanceIds[0];
-    fromZone = a.fromZone;
-    toZone = a.toZone;
-    if (!cardInstanceId) return {};
-  } else {
-    return {};
-  }
-
-  if (!fromZone?.endsWith('_hand') || toZone !== 'staging') return {};
-
-  const template = getTemplateForCard(state, cardInstanceId);
-  if (!template || template.supertype !== SUPERTYPES.TRAINER) return {};
-
-  if (template.rules && template.rules.length > 0) {
-    const header = `[${template.name}]`;
-    const text = template.rules.join(' ');
-    gameLog(state as GameState<PokemonCardTemplate>, `${header} ${text}`);
-  }
-
-  return {};
-}
-
-// Post-hook: Re-arrange cards in field zones to maintain proper stacking order.
-// Visual bottom (index 0) → top (end): Tools, Energy, Basic, Stage 1, Stage 2.
-function reorderFieldZone(state: PokemonState, action: Action): PostHookResult {
-  let toZone: string | undefined;
-
-  if (action.type === ACTION_TYPES.MOVE_CARD) {
-    toZone = (action as MoveCardAction).toZone;
-  } else if (action.type === ACTION_TYPES.MOVE_CARD_STACK) {
-    toZone = (action as MoveCardStackAction).toZone;
-  }
-
-  if (!toZone || !isFieldZone(toZone)) return {};
-
-  const mutableState = state as GameState<PokemonCardTemplate>;
-  const zone = mutableState.zones[toZone];
-  if (!zone || zone.cards.length <= 1) return {};
-
-  // Assign sort weight: lower = closer to visual bottom (index 0)
-  function sortWeight(card: { template: PokemonCardTemplate }): number {
-    const t = getTemplate(card.template.id);
-    if (!t) return 2; // unknown → treat as basic-level
-    if (isTool(t)) return 0;
-    if (isEnergy(t)) return 1;
-    if (isBasicPokemon(t)) return 2;
-    if (isStage1(t)) return 3;
-    if (isStage2(t)) return 4;
-    return 2; // fallback (other pokemon variants, etc.)
-  }
-
-  zone.cards.sort((a, b) => sortWeight(a) - sortWeight(b));
-
-  return {};
-}
-
-// Post-hook: Re-consolidate counters to top card after reorder
-function consolidateCountersAfterReorder(state: PokemonState, action: Action): PostHookResult {
-  let toZone: string | undefined;
-
-  if (action.type === ACTION_TYPES.MOVE_CARD) {
-    toZone = (action as MoveCardAction).toZone;
-  } else if (action.type === ACTION_TYPES.MOVE_CARD_STACK) {
-    toZone = (action as MoveCardStackAction).toZone;
-  }
-
-  if (!toZone || !isFieldZone(toZone)) return {};
-
-  const mutableState = state as GameState<PokemonCardTemplate>;
-  const zone = mutableState.zones[toZone];
-  if (!zone) return {};
-
-  consolidateCountersToTop(zone);
-  return {};
-}
-
 // Warning 8: Trainer Items/Supporters cannot be placed on field zones
 // (Only Pokemon, Energy, and Pokemon Tools belong on the field.)
-// Checks ALL cards in a move_card_stack — not just [0].
 function warnTrainerToField(state: PokemonState, action: Action): PreHookResult {
   if (action.allowed_by_card_effect) return { outcome: 'continue' };
 
-  let cardIds: string[];
-  let toZone: string;
+  const move = unpackMoveAction(action);
+  if (!move) return { outcome: 'continue' };
 
-  if (action.type === ACTION_TYPES.MOVE_CARD) {
-    const a = action as MoveCardAction;
-    cardIds = [a.cardInstanceId];
-    toZone = a.toZone;
-  } else if (action.type === ACTION_TYPES.MOVE_CARD_STACK) {
-    const a = action as MoveCardStackAction;
-    cardIds = a.cardInstanceIds;
-    toZone = a.toZone;
-    if (cardIds.length === 0) return { outcome: 'continue' };
-  } else {
-    return { outcome: 'continue' };
-  }
+  if (!isFieldZone(move.toZone)) return { outcome: 'continue' };
 
-  if (!isFieldZone(toZone)) return { outcome: 'continue' };
-
-  for (const cardId of cardIds) {
+  for (const cardId of move.allCardIds) {
     const template = getTemplateForCard(state, cardId);
     if (!template) continue;
 
-    // Pokemon and Energy are always valid on field zones
     if (template.supertype === SUPERTYPES.POKEMON) continue;
     if (isEnergy(template)) continue;
 
-    // Trainer cards: only Pokemon Tools can attach to field Pokemon
     if (template.supertype === SUPERTYPES.TRAINER) {
       if (isTool(template)) continue;
 
@@ -568,25 +292,12 @@ function warnTrainerToField(state: PokemonState, action: Action): PreHookResult 
 function warnStadiumOnly(state: PokemonState, action: Action): PreHookResult {
   if (action.allowed_by_card_effect) return { outcome: 'continue' };
 
-  let cardInstanceId: string;
-  let toZone: string;
+  const move = unpackMoveAction(action);
+  if (!move) return { outcome: 'continue' };
 
-  if (action.type === ACTION_TYPES.MOVE_CARD) {
-    const moveAction = action as MoveCardAction;
-    cardInstanceId = moveAction.cardInstanceId;
-    toZone = moveAction.toZone;
-  } else if (action.type === ACTION_TYPES.MOVE_CARD_STACK) {
-    const stackAction = action as MoveCardStackAction;
-    cardInstanceId = stackAction.cardInstanceIds[0];
-    toZone = stackAction.toZone;
-    if (!cardInstanceId) return { outcome: 'continue' };
-  } else {
-    return { outcome: 'continue' };
-  }
+  if (!isStadiumZone(move.toZone)) return { outcome: 'continue' };
 
-  if (!isStadiumZone(toZone)) return { outcome: 'continue' };
-
-  const template = getTemplateForCard(state, cardInstanceId);
+  const template = getTemplateForCard(state, move.cardId);
   if (!template) return { outcome: 'continue' };
   if (isStadium(template)) return { outcome: 'continue' };
 
@@ -597,28 +308,15 @@ function warnStadiumOnly(state: PokemonState, action: Action): PreHookResult {
 function warnOneToolPerPokemon(state: PokemonState, action: Action): PreHookResult {
   if (action.allowed_by_card_effect) return { outcome: 'continue' };
 
-  let cardInstanceId: string;
-  let toZone: string;
+  const move = unpackMoveAction(action);
+  if (!move) return { outcome: 'continue' };
 
-  if (action.type === ACTION_TYPES.MOVE_CARD) {
-    const a = action as MoveCardAction;
-    cardInstanceId = a.cardInstanceId;
-    toZone = a.toZone;
-  } else if (action.type === ACTION_TYPES.MOVE_CARD_STACK) {
-    const a = action as MoveCardStackAction;
-    cardInstanceId = a.cardInstanceIds[0];
-    toZone = a.toZone;
-    if (!cardInstanceId) return { outcome: 'continue' };
-  } else {
-    return { outcome: 'continue' };
-  }
+  if (!isFieldZone(move.toZone)) return { outcome: 'continue' };
 
-  if (!isFieldZone(toZone)) return { outcome: 'continue' };
-
-  const template = getTemplateForCard(state, cardInstanceId);
+  const template = getTemplateForCard(state, move.cardId);
   if (!template || !isTool(template)) return { outcome: 'continue' };
 
-  const zone = state.zones[toZone];
+  const zone = state.zones[move.toZone];
   if (!zone) return { outcome: 'continue' };
 
   const existingTool = zone.cards.find(c => {
@@ -627,13 +325,113 @@ function warnOneToolPerPokemon(state: PokemonState, action: Action): PreHookResu
   });
 
   if (existingTool) {
-    return blockOrWarn(action, `${zone.config.name ?? toZone} already has a Pokemon Tool (${existingTool.template.name}). Only one Tool per Pokemon.`);
+    return blockOrWarn(action, `${zone.config.name ?? move.toZone} already has a Pokemon Tool (${existingTool.template.name}). Only one Tool per Pokemon.`);
   }
 
   return { outcome: 'continue' };
 }
 
-// Post-hook: Log Pokemon-specific mulligan message (opponent draws extra)
+// ── Post-Hooks: Move Card Effects ───────────────────────────────────
+
+// Stamp PLAYED_THIS_TURN on cards placed from hand onto field zones.
+// This powers warnEvolutionTiming — a Pokemon played this turn cannot evolve.
+function stampPlayedThisTurn(state: PokemonState, action: Action): PostHookResult {
+  const move = unpackMoveAction(action);
+  if (!move) return {};
+  if (!move.fromZone.endsWith('_hand') || !isFieldZone(move.toZone)) return {};
+
+  const mutableState = state as GameState<PokemonCardTemplate>;
+  const zone = mutableState.zones[move.toZone];
+  if (!zone) return {};
+
+  for (const id of move.allCardIds) {
+    const card = zone.cards.find(c => c.instanceId === id);
+    if (!card || card.flags.includes(CARD_FLAGS.PLAYED_THIS_TURN)) continue;
+    const template = getTemplateForCard(state, card.instanceId);
+    if (template?.supertype !== SUPERTYPES.POKEMON) continue;
+    card.flags.push(CARD_FLAGS.PLAYED_THIS_TURN);
+  }
+
+  return {};
+}
+
+// During setup, cards placed on field zones are face-down (hidden from both players)
+function setupFaceDown(state: PokemonState, action: Action): PostHookResult {
+  if (state.phase !== PHASES.SETUP) return {};
+
+  const move = unpackMoveAction(action);
+  if (!move || !isFieldZone(move.toZone)) return {};
+
+  const mutableState = state as GameState<PokemonCardTemplate>;
+  const zone = mutableState.zones[move.toZone];
+  if (!zone) return {};
+
+  for (const id of move.allCardIds) {
+    const card = zone.cards.find(c => c.instanceId === id);
+    if (card) card.visibility = VISIBILITY.HIDDEN;
+  }
+
+  return {};
+}
+
+// Log trainer card text when played to staging
+function logTrainerText(state: PokemonState, action: Action): PostHookResult {
+  const move = unpackMoveAction(action);
+  if (!move) return {};
+  if (!move.fromZone.endsWith('_hand') || move.toZone !== 'staging') return {};
+
+  const template = getTemplateForCard(state, move.cardId);
+  if (!template || template.supertype !== SUPERTYPES.TRAINER) return {};
+
+  if (template.rules && template.rules.length > 0) {
+    const header = `[${template.name}]`;
+    const text = template.rules.join(' ');
+    gameLog(state as GameState<PokemonCardTemplate>, `${header} ${text}`);
+  }
+
+  return {};
+}
+
+// Re-arrange cards in field zones to maintain proper stacking order.
+// Visual bottom (index 0) → top (end): Tools, Energy, Basic, Stage 1, Stage 2.
+function reorderFieldZone(state: PokemonState, action: Action): PostHookResult {
+  const move = unpackMoveAction(action);
+  if (!move || !isFieldZone(move.toZone)) return {};
+
+  const mutableState = state as GameState<PokemonCardTemplate>;
+  const zone = mutableState.zones[move.toZone];
+  if (!zone || zone.cards.length <= 1) return {};
+
+  function sortWeight(card: { template: PokemonCardTemplate }): number {
+    const t = getTemplate(card.template.id);
+    if (!t) return 2;
+    if (isTool(t)) return 0;
+    if (isEnergy(t)) return 1;
+    if (isBasicPokemon(t)) return 2;
+    if (isStage1(t)) return 3;
+    if (isStage2(t)) return 4;
+    return 2;
+  }
+
+  zone.cards.sort((a, b) => sortWeight(a) - sortWeight(b));
+
+  return {};
+}
+
+// Re-consolidate counters to top card after reorder
+function consolidateCountersAfterReorder(state: PokemonState, action: Action): PostHookResult {
+  const move = unpackMoveAction(action);
+  if (!move || !isFieldZone(move.toZone)) return {};
+
+  const mutableState = state as GameState<PokemonCardTemplate>;
+  const zone = mutableState.zones[move.toZone];
+  if (!zone) return {};
+
+  consolidateCountersToTop(zone);
+  return {};
+}
+
+// Log Pokemon-specific mulligan message (opponent draws extra)
 function logMulliganMessage(state: PokemonState, action: Action): PostHookResult {
   if (action.type !== ACTION_TYPES.MULLIGAN) return {};
   const otherPlayer = action.player === 0 ? 2 : 1;
@@ -680,7 +478,7 @@ function warnAttackEnergyCost(state: PokemonState, action: Action): PreHookResul
   const topCard = activeZone?.cards.at(-1);
   if (!topCard || !activeZone) return { outcome: 'continue' };
 
-  const template = getCardTemplate((topCard.template as PokemonCardTemplate).id);
+  const template = getTemplate((topCard.template as PokemonCardTemplate).id);
   if (!template?.attacks) return { outcome: 'continue' };
 
   const attack = template.attacks.find(
@@ -716,7 +514,7 @@ function logDeclareEffectText(state: PokemonState, action: Action): PostHookResu
     const activeKey = `player${da.player + 1}_${ZONE_IDS.ACTIVE}`;
     const topCard = mutableState.zones[activeKey]?.cards.at(-1);
     if (topCard) {
-      const template = getCardTemplate((topCard.template as PokemonCardTemplate).id);
+      const template = getTemplate((topCard.template as PokemonCardTemplate).id);
       const attack = template?.attacks?.find(a => a.name.toLowerCase() === da.name.toLowerCase());
       if (attack?.effect) {
         gameLog(mutableState, `[${attack.name}] ${attack.effect}`);
@@ -728,7 +526,7 @@ function logDeclareEffectText(state: PokemonState, action: Action): PostHookResu
       for (const zone of Object.values(mutableState.zones)) {
         for (const card of zone.cards) {
           if (card.template.name === cardName) {
-            const template = getCardTemplate((card.template as PokemonCardTemplate).id);
+            const template = getTemplate((card.template as PokemonCardTemplate).id);
             const ability = template?.abilities?.find(a => a.name.toLowerCase() === da.name.toLowerCase());
             if (ability?.effect) {
               gameLog(mutableState, `[${ability.name}] ${ability.effect}`);
@@ -793,6 +591,29 @@ export function modifyReadableState(
   return readable;
 }
 
+// ── Hook Registration ────────────────────────────────────────────
+// Shared arrays for move_card and move_card_stack (identical hooks for both).
+
+const MOVE_PRE_HOOKS: PrioritizedPreHook<PokemonCardTemplate>[] = [
+  { hook: warnOneSupporter, priority: 100 },
+  { hook: warnNoSupporterFirstTurn, priority: 100 },
+  { hook: warnOneEnergyAttachment, priority: 100 },
+  { hook: warnEvolutionTiming, priority: 95 },
+  { hook: warnEvolutionChain, priority: 100 },
+  { hook: warnPokemonPlacement, priority: 90 },
+  { hook: warnStadiumOnly, priority: 90 },
+  { hook: warnTrainerToField, priority: 85 },
+  { hook: warnOneToolPerPokemon, priority: 90 },
+];
+
+const MOVE_POST_HOOKS: PrioritizedPostHook<PokemonCardTemplate>[] = [
+  { hook: setupFaceDown, priority: 50 },
+  { hook: stampPlayedThisTurn, priority: 60 },
+  { hook: logTrainerText, priority: 100 },
+  { hook: reorderFieldZone, priority: 200 },
+  { hook: consolidateCountersAfterReorder, priority: 250 },
+];
+
 export const pokemonHooksPlugin: Plugin<PokemonCardTemplate> = {
   id: 'pokemon-hooks',
   name: 'Pokemon TCG Hooks',
@@ -800,20 +621,8 @@ export const pokemonHooksPlugin: Plugin<PokemonCardTemplate> = {
   readableStateModifier: modifyReadableState,
   readableStateFormatter: formatNarrativeState,
   postHooks: {
-    [ACTION_TYPES.MOVE_CARD]: [
-      { hook: setupFaceDown, priority: 50 },
-      { hook: stampPlayedThisTurn, priority: 60 },
-      { hook: logTrainerText, priority: 100 },
-      { hook: reorderFieldZone, priority: 200 },
-      { hook: consolidateCountersAfterReorder, priority: 250 },
-    ],
-    [ACTION_TYPES.MOVE_CARD_STACK]: [
-      { hook: setupFaceDown, priority: 50 },
-      { hook: stampPlayedThisTurn, priority: 60 },
-      { hook: logTrainerText, priority: 100 },
-      { hook: reorderFieldZone, priority: 200 },
-      { hook: consolidateCountersAfterReorder, priority: 250 },
-    ],
+    [ACTION_TYPES.MOVE_CARD]: MOVE_POST_HOOKS,
+    [ACTION_TYPES.MOVE_CARD_STACK]: MOVE_POST_HOOKS,
     [ACTION_TYPES.MULLIGAN]: [
       { hook: logMulliganMessage, priority: 100 },
     ],
@@ -822,30 +631,8 @@ export const pokemonHooksPlugin: Plugin<PokemonCardTemplate> = {
     ],
   },
   preHooks: {
-    [ACTION_TYPES.MOVE_CARD]: [
-      { hook: warnOneSupporter, priority: 100 },
-      { hook: warnNoSupporterFirstTurn, priority: 100 },
-      { hook: warnOneEnergyAttachment, priority: 100 },
-      { hook: warnEvolutionTiming, priority: 95 },
-      { hook: warnEvolutionChain, priority: 100 },
-
-      { hook: warnPokemonPlacement, priority: 90 },
-      { hook: warnStadiumOnly, priority: 90 },
-      { hook: warnTrainerToField, priority: 85 },
-      { hook: warnOneToolPerPokemon, priority: 90 },
-    ],
-    [ACTION_TYPES.MOVE_CARD_STACK]: [
-      { hook: warnOneSupporter, priority: 100 },
-      { hook: warnNoSupporterFirstTurn, priority: 100 },
-      { hook: warnOneEnergyAttachment, priority: 100 },
-      { hook: warnEvolutionTiming, priority: 95 },
-      { hook: warnEvolutionChain, priority: 100 },
-
-      { hook: warnPokemonPlacement, priority: 90 },
-      { hook: warnStadiumOnly, priority: 90 },
-      { hook: warnTrainerToField, priority: 85 },
-      { hook: warnOneToolPerPokemon, priority: 90 },
-    ],
+    [ACTION_TYPES.MOVE_CARD]: MOVE_PRE_HOOKS,
+    [ACTION_TYPES.MOVE_CARD_STACK]: MOVE_PRE_HOOKS,
     [ACTION_TYPES.ADD_COUNTER]: [
       { hook: warnCountersOnTrainers, priority: 100 },
     ],

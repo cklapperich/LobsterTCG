@@ -1,25 +1,32 @@
-* 4 Dreepy Twilight Masquerade 128
-* 4 Drakloak Twilight Masquerade 129
-* 4 Dragapult ex Twilight Masquerade 130
-* 3 Natu Paradox Rift 071
-* 3 Xatu Paradox Rift 072
-* 2 Tatsugiri Twilight Masquerade 131
-* 1 Fezandipiti ex Shrouded Fable 038
-* 3 Arven Scarlet & Violet 166
-* 3 Iono Paldea Evolved 185
-* 1 Boss's Orders Paldea Evolved 172
-* 1 Professor Turo's Scenario Prismatic Evolutions 121
-* 1 Mela Paradox Rift 254
-* 4 Buddy-Buddy Poffin Temporal Forces 144
-* 4 Ultra Ball Scarlet & Violet 196
-* 2 Earthen Vessel Shrouded Fable 096
-* 2 Rare Candy Scarlet & Violet 191
-* 1 Counter Catcher Paradox Rift 160
-* 1 Super Rod Paldea Evolved 188
-* 1 Switch Scarlet & Violet 194
-* 1 Unfair Stamp Twilight Masquerade 165
-* 2 Rescue Board Temporal Forces 159
-* 1 Technical Machine: Devolution Paradox Rift 177
-* 1 Technical Machine: Evolution Paradox Rift 178
-* 6 Basic Psychic Energy Scarlet & Violet Energies 5
-* 4 Basic Fire Energy Scarlet & Violet Energies 2
+* 4 Dreepy
+* 4 Drakloak
+* 4 Dragapult ex
+* 3 Natu
+* 3 Xatu
+* 2 Tatsugiri Twilight
+* 1 Fezandipiti ex
+* 3 Arven
+* 3 Iono Paldea
+* 1 Boss's Orders
+* 1 Professor Turo's Scenario
+* 1 Mela
+* 4 Buddy-Buddy Poffin
+* 4 Ultra Ball
+* 2 Earthen Vessel
+* 2 Rare Candy
+* 1 Counter Catcher
+* 1 Super Rod
+* 1 Switch
+* 1 Unfair Stamp
+* 2 Rescue Board
+* 1 Technical Machine: Devolution
+* 1 Technical Machine: Evolution
+* 6 Basic Psychic Energy
+* 4 Basic Fire Energy
+
+Your goal is to get a dreepy on your bench, evolve to Dragapult.. power it up, then switch it in and attack with it. Try to attack your oponnents strong pokemon first: let them knock one of your pokemon out, or boss's orders their strong pokemon out to the front. 
+Tatsugiri cant attack, no water energy, you have to reatreat/switch it out or use its ability its only here for the ability.
+Natu is only for evolving to xatu.
+xatu is only for using its ability.
+When using Dragapults attack, try to knock out weak benched pokemon as quickly as possible, be agressive and take prizes.
+
