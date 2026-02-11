@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { CounterDefinition } from '../../core';
+  import type { CounterDefinition, MarkerState } from '../../core';
   import CounterIcon from './CounterIcon.svelte';
   import {
     startCounterDrag,
@@ -11,9 +11,11 @@
   interface Props {
     counters: CounterDefinition[];
     onCounterReturn?: () => void;
+    markers?: MarkerState[];
+    onMarkerClick?: (id: string) => void;
   }
 
-  let { counters, onCounterReturn }: Props = $props();
+  let { counters, onCounterReturn, markers = [], onMarkerClick }: Props = $props();
 
   // Group counters by category
   const groupedCounters = $derived(() => {
@@ -106,6 +108,28 @@
     </div>
   {/each}
 
+  {#if markers.length > 0}
+    <div class="tray-header">MARKERS</div>
+    <div class="marker-grid">
+      {#each markers as marker (marker.id)}
+        <button
+          class="marker-btn"
+          class:marker-used={marker.used}
+          class:marker-clickable={marker.clickable && !marker.used}
+          disabled={!marker.clickable || marker.used}
+          onclick={() => onMarkerClick?.(marker.id)}
+          title="{marker.sublabel} {marker.label}: {marker.used ? 'Used' : 'Available'}"
+        >
+          <span class="marker-label">{marker.label}</span>
+          <span class="marker-sublabel">{marker.sublabel}</span>
+          {#if marker.used}
+            <span class="marker-used-overlay">USED</span>
+          {/if}
+        </button>
+      {/each}
+    </div>
+  {/if}
+
   {#if isDragOver}
     <div class="return-hint">Drop to remove</div>
   {/if}
@@ -157,5 +181,44 @@
     @apply absolute inset-0 flex items-center justify-center;
     @apply bg-gbc-red/80 text-gbc-cream text-[0.5rem] font-retro;
     @apply rounded pointer-events-none;
+  }
+
+  .marker-grid {
+    @apply grid grid-cols-2 gap-1.5 px-2 mb-2;
+  }
+
+  .marker-btn {
+    @apply relative flex flex-col items-center justify-center;
+    @apply py-1.5 px-2 rounded-sm border-2 border-gbc-green;
+    @apply bg-gbc-dark-green text-gbc-green font-retro;
+    @apply transition-all cursor-default;
+    min-height: 2.2rem;
+  }
+
+  .marker-clickable {
+    @apply cursor-pointer;
+  }
+
+  .marker-clickable:hover {
+    @apply bg-gbc-green/20 border-gbc-yellow;
+    transform: scale(1.03);
+  }
+
+  .marker-used {
+    @apply border-gbc-red/60 opacity-50;
+  }
+
+  .marker-label {
+    @apply text-[0.55rem] leading-tight font-bold;
+  }
+
+  .marker-sublabel {
+    @apply text-[0.4rem] leading-tight text-gbc-light/60;
+  }
+
+  .marker-used-overlay {
+    @apply absolute inset-0 flex items-center justify-center;
+    @apply text-gbc-red text-[0.45rem] font-bold;
+    @apply bg-gbc-dark-green/70;
   }
 </style>

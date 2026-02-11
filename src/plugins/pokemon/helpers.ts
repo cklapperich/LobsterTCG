@@ -1,4 +1,4 @@
-import type { PokemonCardTemplate } from './cards';
+import type { PokemonCardTemplate, PokemonAttack, PokemonAbility } from './cards';
 import { SUPERTYPES, STAGES, TRAINER_SUBTYPES } from './constants';
 
 // Normalize subtypes: "Stage 1" and "Stage1" both match
@@ -47,4 +47,23 @@ export function isFieldZone(zoneKey: string): boolean {
 
 export function isStadiumZone(zoneKey: string): boolean {
   return zoneKey === 'stadium';
+}
+
+// GX / VSTAR detection — parsed from effect text (no card DB schema changes)
+
+export function isGXAttack(attack: PokemonAttack): boolean {
+  return attack.effect?.includes("can't use more than 1 GX attack") ?? false;
+}
+
+export function isGXAttackByName(name: string): boolean {
+  const n = name.trimEnd().toUpperCase();
+  return n.endsWith(' GX') || n.endsWith('-GX');
+}
+
+export function isVSTARPower(ability: PokemonAbility): boolean {
+  return ability.effect?.includes("can't use more than 1 VSTAR Power") ?? false;
+}
+
+export function isVSTARAttack(attack: PokemonAttack): boolean {
+  return attack.effect?.includes("can't use more than 1 VSTAR Power") ?? false;
 }

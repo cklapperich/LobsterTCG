@@ -151,6 +151,7 @@ export function createGameState<T extends CardTemplate>(
     startedAt: now,
     lastActionAt: now,
     log: [],
+    pluginState: {},
   };
 }
 

@@ -17,6 +17,10 @@ import {
   isTool,
   isFieldZone,
   isStadiumZone,
+  isGXAttack,
+  isGXAttackByName,
+  isVSTARPower,
+  isVSTARAttack,
 } from './helpers';
 import { ZONE_IDS } from './zones';
 import type { ReadableGameState } from '../../core/readable';
@@ -30,6 +34,7 @@ import {
   FIRST_SUPPORTER_TURN,
   POKEMON_DECLARATION_TYPES,
 } from './constants';
+import { getPluginState } from './plugin-state';
 
 type PokemonState = Readonly<GameState<PokemonCardTemplate>>;
 
@@ -513,6 +518,113 @@ function warnAttackEnergyCost(state: PokemonState, action: Action): PreHookResul
   return { outcome: 'continue' };
 }
 
+/** Pre-hook: block if player already used their GX attack this game. */
+function warnGXAlreadyUsed(state: PokemonState, action: Action): PreHookResult {
+  if (action.type !== ACTION_TYPES.DECLARE_ACTION) return { outcome: 'continue' };
+  const da = action as DeclareAction;
+  if (da.declarationType !== POKEMON_DECLARATION_TYPES.ATTACK) return { outcome: 'continue' };
+  if (action.allowed_by_card_effect) return { outcome: 'continue' };
+
+  // Check by effect text first, fall back to name convention
+  const activeKey = `player${da.player + 1}_${ZONE_IDS.ACTIVE}`;
+  const topCard = state.zones[activeKey]?.cards.at(-1);
+  const template = topCard ? getTemplate((topCard.template as PokemonCardTemplate).id) : undefined;
+  const attack = template?.attacks?.find(a => a.name.toLowerCase() === da.name.toLowerCase());
+  if (!attack) return { outcome: 'continue' };
+  if (!isGXAttack(attack) && !isGXAttackByName(attack.name)) return { outcome: 'continue' };
+
+  const ps = getPluginState(state as GameState<PokemonCardTemplate>);
+  if (ps.gxUsed[da.player]) {
+    return blockOrWarn(action, 'Already used a GX attack this game (limit 1 per player).', 'hard');
+  }
+  return { outcome: 'continue' };
+}
+
+/** Pre-hook: block if player already used their VSTAR power this game. */
+function warnVSTARAlreadyUsed(state: PokemonState, action: Action): PreHookResult {
+  if (action.type !== ACTION_TYPES.DECLARE_ACTION) return { outcome: 'continue' };
+  const da = action as DeclareAction;
+  if (action.allowed_by_card_effect) return { outcome: 'continue' };
+
+  const ps = getPluginState(state as GameState<PokemonCardTemplate>);
+
+  if (da.declarationType === POKEMON_DECLARATION_TYPES.ATTACK) {
+    const activeKey = `player${da.player + 1}_${ZONE_IDS.ACTIVE}`;
+    const topCard = state.zones[activeKey]?.cards.at(-1);
+    const template = topCard ? getTemplate((topCard.template as PokemonCardTemplate).id) : undefined;
+    const attack = template?.attacks?.find(a => a.name.toLowerCase() === da.name.toLowerCase());
+    if (attack && isVSTARAttack(attack) && ps.vstarUsed[da.player]) {
+      return blockOrWarn(action, 'Already used a VSTAR Power this game (limit 1 per player).', 'hard');
+    }
+  }
+
+  if (da.declarationType === POKEMON_DECLARATION_TYPES.ABILITY) {
+    const cardName = (da.metadata as any)?.cardName as string | undefined;
+    if (cardName) {
+      for (const zone of Object.values(state.zones)) {
+        for (const card of zone.cards) {
+          if (card.template.name === cardName) {
+            const template = getTemplate((card.template as PokemonCardTemplate).id);
+            const ability = template?.abilities?.find(a => a.name.toLowerCase() === da.name.toLowerCase());
+            if (ability && isVSTARPower(ability) && ps.vstarUsed[da.player]) {
+              return blockOrWarn(action, 'Already used a VSTAR Power this game (limit 1 per player).', 'hard');
+            }
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  return { outcome: 'continue' };
+}
+
+/** Post-hook: auto-flip GX/VSTAR marker when the corresponding action succeeds. */
+function autoFlipMarkerOnDeclare(state: PokemonState, action: Action): PostHookResult {
+  if (action.type !== ACTION_TYPES.DECLARE_ACTION) return {};
+  const da = action as DeclareAction;
+  const mutableState = state as GameState<PokemonCardTemplate>;
+  const ps = getPluginState(mutableState);
+
+  if (da.declarationType === POKEMON_DECLARATION_TYPES.ATTACK) {
+    const activeKey = `player${da.player + 1}_${ZONE_IDS.ACTIVE}`;
+    const topCard = mutableState.zones[activeKey]?.cards.at(-1);
+    const template = topCard ? getTemplate((topCard.template as PokemonCardTemplate).id) : undefined;
+    const attack = template?.attacks?.find(a => a.name.toLowerCase() === da.name.toLowerCase());
+    if (attack) {
+      if ((isGXAttack(attack) || isGXAttackByName(attack.name)) && !ps.gxUsed[da.player]) {
+        ps.gxUsed[da.player] = true;
+        gameLog(mutableState, `Player ${da.player + 1} used their GX attack!`);
+      }
+      if (isVSTARAttack(attack) && !ps.vstarUsed[da.player]) {
+        ps.vstarUsed[da.player] = true;
+        gameLog(mutableState, `Player ${da.player + 1} used their VSTAR Power!`);
+      }
+    }
+  }
+
+  if (da.declarationType === POKEMON_DECLARATION_TYPES.ABILITY) {
+    const cardName = (da.metadata as any)?.cardName as string | undefined;
+    if (cardName) {
+      for (const zone of Object.values(mutableState.zones)) {
+        for (const card of zone.cards) {
+          if (card.template.name === cardName) {
+            const template = getTemplate((card.template as PokemonCardTemplate).id);
+            const ability = template?.abilities?.find(a => a.name.toLowerCase() === da.name.toLowerCase());
+            if (ability && isVSTARPower(ability) && !ps.vstarUsed[da.player]) {
+              ps.vstarUsed[da.player] = true;
+              gameLog(mutableState, `Player ${da.player + 1} used their VSTAR Power!`);
+            }
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  return {};
+}
+
 /** Post-hook: log attack/ability effect text after declaration. */
 function logDeclareEffectText(state: PokemonState, action: Action): PostHookResult {
   if (action.type !== ACTION_TYPES.DECLARE_ACTION) return {};
@@ -636,6 +748,7 @@ export const pokemonHooksPlugin: Plugin<PokemonCardTemplate> = {
       { hook: logMulliganMessage, priority: 100 },
     ],
     [ACTION_TYPES.DECLARE_ACTION]: [
+      { hook: autoFlipMarkerOnDeclare, priority: 50 },
       { hook: logDeclareEffectText, priority: 100 },
     ],
   },
@@ -648,6 +761,8 @@ export const pokemonHooksPlugin: Plugin<PokemonCardTemplate> = {
     [ACTION_TYPES.DECLARE_ACTION]: [
       { hook: warnAttackFirstTurn, priority: 90 },
       { hook: warnAttackEnergyCost, priority: 100 },
+      { hook: warnGXAlreadyUsed, priority: 80 },
+      { hook: warnVSTARAlreadyUsed, priority: 80 },
     ],
     [ACTION_TYPES.END_TURN]: [
       { hook: warnStagingNotEmpty, priority: 90 },

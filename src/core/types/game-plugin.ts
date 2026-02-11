@@ -6,6 +6,14 @@ import type { RunnableTool, ToolContext } from '../ai-tools';
 import type { ActionPanel } from './action-panel';
 import type { Action } from './action';
 
+export interface MarkerState {
+  id: string;
+  label: string;       // "GX" or "VSTAR"
+  sublabel: string;    // "You" / "Opp"
+  used: boolean;
+  clickable: boolean;
+}
+
 /**
  * Interface for game plugins (Pokemon, Solitaire, etc.)
  *
@@ -66,4 +74,10 @@ export interface GamePlugin<T extends CardTemplate = CardTemplate> {
 
   /** Handle a button click from an action panel. Returns an Action to dispatch through the hook system, or void for direct mutation. */
   onActionPanelClick?(state: GameState<T>, player: PlayerIndex, panelId: string, buttonId: string): Action | void;
+
+  /** Return marker states for the counter tray UI. */
+  getMarkers?(state: GameState<T>, playerIndex: PlayerIndex): MarkerState[];
+
+  /** Handle a marker click (manual flip). */
+  onMarkerClick?(state: GameState<T>, playerIndex: PlayerIndex, markerId: string): void;
 }

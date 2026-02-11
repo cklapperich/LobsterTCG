@@ -59,6 +59,7 @@ export interface ReadableGameState {
   pendingDecision: Decision | null;
   result: GameResult | null;
   log: string[];
+  pluginState?: Record<string, unknown>;
 }
 
 /**
@@ -97,6 +98,7 @@ export function toReadableState<T extends CardTemplate>(
     pendingDecision: state.pendingDecision,
     result: state.result,
     log: state.log.slice(-READABLE_LOG_LIMIT),
+    pluginState: state.pluginState,
   };
 
   return readable;

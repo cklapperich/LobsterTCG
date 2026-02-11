@@ -1,4 +1,4 @@
-import type { GameState, Playmat, DeckList, PlayerIndex, CardTemplate, GameConfig, GamePlugin, CounterDefinition, ActionPanel, Action } from '../../core';
+import type { GameState, Playmat, DeckList, PlayerIndex, CardTemplate, GameConfig, GamePlugin, CounterDefinition, ActionPanel, Action, MarkerState } from '../../core';
 import {
   createGameState,
   createCardInstance,
@@ -36,6 +36,7 @@ import {
   SETUP,
   POKEMON_DECLARATION_TYPES,
   AI_COUNTER_TYPES,
+  MARKER_IDS,
 } from './constants';
 
 // Import counter images
@@ -127,7 +128,9 @@ export function startPokemonGameWithPlaymat(
   player2Id: string = 'player2'
 ): PokemonGameState {
   const config = getGameConfig(playmat);
-  return createGameState<PokemonCardTemplate>(config, player1Id, player2Id);
+  const state = createGameState<PokemonCardTemplate>(config, player1Id, player2Id);
+  initPluginState(state);
+  return state;
 }
 
 /**
@@ -404,6 +407,35 @@ async function shouldSkipStartOfTurn(ctx: ToolContext): Promise<boolean> {
   return true;
 }
 
+// ── GX / VSTAR Plugin State ──────────────────────────────────────
+
+import { getPluginState, initPluginState } from './plugin-state';
+export { getPluginState, initPluginState } from './plugin-state';
+export type { PokemonPluginState } from './plugin-state';
+
+function getMarkers(state: GameState<PokemonCardTemplate>, playerIndex: PlayerIndex): MarkerState[] {
+  const ps = getPluginState(state);
+  const opp = (playerIndex === 0 ? 1 : 0) as PlayerIndex;
+  return [
+    { id: `p${playerIndex}_${MARKER_IDS.GX}`, label: 'GX', sublabel: 'You', used: ps.gxUsed[playerIndex], clickable: true },
+    { id: `p${playerIndex}_${MARKER_IDS.VSTAR}`, label: 'VSTAR', sublabel: 'You', used: ps.vstarUsed[playerIndex], clickable: true },
+    { id: `p${opp}_${MARKER_IDS.GX}`, label: 'GX', sublabel: 'Opp', used: ps.gxUsed[opp], clickable: false },
+    { id: `p${opp}_${MARKER_IDS.VSTAR}`, label: 'VSTAR', sublabel: 'Opp', used: ps.vstarUsed[opp], clickable: false },
+  ];
+}
+
+function onMarkerClick(state: GameState<PokemonCardTemplate>, playerIndex: PlayerIndex, markerId: string): void {
+  const ps = getPluginState(state);
+  if (markerId.endsWith(`_${MARKER_IDS.GX}`) && !ps.gxUsed[playerIndex]) {
+    ps.gxUsed[playerIndex] = true;
+    gameLog(state, `Player ${playerIndex + 1} flipped GX marker`);
+  }
+  if (markerId.endsWith(`_${MARKER_IDS.VSTAR}`) && !ps.vstarUsed[playerIndex]) {
+    ps.vstarUsed[playerIndex] = true;
+    gameLog(state, `Player ${playerIndex + 1} flipped VSTAR marker`);
+  }
+}
+
 // Plugin object conforming to GamePlugin interface
 export const plugin: GamePlugin<PokemonCardTemplate> = {
   getPlaymat: getPokemonPlaymat,
@@ -419,6 +451,8 @@ export const plugin: GamePlugin<PokemonCardTemplate> = {
   getAgentConfig,
   getActionPanels,
   onActionPanelClick,
+  getMarkers,
+  onMarkerClick,
 };
 
 /**
