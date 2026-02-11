@@ -4,7 +4,7 @@
   import { parsePTCGODeck } from '../../plugins/pokemon/cards';
   import { playSfx } from '../../lib/audio.svelte';
   import SettingsModal from './SettingsModal.svelte';
-  import { MODEL_OPTIONS } from '../../ai';
+  import { MODEL_OPTIONS, PLANNER_CONFIG } from '../../ai';
   import { DEFAULT_CONFIG, type PlayerConfig } from './player-config';
   import GbcDropdown from './GbcDropdown.svelte';
   import { GAME_TYPES, DEFAULT_GAME_TYPE } from '../../game-types';
@@ -31,6 +31,7 @@
       playmatImage: string;
       aiModel: string;
       aiMode: string;
+      plannerModel?: string;
       playerConfig: PlayerConfig;
     }) => void;
   }
@@ -46,6 +47,7 @@
   let playmatImage = $state<string>('');
   let aiModel = $state<string>('kimi-k2p5');
   let aiMode = $state<string>('autonomous');
+  let plannerModel = $state<string>(PLANNER_CONFIG.MODEL === 'claude-sonnet-4-5-20250929' ? 'sonnet-4.5' : PLANNER_CONFIG.MODEL);
   let showSettings = $state(false);
 
   const gameConfig = $derived(GAME_TYPES[gameType]);
@@ -160,6 +162,7 @@
         playmatImage: selectedPlaymat?.url ?? '',
         aiModel,
         aiMode,
+        plannerModel: aiMode === 'pipeline' ? plannerModel : undefined,
         playerConfig: DEFAULT_CONFIG,
       });
     } else {
@@ -171,6 +174,7 @@
         playmatImage: selectedPlaymat?.url ?? '',
         aiModel,
         aiMode,
+        plannerModel: aiMode === 'pipeline' ? plannerModel : undefined,
         playerConfig: DEFAULT_CONFIG,
       });
     }
@@ -288,6 +292,20 @@
             bind:value={aiMode}
           />
         </div>
+
+        <!-- Planner Model Selection (only in pipeline mode) -->
+        {#if aiMode === 'pipeline'}
+          <div class="model-select mb-4">
+            <div class="player-label text-gbc-green text-[0.6rem] mb-3 flex items-center gap-2">
+              <span class="player-badge bg-gbc-yellow text-gbc-border px-2 py-1">PLAN</span>
+              PLANNER MODEL
+            </div>
+            <GbcDropdown
+              options={MODEL_OPTIONS.map(m => ({ value: m.id, label: m.label }))}
+              bind:value={plannerModel}
+            />
+          </div>
+        {/if}
       {/if}
 
       {#if gameConfig?.testOptions && gameConfig.testOptions.length > 0}

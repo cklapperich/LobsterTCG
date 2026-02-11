@@ -15,6 +15,7 @@
     playmatImage: string;
     aiModel: string;
     aiMode: string;
+    plannerModel?: string;
     playerConfig: PlayerConfig;
   } | null>(null);
 
@@ -25,6 +26,7 @@
     playmatImage: string;
     aiModel: string;
     aiMode: string;
+    plannerModel?: string;
     playerConfig: PlayerConfig;
   }) {
     selectedGame = options;
@@ -47,6 +49,7 @@
     playmatImage={selectedGame.playmatImage}
     aiModel={selectedGame.aiModel}
     aiMode={selectedGame.aiMode}
+    plannerModel={selectedGame.plannerModel}
     playerConfig={selectedGame.playerConfig}
     onBackToMenu={handleBackToMenu}
   />
