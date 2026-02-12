@@ -1,6 +1,7 @@
 import type { CardTemplate, PlayerIndex, Action } from './types';
 import type { GameState } from './types';
-import { INSTANCE_ID_PREFIX, POSITIONS, ORIENTATIONS, REVEAL_TARGETS } from './types';
+import type { ToolSet } from 'ai';
+import { INSTANCE_ID_PREFIX, ORIENTATIONS } from './types';
 import { resolveCardName, formatCardInventory } from './readable';
 import {
   draw,
@@ -27,68 +28,74 @@ import {
   rearrangeZone,
 } from './action';
 import type { Visibility } from './types';
+import { tool as aiTool } from 'ai';
+import { z } from 'zod';
 
-/**
- * Execution context provided to AI tools.
- * The caller decides how actions are executed — Game.svelte provides
- * a real-time context that operates on reactive state with delays.
- */
 export interface ToolContext {
   playerIndex: PlayerIndex;
-  /** Execute an action and return the resulting readable state as JSON.
-   *  Accepts a lazy factory `(state) => Action` — the factory is called inside
-   *  the serialized execution queue so card-name resolution sees the latest state
-   *  after prior parallel tool calls have completed. */
   execute: (actionOrFactory: Action | ((state: GameState<CardTemplate>) => Action)) => Promise<string>;
-  /** Get the current game state (for card name resolution, etc). */
   getState: () => GameState<CardTemplate>;
-  /** Get the readable state JSON for this player. */
   getReadableState: () => string;
-  /** True when this context is for a decision mini-turn response. */
   isDecisionResponse?: boolean;
-  /** Format a card template for search results. Plugin-provided for rich output. */
   formatCardForSearch?: (template: CardTemplate) => string;
-  /** Translate AI-perspective zone keys (your_hand, opponent_active) to internal keys (player2_hand, player1_active). */
   translateZoneKey?: (key: string) => string;
-  /** Plugin-provided list of counter types the AI can use (shown as enum in tool schema). */
   counterTypes?: string[];
-  /** Create a deep-cloned snapshot of current game state, safe from Svelte proxy issues. */
   createCheckpoint?: () => any;
-  /** Replace the entire game state with a previously checkpointed snapshot (used by rewind). */
   restoreState?: (snapshot: any) => void;
 }
 
-/**
- * A runnable tool compatible with the Vercel AI SDK.
- */
-export interface RunnableTool {
-  name: string;
-  description: string;
-  parameters: Record<string, unknown>;
-  execute: (input: Record<string, any>) => Promise<string> | string;
+export type ToolExecutionContext = {
+  stepState?: import('../ai/run-turn').StepState;
+  abort?: AbortController;
+  rewindSignal?: import('../ai/run-turn').RewindSignal;
+  restoreCheckpoint?: () => void;
+  terminalTools: Set<string>;
+};
+
+export function wrapToolsWithContext(tools: ToolSet, context: ToolExecutionContext): ToolSet {
+  const result: ToolSet = {};
+  for (const [name, tool] of Object.entries(tools)) {
+    const originalExecute = (tool as any).execute;
+    result[name] = {
+      ...tool,
+      execute: async (args: any, options?: any) => {
+        if (context.stepState?.blocked) {
+          return `Cancelled: a prior action in this parallel batch was blocked (${context.stepState.blockReason}). All remaining actions have been cancelled. Review the error and adjust your plan.`;
+        }
+        try {
+          const res = await originalExecute(args, options);
+          if (context.terminalTools.has(name) && context.abort) {
+            context.abort.abort();
+            if (context.stepState) {
+              context.stepState.blocked = true;
+              context.stepState.blockReason = `${name} executed - turn ending`;
+            }
+          }
+          if (name === 'rewind' && context.rewindSignal) {
+            context.rewindSignal.triggered = true;
+            context.rewindSignal.reason = args.reason ?? '';
+            context.rewindSignal.guidance = args.guidance ?? '';
+            if (context.stepState) {
+              context.stepState.blocked = true;
+              context.stepState.blockReason = 'Rewind triggered — remaining actions cancelled';
+            }
+            context.restoreCheckpoint?.();
+          }
+          return res;
+        } catch (e: any) {
+          const msg = e?.message ?? String(e);
+          if (context.stepState) {
+            context.stepState.blocked = true;
+            context.stepState.blockReason = msg;
+          }
+          return `Error: ${msg}`;
+        }
+      },
+    };
+  }
+  return result;
 }
 
-/**
- * Create a runnable tool from a schema definition.
- */
-function tool(options: {
-  name: string;
-  description: string;
-  inputSchema: Record<string, unknown> & { type: 'object' };
-  run: (input: any) => Promise<string> | string;
-}): RunnableTool {
-  return {
-    name: options.name,
-    description: options.description,
-    parameters: options.inputSchema,
-    execute: options.run,
-  };
-}
-
-/**
- * Helper: resolve a card name to instanceId. If the input already looks
- * like an instanceId (starts with "card_"), return it directly.
- */
 function resolveCard(
   state: GameState<CardTemplate>,
   cardName: string,
@@ -98,10 +105,6 @@ function resolveCard(
   return resolveCardName(state, cardName, zoneKey);
 }
 
-/**
- * Helper: resolve a card by position in a zone (for face-down cards the AI can't name).
- * Index 0 = top of zone (consistent with draw/peek).
- */
 export function resolveCardByPosition(
   state: GameState<CardTemplate>,
   zoneKey: string,
@@ -120,390 +123,223 @@ export function resolveCardByPosition(
   return zone.cards[index].instanceId;
 }
 
-/**
- * Translate a zone key from AI perspective to internal format.
- * If ctx.translateZoneKey is not set, returns the key unchanged.
- */
 function tz(ctx: ToolContext, key: string): string {
   return ctx.translateZoneKey ? ctx.translateZoneKey(key) : key;
 }
 
-/**
- * Create default tools for all built-in action types.
- * Each tool calls ctx.execute() which is provided by the caller.
- *
- * All zone parameters accept zone keys (e.g. "your_hand", "opponent_active").
- * Zone keys are translated from AI perspective to internal format before
- * being passed to action factories.
- *
- * Plugins can call this, filter out tools they don't want, and append
- * custom tools before returning from getAgentConfig().
- */
-export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
+function createTool<T extends z.ZodSchema>(
+  description: string,
+  inputSchema: T,
+  execute: (args: z.infer<T>) => Promise<string>
+) {
+  return aiTool({
+    description,
+    inputSchema,
+    execute,
+  });
+}
+
+export function createDefaultTools(ctx: ToolContext): ToolSet {
   const p = ctx.playerIndex;
 
-  return [
-    // ── Card Drawing ──────────────────────────────────────────────
-    tool({
-      name: 'draw',
-      description: 'Draw cards from the top of your deck into your hand.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          count: { type: 'number', description: 'Number of cards to draw (default 1)' },
-        },
-        required: [],
-      },
-      async run(input) {
-        const count = input.count ?? 1;
-        return ctx.execute(draw(p, count));
-      },
-    }),
+  return {
+    draw: createTool('Draw cards from the top of your deck into your hand.',
+      z.object({ count: z.number().optional().describe('Number of cards to draw (default 1)') }),
+      async ({ count }) => ctx.execute(draw(p, count ?? 1))),
 
-    // ── Move Card ──────────────────────────────────────────────────
-    tool({
-      name: 'move_card',
-      description: 'Move a card from one zone to another. Always specify cardName for visible cards. Omit cardName only for face-down cards (takes from top of zone).',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          cardName: { type: 'string', description: 'Name of the card to move. Always provide for visible cards. Omit only for face-down cards (takes top card).' },
-          fromZone: { type: 'string', description: 'Zone key (e.g. "your_hand")' },
-          toZone: { type: 'string', description: 'Zone key to move the card to (e.g. "your_active")' },
-          toPosition: { type: 'string', enum: ['top', 'bottom'], description: '"top" = top of zone (default), "bottom" = bottom of zone' },
-        },
-        required: ['fromZone', 'toZone'],
-      },
-      async run(input) {
-        const fromZone = tz(ctx, input.fromZone);
-        const toZone = tz(ctx, input.toZone);
+    move_card: createTool('Move a card from one zone to another. Always specify cardName for visible cards. Omit cardName only for face-down cards (takes from top of zone).',
+      z.object({
+        cardName: z.string().optional().describe('Name of the card to move. Always provide for visible cards. Omit only for face-down cards (takes top card).'),
+        fromZone: z.string().describe('Zone key (e.g. "your_hand")'),
+        toZone: z.string().describe('Zone key to move the card to (e.g. "your_active")'),
+        toPosition: z.enum(['top', 'bottom']).optional().describe('"top" = top of zone (default), "bottom" = bottom of zone'),
+      }),
+      async ({ cardName, fromZone, toZone, toPosition }) => {
+        const fromZoneKey = tz(ctx, fromZone);
+        const toZoneKey = tz(ctx, toZone);
         return ctx.execute((state) => {
-          const cardId = input.cardName
-            ? resolveCard(state, input.cardName, fromZone)
-            : resolveCardByPosition(state, fromZone);
-          return moveCard(p, cardId, fromZone, toZone, input.toPosition ?? 'top');
+          const cardId = cardName
+            ? resolveCard(state, cardName, fromZoneKey)
+            : resolveCardByPosition(state, fromZoneKey);
+          return moveCard(p, cardId, fromZoneKey, toZoneKey, toPosition ?? 'top');
         });
-      },
-    }),
+      }),
 
-    // ── Move Card Stack ────────────────────────────────────────────
-    tool({
-      name: 'move_card_stack',
-      description: 'Move ALL cards from one zone to another as a group (e.g. moving a Pokemon and all its attachments).',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          fromZone: { type: 'string', description: 'Zone key to move all cards from (e.g. "your_active")' },
-          toZone: { type: 'string', description: 'Zone key to move the cards to (e.g. "your_discard")' },
-          toPosition: { type: 'string', enum: ['top', 'bottom'], description: '"top" = top of zone (default), "bottom" = bottom of zone' },
-        },
-        required: ['fromZone', 'toZone'],
-      },
-      async run(input) {
-        const fromZone = tz(ctx, input.fromZone);
-        const toZone = tz(ctx, input.toZone);
-        const zone = ctx.getState().zones[fromZone];
-        if (!zone) return `Error: zone "${input.fromZone}" not found`;
-        if (zone.cards.length === 0) return `Error: zone "${input.fromZone}" is empty`;
+    move_card_stack: createTool('Move ALL cards from one zone to another as a group (e.g. moving a Pokemon and all its attachments).',
+      z.object({
+        fromZone: z.string().describe('Zone key to move all cards from (e.g. "your_active")'),
+        toZone: z.string().describe('Zone key to move the cards to (e.g. "your_discard")'),
+        toPosition: z.enum(['top', 'bottom']).optional().describe('"top" = top of zone (default), "bottom" = bottom of zone'),
+      }),
+      async ({ fromZone, toZone, toPosition }) => {
+        const fromZoneKey = tz(ctx, fromZone);
+        const toZoneKey = tz(ctx, toZone);
+        const zone = ctx.getState().zones[fromZoneKey];
+        if (!zone) return `Error: zone "${fromZone}" not found`;
+        if (zone.cards.length === 0) return `Error: zone "${fromZone}" is empty`;
         const cardIds = zone.cards.map(c => c.instanceId);
-        return ctx.execute(moveCardStack(p, cardIds, fromZone, toZone, input.toPosition ?? 'top'));
-      },
-    }),
+        return ctx.execute(moveCardStack(p, cardIds, fromZoneKey, toZoneKey, toPosition ?? 'top'));
+      }),
 
-    // ── Swap Card Stacks ────────────────────────────────────────────
-    tool({
-      name: 'swap_card_stacks',
-      description: 'Swap all cards between two zones. Both zones exchange their entire contents atomically. Works even if one or both zones are empty.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          zone1: { type: 'string', description: 'First zone key (e.g. "your_active")' },
-          zone2: { type: 'string', description: 'Second zone key (e.g. "your_bench_1")' },
-        },
-        required: ['zone1', 'zone2'],
-      },
-      async run(input) {
-        return ctx.execute(swapCardStacks(p, tz(ctx, input.zone1), tz(ctx, input.zone2)));
-      },
-    }),
+    swap_card_stacks: createTool('Swap all cards between two zones. Both zones exchange their entire contents atomically. Works even if one or both zones are empty.',
+      z.object({
+        zone1: z.string().describe('First zone key (e.g. "your_active")'),
+        zone2: z.string().describe('Second zone key (e.g. "your_bench_1")'),
+      }),
+      async ({ zone1, zone2 }) => ctx.execute(swapCardStacks(p, tz(ctx, zone1), tz(ctx, zone2)))),
 
-    // ── Place on Zone ──────────────────────────────────────────────
-    tool({
-      name: 'place_on_zone',
-      description: 'Place cards on the top or bottom of a zone.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          cardNames: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'Names of the cards to place',
-          },
-          zone: { type: 'string', description: 'Target zone key (e.g. "your_deck")' },
-          position: { type: 'string', enum: [POSITIONS.TOP, POSITIONS.BOTTOM], description: 'Place on top or bottom of the zone' },
-        },
-        required: ['cardNames', 'zone', 'position'],
-      },
-      async run(input) {
-        const zone = tz(ctx, input.zone);
+    place_on_zone: createTool('Place cards on the top or bottom of a zone.',
+      z.object({
+        cardNames: z.array(z.string()).describe('Names of the cards to place'),
+        zone: z.string().describe('Target zone key (e.g. "your_deck")'),
+        position: z.enum(['top', 'bottom']).describe('Place on top or bottom of the zone'),
+      }),
+      async ({ cardNames, zone, position }) => {
+        const zoneKey = tz(ctx, zone);
         return ctx.execute((state) => {
-          const cardIds = input.cardNames.map((name: string) => {
+          const cardIds = cardNames.map((name: string) => {
             if (name.startsWith(INSTANCE_ID_PREFIX)) return name;
             for (const zk of Object.keys(state.zones)) {
-              try {
-                return resolveCardName(state, name, zk);
-              } catch { /* try next zone */ }
+              try { return resolveCardName(state, name, zk); } catch { /* try next zone */ }
             }
             throw new Error(`Card "${name}" not found in any zone`);
           });
-          return placeOnZone(p, cardIds, zone, input.position);
+          return placeOnZone(p, cardIds, zoneKey, position);
         });
-      },
-    }),
+      }),
 
-    // ── Shuffle ────────────────────────────────────────────────────
-    tool({
-      name: 'shuffle',
-      description: 'Shuffle a zone (typically your deck).',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          zone: { type: 'string', description: 'Zone key to shuffle (e.g. "your_deck")' },
-        },
-        required: ['zone'],
-      },
-      async run(input) {
-        return ctx.execute(shuffle(p, tz(ctx, input.zone)));
-      },
-    }),
+    shuffle: createTool('Shuffle a zone (typically your deck).',
+      z.object({ zone: z.string().describe('Zone key to shuffle (e.g. "your_deck")') }),
+      async ({ zone }) => ctx.execute(shuffle(p, tz(ctx, zone)))),
 
-    // ── Search Zone ────────────────────────────────────────────────
-    tool({
-      name: 'search_zone',
-      description: 'Search a zone to see all cards and their full details. Read-only — does not modify game state. After reviewing, use move_card to take cards, then shuffle the zone.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          zone: { type: 'string', description: 'Zone key to search (e.g. "your_deck")' },
-        },
-        required: ['zone'],
-      },
-      run(input) {
+    search_zone: createTool('Search a zone to see all cards and their full details. Read-only — does not modify game state. After reviewing, use move_card to take cards, then shuffle the zone.',
+      z.object({ zone: z.string().describe('Zone key to search (e.g. "your_deck")') }),
+      async ({ zone }) => {
         const state = ctx.getState();
-        const zoneKey = tz(ctx, input.zone);
-        const displayKey = input.zone; // keep AI-facing key for instructions
-        const zone = state.zones[zoneKey];
-        if (!zone) return `Error: zone "${displayKey}" not found`;
-        if (zone.cards.length === 0) return `Zone "${displayKey}" is empty`;
+        const zoneKey = tz(ctx, zone);
+        const displayKey = zone;
+        const zoneObj = state.zones[zoneKey];
+        if (!zoneObj) return `Error: zone "${displayKey}" not found`;
+        if (zoneObj.cards.length === 0) return `Zone "${displayKey}" is empty`;
 
-        const templates = zone.cards.map(c => c.template);
+        const templates = zoneObj.cards.map(c => c.template);
         const inventory = formatCardInventory(templates, ctx.formatCardForSearch);
         const uniqueCount = new Set(templates.map(t => t.name)).size;
 
-        const lines: string[] = [
-          `=== SEARCH: ${zone.config.name ?? displayKey} (${zone.cards.length} cards, ${uniqueCount} unique) ===`,
-          '',
-          inventory,
-          '',
-          '---',
+        return [
+          `=== SEARCH: ${zoneObj.config?.name ?? displayKey} (${zoneObj.cards.length} cards, ${uniqueCount} unique) ===`,
+          '', inventory, '', '---',
           `You are resolving a zone search. Review the cards above and select which to take.`,
-          `Use move_card with fromZone="${displayKey}" and cardName="<name>" to move cards to your hand or the appropriate zone based on the card effect.`,
+          `Use move_card with fromZone="${displayKey}" and cardName="<name>" to move cards.`,
           `Then call shuffle with zone="${displayKey}" to shuffle the zone.`,
-        ];
+        ].join('\n');
+      }),
 
-        return lines.join('\n');
-      },
-    }),
-
-    // ── Flip Card Visibility ───────────────────────────────────────
-    tool({
-      name: 'flip_card',
-      description: 'Change a card\'s visibility (face-up/face-down).',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          cardName: { type: 'string', description: 'Name of the card to flip' },
-          zone: { type: 'string', description: 'Zone key the card is in' },
-          visibility: {
-            type: 'string',
-            enum: ['public', 'hidden', 'owner_only'],
-            description: 'New visibility: "public" (both see), "hidden" (neither sees), "owner_only" (only you see)',
-          },
-        },
-        required: ['cardName', 'zone', 'visibility'],
-      },
-      async run(input) {
-        const zone = tz(ctx, input.zone);
+    flip_card: createTool('Change a card\'s visibility (face-up/face-down).',
+      z.object({
+        cardName: z.string().describe('Name of the card to flip'),
+        zone: z.string().describe('Zone key the card is in'),
+        visibility: z.enum(['public', 'hidden', 'owner_only']).describe('New visibility: "public" (both see), "hidden" (neither sees), "owner_only" (only you see)'),
+      }),
+      async ({ cardName, zone, visibility }) => {
+        const zoneKey = tz(ctx, zone);
         return ctx.execute((state) => {
-          const cardId = resolveCard(state, input.cardName, zone);
+          const cardId = resolveCard(state, cardName, zoneKey);
           const visMap: Record<string, Visibility> = {
             public: [true, true],
             hidden: [false, false],
             owner_only: p === 0 ? [true, false] : [false, true],
           };
-          const vis = visMap[input.visibility] ?? [true, true];
-          return flipCard(p, cardId, vis);
+          return flipCard(p, cardId, visMap[visibility] ?? [true, true]);
         });
-      },
-    }),
+      }),
 
-    // ── Set Orientation ────────────────────────────────────────────
-    tool({
-      name: 'set_orientation',
-      description: 'Set card rotation/orientation by degrees.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          cardName: { type: 'string', description: 'Name of the card' },
-          zone: { type: 'string', description: 'Zone key the card is in' },
-          orientation: { type: 'string', enum: [ORIENTATIONS.NORMAL, ORIENTATIONS.TAPPED, ORIENTATIONS.COUNTER_TAPPED, ORIENTATIONS.FLIPPED], description: '"0" = upright, "90" = 90° clockwise, "-90" = 90° counter-clockwise, "180" = upside-down' },
-        },
-        required: ['cardName', 'zone', 'orientation'],
-      },
-      async run(input) {
-        const zone = tz(ctx, input.zone);
+    set_orientation: createTool('Set card rotation/orientation by degrees.',
+      z.object({
+        cardName: z.string().describe('Name of the card'),
+        zone: z.string().describe('Zone key the card is in'),
+        orientation: z.enum([ORIENTATIONS.NORMAL, ORIENTATIONS.TAPPED, ORIENTATIONS.COUNTER_TAPPED, ORIENTATIONS.FLIPPED]).describe('"0" = upright, "90" = 90° clockwise, "-90" = 90° counter-clockwise, "180" = upside-down'),
+      }),
+      async ({ cardName, zone, orientation }) => {
+        const zoneKey = tz(ctx, zone);
         return ctx.execute((state) => {
-          const cardId = resolveCard(state, input.cardName, zone);
-          return setOrientation(p, cardId, input.orientation);
+          const cardId = resolveCard(state, cardName, zoneKey);
+          return setOrientation(p, cardId, orientation);
         });
-      },
-    }),
+      }),
 
-    // ── Add Counter ────────────────────────────────────────────────
-    tool({
-      name: 'add_counter',
-      description: 'Add counters to a card (e.g. damage counters).',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          cardName: { type: 'string', description: 'Name of the card' },
-          zone: { type: 'string', description: 'Zone key the card is in (e.g. "opponent_active")' },
-          counterType: { type: 'string', ...(ctx.counterTypes && { enum: ctx.counterTypes }), description: 'Counter type' },
-          amount: { type: 'number', description: 'Number of counters to add (default 1)' },
-        },
-        required: ['cardName', 'zone', 'counterType'],
-      },
-      async run(input) {
-        const zone = tz(ctx, input.zone);
+    add_counter: createTool('Add counters to a card (e.g. damage counters).',
+      z.object({
+        cardName: z.string().describe('Name of the card'),
+        zone: z.string().describe('Zone key the card is in (e.g. "opponent_active")'),
+        counterType: z.string().refine((type) => !ctx.counterTypes || ctx.counterTypes.includes(type), { message: "Invalid counter type" }).describe('Counter type'),
+        amount: z.number().optional().describe('Number of counters to add (default 1)'),
+      }),
+      async ({ cardName, zone, counterType, amount }) => {
+        const zoneKey = tz(ctx, zone);
         return ctx.execute((state) => {
-          const cardId = resolveCard(state, input.cardName, zone);
-          const amount = input.amount ?? 1;
-          return addCounter(p, cardId, input.counterType, amount);
+          const cardId = resolveCard(state, cardName, zoneKey);
+          return addCounter(p, cardId, counterType ?? 'damage', amount ?? 1);
         });
-      },
-    }),
+      }),
 
-    // ── Remove Counter ─────────────────────────────────────────────
-    tool({
-      name: 'remove_counter',
-      description: 'Remove counters from a card.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          cardName: { type: 'string', description: 'Name of the card' },
-          zone: { type: 'string', description: 'Zone key the card is in' },
-          counterType: { type: 'string', ...(ctx.counterTypes && { enum: ctx.counterTypes }), description: 'Counter type to remove' },
-          amount: { type: 'number', description: 'Number of counters to remove (default 1)' },
-        },
-        required: ['cardName', 'zone', 'counterType'],
-      },
-      async run(input) {
-        const zone = tz(ctx, input.zone);
+    remove_counter: createTool('Remove counters from a card.',
+      z.object({
+        cardName: z.string().describe('Name of the card'),
+        zone: z.string().describe('Zone key the card is in'),
+        counterType: z.string().refine((type) => !ctx.counterTypes || ctx.counterTypes.includes(type), { message: "Invalid counter type" }).describe('Counter type to remove'),
+        amount: z.number().optional().describe('Number of counters to remove (default 1)'),
+      }),
+      async ({ cardName, zone, counterType, amount }) => {
+        const zoneKey = tz(ctx, zone);
         return ctx.execute((state) => {
-          const cardId = resolveCard(state, input.cardName, zone);
-          const amount = input.amount ?? 1;
-          return removeCounter(p, cardId, input.counterType, amount);
+          const cardId = resolveCard(state, cardName, zoneKey);
+          return removeCounter(p, cardId, counterType ?? 'damage', amount ?? 1);
         });
-      },
-    }),
+      }),
 
-    // ── Coin Flip ──────────────────────────────────────────────────
-    tool({
-      name: 'coin_flip',
-      description: 'Flip one or more coins. Returns heads (true) or tails (false) for each.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          num_coins: { type: 'number', description: 'Number of coins to flip (default 1)' },
-        },
-        required: [],
-      },
-      async run(input) {
-        const count = input.num_coins ?? 1;
-        return ctx.execute(coinFlip(p, count));
-      },
-    }),
+    coin_flip: createTool('Flip one or more coins. Returns heads (true) or tails (false) for each.',
+      z.object({ num_coins: z.number().optional().describe('Number of coins to flip (default 1)') }),
+      async ({ num_coins }) => ctx.execute(coinFlip(p, num_coins ?? 1))),
 
-    // ── Dice Roll ──────────────────────────────────────────────────
-    tool({
-      name: 'dice_roll',
-      description: 'Roll one or more dice.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          sides: { type: 'number', description: 'Number of sides on the die (default 6)' },
-          count: { type: 'number', description: 'Number of dice to roll (default 1)' },
-        },
-        required: [],
-      },
-      async run(input) {
-        const sides = input.sides ?? 6;
-        const count = input.count ?? 1;
-        return ctx.execute(diceRoll(p, sides, count));
-      },
-    }),
+    dice_roll: createTool('Roll one or more dice.',
+      z.object({
+        sides: z.number().optional().describe('Number of sides on the die (default 6)'),
+        count: z.number().optional().describe('Number of dice to roll (default 1)'),
+      }),
+      async ({ sides, count }) => ctx.execute(diceRoll(p, sides ?? 6, count ?? 1))),
 
-    // ── Peek ───────────────────────────────────────────────────────
-    tool({
-      name: 'peek',
-      description: 'Look at the top or bottom cards of a zone. Returns full card details and positions. Use after peek: move_card to take cards, rearrange_zone to reorder, shuffle to randomize.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          zone: { type: 'string', description: 'Zone key to peek at (e.g. "your_deck")' },
-          count: { type: 'number', description: 'Number of cards to peek at (default 1)' },
-          fromPosition: { type: 'string', enum: [POSITIONS.TOP, POSITIONS.BOTTOM], description: 'Peek from top or bottom (default "top")' },
-        },
-        required: ['zone'],
-      },
-      async run(input) {
-        const count = input.count ?? 1;
-        const from = input.fromPosition ?? 'top';
-        const zoneKey = tz(ctx, input.zone);
-        const displayKey = input.zone;
+    peek: createTool('Look at the top or bottom cards of a zone. Returns full card details and positions. Use after peek: move_card to take cards, rearrange_zone to reorder, shuffle to randomize.',
+      z.object({
+        zone: z.string().describe('Zone key to peek at (e.g. "your_deck")'),
+        count: z.number().optional().describe('Number of cards to peek at (default 1)'),
+        fromPosition: z.enum(['top', 'bottom']).optional().describe('Peek from top or bottom (default "top")'),
+      }),
+      async ({ zone, count, fromPosition }) => {
+        const actualCount = count ?? 1;
+        const from = fromPosition ?? 'top';
+        const zoneKey = tz(ctx, zone);
+        const displayKey = zone;
 
-        // Execute the peek action for logging/hooks
-        await ctx.execute(peek(p, zoneKey, count, from));
+        await ctx.execute(peek(p, zoneKey, actualCount, from));
 
-        // Read peeked cards directly from state
         const state = ctx.getState();
-        const zone = state.zones[zoneKey];
-        if (!zone || zone.cards.length === 0) return `Zone "${displayKey}" is empty`;
+        const zoneObj = state.zones[zoneKey];
+        if (!zoneObj || zoneObj.cards.length === 0) return `Zone "${displayKey}" is empty`;
 
-        const actualCount = Math.min(count, zone.cards.length);
-        let peekedCards: typeof zone.cards;
+        const finalCount = Math.min(actualCount, zoneObj.cards.length);
+        const peekedCards = from === 'top'
+          ? zoneObj.cards.slice(zoneObj.cards.length - finalCount).reverse()
+          : zoneObj.cards.slice(0, finalCount);
 
-        if (from === 'top') {
-          // zone.cards: index 0 = bottom, end = top. Reverse so [0] = top of deck.
-          peekedCards = zone.cards.slice(zone.cards.length - actualCount).reverse();
-        } else {
-          peekedCards = zone.cards.slice(0, actualCount);
-        }
+        const lines: string[] = [`Peeked at ${from} ${finalCount} of ${displayKey}:`, ''];
 
-        const lines: string[] = [];
-        lines.push(`Peeked at ${from} ${actualCount} of ${displayKey}:`);
-        lines.push('');
-
-        // Card references (full details)
         if (ctx.formatCardForSearch) {
           lines.push('=== CARD REFERENCES ===');
-          for (const card of peekedCards) {
-            lines.push(ctx.formatCardForSearch(card.template));
-          }
+          for (const card of peekedCards) lines.push(ctx.formatCardForSearch(card.template));
           lines.push('');
         }
 
-        // Position list
         lines.push(`=== POSITION (${from} to ${from === 'top' ? 'deeper' : 'higher'}) ===`);
         for (let i = 0; i < peekedCards.length; i++) {
           const posLabel = from === 'top'
@@ -512,209 +348,84 @@ export function createDefaultTools(ctx: ToolContext): RunnableTool[] {
           lines.push(`${i + 1}. ${peekedCards[i].template.name} ${posLabel}`);
         }
 
-        // Action instructions
-        lines.push('');
-        lines.push('=== ACTIONS ===');
+        lines.push('', '=== ACTIONS ===');
         lines.push(`To take cards: move_card with fromZone="${displayKey}" and cardName="<name>"`);
         lines.push(`To reorder: rearrange_zone with zone="${displayKey}" and cardNames in desired top-to-bottom order`);
         lines.push(`To shuffle: shuffle with zone="${displayKey}"`);
 
         return lines.join('\n');
-      },
-    }),
+      }),
 
-    // ── Rearrange Zone ─────────────────────────────────────────────
-    tool({
-      name: 'rearrange_zone',
-      description: 'Reorder the top or bottom cards of a zone. Used after peeking to arrange cards in a specific order. Provide card names from top to bottom (first name = top of deck, drawn next).',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          zone: { type: 'string', description: 'Zone key (e.g. "your_deck")' },
-          cardNames: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'Card names in desired order, from top to bottom',
-          },
-          from: {
-            type: 'string',
-            enum: [POSITIONS.TOP, POSITIONS.BOTTOM],
-            description: 'Which end of the zone to rearrange (default: top)',
-          },
-        },
-        required: ['zone', 'cardNames'],
-      },
-      async run(input) {
-        const zoneKey = tz(ctx, input.zone);
-        const from = input.from ?? 'top';
+    rearrange_zone: createTool('Reorder the top or bottom cards of a zone. Used after peeking to arrange cards in a specific order. Provide card names from top to bottom (first name = top of deck, drawn next).',
+      z.object({
+        zone: z.string().describe('Zone key (e.g. "your_deck")'),
+        cardNames: z.array(z.string()).describe('Card names in desired order, from top to bottom'),
+        from: z.enum(['top', 'bottom']).optional().describe('Which end of the zone to rearrange (default: top)'),
+      }),
+      async ({ zone, cardNames, from }) => {
+        const zoneKey = tz(ctx, zone);
         return ctx.execute((state) => {
-          const zone = state.zones[zoneKey];
-          if (!zone) throw new Error(`Zone "${input.zone}" not found`);
-
-          const cardIds = (input.cardNames as string[]).map(name =>
-            resolveCard(state, name, zoneKey)
-          );
-          return rearrangeZone(p, zoneKey, cardIds, from);
+          const zoneObj = state.zones[zoneKey];
+          if (!zoneObj) throw new Error(`Zone "${zone}" not found`);
+          const cardIds = cardNames.map(name => resolveCard(state, name, zoneKey));
+          return rearrangeZone(p, zoneKey, cardIds, from ?? 'top');
         });
-      },
-    }),
+      }),
 
-    // ── Reveal ─────────────────────────────────────────────────────
-    tool({
-      name: 'reveal',
-      description: 'Reveal cards to your opponent or both players.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          cardNames: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'Names of cards to reveal',
-          },
-          zone: { type: 'string', description: 'Zone key the cards are in' },
-          to: { type: 'string', enum: [REVEAL_TARGETS.OPPONENT, REVEAL_TARGETS.BOTH], description: 'Who to reveal to (default "both")' },
-        },
-        required: ['cardNames', 'zone'],
-      },
-      async run(input) {
-        const zone = tz(ctx, input.zone);
+    reveal: createTool('Reveal cards to your opponent or both players.',
+      z.object({
+        cardNames: z.array(z.string()).describe('Names of cards to reveal'),
+        zone: z.string().describe('Zone key the cards are in'),
+        to: z.enum(['opponent', 'both']).optional().describe('Who to reveal to (default "both")'),
+      }),
+      async ({ cardNames, zone, to }) => {
+        const zoneKey = tz(ctx, zone);
         return ctx.execute((state) => {
-          const cardIds = input.cardNames.map((name: string) =>
-            resolveCard(state, name, zone)
-          );
-          const to = input.to ?? 'both';
-          return reveal(p, cardIds, to);
+          const cardIds = cardNames.map((name: string) => resolveCard(state, name, zoneKey));
+          return reveal(p, cardIds, to ?? 'both');
         });
-      },
-    }),
+      }),
 
-    // ── End Turn ───────────────────────────────────────────────────
-    tool({
-      name: 'end_turn',
-      description: 'End your turn and pass to the opponent. Never call in parallel, always call alone.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {},
-        required: [],
-      },
-      async run() {
-        return ctx.execute(endTurn(p));
-      },
-    }),
+    end_turn: createTool('End your turn and pass to the opponent. Never call in parallel, always call alone.',
+      z.object({}),
+      async () => ctx.execute(endTurn(p))),
 
-    // ── Concede ────────────────────────────────────────────────────
-    tool({
-      name: 'concede',
-      description: 'Concede the game. Your opponent wins.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {},
-        required: [],
-      },
-      async run() {
-        return ctx.execute(concede(p));
-      },
-    }),
+    concede: createTool('Concede the game. Your opponent wins.',
+      z.object({}),
+      async () => ctx.execute(concede(p))),
 
-    // ── Declare Victory ────────────────────────────────────────────
-    tool({
-      name: 'declare_victory',
-      description: 'Declare victory with a reason (e.g. when win conditions are met).',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          reason: { type: 'string', description: 'Reason for declaring victory' },
-        },
-        required: [],
-      },
-      async run(input) {
-        return ctx.execute(declareVictory(p, input.reason));
-      },
-    }),
+    declare_victory: createTool('Declare victory with a reason (e.g. when win conditions are met).',
+      z.object({ reason: z.string().optional().describe('Reason for declaring victory') }),
+      async ({ reason }) => ctx.execute(declareVictory(p, reason))),
 
-    // ── Reveal Hand ─────────────────────────────────────────────────
-    tool({
-      name: 'reveal_hand',
-      description: 'Reveal all cards in a zone to the opponent. Logs card names and creates a decision for acknowledgment. If mutual is true, reveals both your zone and the opponent\'s equivalent zone simultaneously (e.g. for Lass-type effects).',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          zone: { type: 'string', description: 'Zone key to reveal (e.g. "your_hand")' },
-          mutual: { type: 'boolean', description: 'If true, reveals both your zone and the opponent\'s equivalent zone' },
-          message: { type: 'string', description: 'Custom decision message describing what the opponent should do' },
-        },
-        required: ['zone'],
-      },
-      async run(input) {
-        return ctx.execute(revealHand(p, tz(ctx, input.zone), input.mutual, input.message));
-      },
-    }),
+    reveal_hand: createTool('Reveal all cards in a zone to the opponent. Logs card names and creates a decision for acknowledgment. If mutual is true, reveals both your zone and the opponent\'s equivalent zone simultaneously.',
+      z.object({
+        zone: z.string().describe('Zone key to reveal (e.g. "your_hand")'),
+        mutual: z.boolean().optional().describe('If true, reveals both your zone and the opponent\'s equivalent zone'),
+        message: z.string().optional().describe('Custom decision message describing what the opponent should do'),
+      }),
+      async ({ zone, mutual, message }) => ctx.execute(revealHand(p, tz(ctx, zone), mutual, message))),
 
-    // ── Create Decision ───────────────────────────────────────────
-    tool({
-      name: 'create_decision',
-      description: 'Request the opponent to make a decision (mini-turn). The opponent gets control to take actions, then resolves the decision back to you.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          message: { type: 'string', description: 'Optional message describing what the opponent needs to do' },
-        },
-        required: [],
-      },
-      async run(input) {
+    create_decision: createTool('Request the opponent to make a decision (mini-turn). The opponent gets control to take actions, then resolves the decision back to you.',
+      z.object({ message: z.string().optional().describe('Optional message describing what the opponent needs to do') }),
+      async ({ message }) => {
         const opponent = (p === 0 ? 1 : 0) as PlayerIndex;
-        return ctx.execute(createDecision(p, opponent, input.message));
-      },
-    }),
+        return ctx.execute(createDecision(p, opponent, message));
+      }),
 
-    // ── Resolve Decision ──────────────────────────────────────────
-    tool({
-      name: 'resolve_decision',
-      description: 'Resolve a pending decision, returning control to the player who created it.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {},
-        required: [],
-      },
-      async run() {
-        return ctx.execute(resolveDecision(p));
-      },
-    }),
+    resolve_decision: createTool('Resolve a pending decision, returning control to the player who created it.',
+      z.object({}),
+      async () => ctx.execute(resolveDecision(p))),
 
-    // ── Mulligan ────────────────────────────────────────────────────
-    tool({
-      name: 'mulligan',
-      description: 'Shuffle your hand back into your deck and draw a new hand.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          drawCount: { type: 'number', description: 'Number of cards to draw (default 7)' },
-        },
-        required: [],
-      },
-      async run(input) {
-        const count = input.drawCount ?? 7;
-        return ctx.execute(mulligan(p, count));
-      },
-    }),
+    mulligan: createTool('Shuffle your hand back into your deck and draw a new hand.',
+      z.object({ drawCount: z.number().optional().describe('Number of cards to draw (default 7)') }),
+      async ({ drawCount }) => ctx.execute(mulligan(p, drawCount ?? 7))),
 
-    // ── Rewind ────────────────────────────────────────────────────
-    tool({
-      name: 'rewind',
-      description: 'Undo ALL actions you have taken this turn and start over with a different approach. Use when you realize you made a strategic mistake or went down a wrong path. This resets the game state to the start of your turn and clears your conversation history.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          reason: { type: 'string', description: 'What went wrong with the current approach' },
-          guidance: { type: 'string', description: 'What to do differently on the retry' },
-        },
-        required: ['reason', 'guidance'],
-      },
-      async run(input) {
-        // The actual state restoration and history clearing are handled by the
-        // signal mechanism in runAgent(). This tool just returns a confirmation.
-        return `Rewind requested: ${input.reason}. Will retry with guidance: ${input.guidance}`;
-      },
-    }),
-  ];
+    rewind: createTool('Undo ALL actions you have taken this turn and start over with a different approach. Use when you realize you made a strategic mistake or went down a wrong path.',
+      z.object({
+        reason: z.string().describe('What went wrong with current approach'),
+        guidance: z.string().describe('What to do differently on the retry'),
+      }),
+      async ({ reason, guidance }) => `Rewind requested: ${reason}. Will retry with guidance: ${guidance}`),
+  };
 }

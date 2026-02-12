@@ -45,7 +45,7 @@ export type { ReadableCard, ReadableZone, ReadableGameState, ReadableAction, Rea
 
 // Re-export AI tools
 export { createDefaultTools } from './ai-tools';
-export type { RunnableTool, ToolContext } from './ai-tools';
+export type { ToolContext } from './ai-tools';
 
 // Re-export action executor interface
 export type { ActionExecutor } from './action-executor';

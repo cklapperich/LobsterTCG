@@ -502,12 +502,12 @@ function formatCombatNotes(readable: ReadableGameState, aiIdx: PlayerIndex = 1):
 
   if (oppWeakMatch.length > 0) {
     for (const w of oppWeakMatch) {
-      lines.push(`Your ${myActive.name} (${myTypes.join('/')}) vs ${oppActive.name}: WEAKNESS applies (${w.type} ${w.value}) — damage is doubled (unless an effect nullifies it)`);
+      lines.push(`Your ${myActive.name} VS ${oppActive.name}: WEAKNESS applies: ${myActive.name} takes 2x damage from ${w.type} types such as ${oppActive.name} (unless an effect nullifies it`);
     }
   }
   if (oppResistMatch.length > 0) {
     for (const r of oppResistMatch) {
-      lines.push(`Your ${myActive.name} (${myTypes.join('/')}) vs ${oppActive.name}: RESISTANCE applies (${r.type} ${r.value}) — damage is reduced (unless an effect nullifies it)`);
+      lines.push(`Your ${myActive.name} VS ${oppActive.name}: RESISTANCE applies: ${myActive.name} takes -30 damage from ${r.type} types such as ${oppActive.name} (unless an effect nullifies it`);
     }
   }
 
@@ -517,12 +517,12 @@ function formatCombatNotes(readable: ReadableGameState, aiIdx: PlayerIndex = 1):
 
   if (myWeakMatch.length > 0) {
     for (const w of myWeakMatch) {
-      lines.push(`Opponent's ${oppActive.name} (${oppTypes.join('/')}) vs your ${myActive.name}: WEAKNESS applies (${w.type} ${w.value}) — you take double damage (unless an effect nullifies it)`);
+      lines.push(`Your ${myActive.name} VS ${oppActive.name}: WEAKNESS applies: ${oppActive.name} takes 2x damage from ${w.type} types such as your ${myActive.name} (unless an effect nullifies it`);
     }
   }
   if (myResistMatch.length > 0) {
     for (const r of myResistMatch) {
-      lines.push(`Opponent's ${oppActive.name} (${oppTypes.join('/')}) vs your ${myActive.name}: RESISTANCE applies (${r.type} ${r.value}) — you take reduced damage (unless an effect nullifies it)`);
+      lines.push(`Your ${myActive.name} VS ${oppActive.name}: RESISTANCE applies: ${oppActive.name} takes -30 damage from ${r.type} types such as your ${myActive.name} (unless an effect nullifies it`);
     }
   }
 
