@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { CardInstance, CardTemplate, CounterDefinition } from '../../core';
-  import { ORIENTATIONS } from '../../core';
   import { startDrag, updateDragPosition, endDrag } from './dragState.svelte';
   import {
     startCounterDrag,
@@ -19,6 +18,7 @@
     isDropTarget?: boolean;
     cardBack?: string;
     counterDefinitions?: CounterDefinition[];
+    applyDisplayRotation?: boolean;
     // For playing cards without images - render functions
     renderFace?: (template: CardTemplate) => { rank?: string; suit?: string; color?: string };
     onPreview?: (card: CardInstance<CardTemplate>) => void;
@@ -35,12 +35,19 @@
     isDropTarget = false,
     cardBack,
     counterDefinitions = [],
+    applyDisplayRotation = false,
     renderFace,
     onPreview,
     onToggleVisibility,
     onCardDrop,
     onCounterDrop,
   }: Props = $props();
+
+  // Display rotation: only apply on field zones (via applyDisplayRotation prop)
+  const effectiveDisplayRotation = $derived(
+    applyDisplayRotation ? (card.template.displayRotation ?? 0) : 0
+  );
+  const isLandscape = $derived(effectiveDisplayRotation !== 0);
 
   let isDragging = $state(false);
   let isDragOver = $state(false);
@@ -197,8 +204,8 @@
   class:dragging={isDragging}
   class:drop-target={isDragOver}
   class:counter-drop-target={isCounterDragOver}
-  data-orientation={card.orientation ?? ORIENTATIONS.NORMAL}
-  style="--i: {index}"
+  class:landscape={isLandscape}
+  style="--i: {index}; --base-rot: {effectiveDisplayRotation}deg; --status-rot: {parseInt(card.orientation ?? '0')}deg"
   {draggable}
   ondragstart={handleDragStart}
   ondrag={handleDrag}
@@ -268,6 +275,10 @@
   @reference "../../app.css";
 
   .card {
+    /* Landscape offset: 0 for portrait cards, shifts up for rotated landscape cards.
+     * A 5:7 card rotated 90° displaces its top edge down by cardWidth/5.
+     * translateY compensates BEFORE rotation (in screen space). */
+    --landscape-offset: 0px;
     width: calc(var(--spacing-card-w) * var(--zone-scale, 1));
     aspect-ratio: 5 / 7;
     @apply rounded-lg overflow-hidden p-0 cursor-pointer;
@@ -275,6 +286,8 @@
     box-shadow: 0.125rem 0.125rem 0 rgba(0,0,0,0.2);
     position: relative;
     user-select: none;
+    /* Combined: landscape offset (screen Y) then rotation (display + status) */
+    transform: translateY(var(--landscape-offset)) rotate(calc(var(--base-rot, 0deg) + var(--status-rot, 0deg)));
   }
 
   @media (max-width: 640px) {
@@ -283,21 +296,18 @@
     }
   }
 
-  .card[data-orientation="90"] { transform: rotate(90deg); }
-  .card[data-orientation="-90"] { transform: rotate(-90deg); }
-  .card[data-orientation="180"] { transform: rotate(180deg); }
-
   .card:hover {
     z-index: 100;
-    transform: translateY(-0.25rem);
+    transform: translateY(calc(var(--landscape-offset) - 0.25rem)) rotate(calc(var(--base-rot, 0deg) + var(--status-rot, 0deg)));
     box-shadow:
       0 0.25rem 0 rgba(0,0,0,0.3),
       0 0 0 0.125rem var(--color-gbc-yellow);
   }
 
-  .card[data-orientation="90"]:hover { transform: rotate(90deg) translateY(-0.25rem); }
-  .card[data-orientation="-90"]:hover { transform: rotate(-90deg) translateY(-0.25rem); }
-  .card[data-orientation="180"]:hover { transform: rotate(180deg) translateY(-0.25rem); }
+  /* Landscape cards (BREAK/LEGEND): shift up so rotated card's top edge aligns with zone top */
+  .card.landscape {
+    --landscape-offset: calc(-1 * var(--spacing-card-w) * var(--zone-scale, 1) / 5);
+  }
 
   .card.dragging {
     opacity: 0;

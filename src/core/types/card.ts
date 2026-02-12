@@ -16,6 +16,7 @@ export interface CardTemplate {
   id: string;
   name: string;
   imageUrl?: string;
+  displayRotation?: number; // degrees — inherent visual rotation (e.g. 90 for landscape cards like BREAK/LEGEND)
 }
 
 // Runtime card instance

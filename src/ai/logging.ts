@@ -4,7 +4,7 @@
  */
 export function logStepFinish(step: {
   text?: string;
-  toolCalls?: Array<{ toolName: string; args: Record<string, any> }>;
+  toolCalls?: Array<{ toolName: string; input?: Record<string, any>; args?: Record<string, any> }>;
   reasoning?: string;
 }): void {
   if (step.reasoning) {
@@ -18,7 +18,7 @@ export function logStepFinish(step: {
       console.log(
         `%c[tool] ${call.toolName}`,
         'color: #c80',
-        call.args,
+        call.input,
       );
     }
   }

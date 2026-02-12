@@ -138,7 +138,19 @@ function collectUniqueCards(readable: ReadableGameState): ReadableCard[] {
       const isPokemon = card.supertype === SUPERTYPES.POKEMON;
 
       // Skip non-top Pokemon in field zones (evolved-from cards under the stack)
-      if (field && !isTop && isPokemon) continue;
+      // Exception: BREAK can use pre-evolution attacks, so include the direct pre-evo
+      if (field && !isTop && isPokemon) {
+        const topCard = zone.cards[zone.cards.length - 1];
+        const topSubtypes = topCard.subtypes as string[] | undefined;
+        const topIsBreak = topCard.supertype === SUPERTYPES.POKEMON &&
+          (topSubtypes ?? []).includes('BREAK');
+        if (!topIsBreak) continue;
+        // Only include the highest non-BREAK Pokemon (direct pre-evolution)
+        const isDirectPreEvo = !zone.cards.slice(i + 1).some(c =>
+          c.supertype === SUPERTYPES.POKEMON && !((c.subtypes as string[] ?? []).includes('BREAK'))
+        );
+        if (!isDirectPreEvo) continue;
+      }
 
       if (!seen.has(card.name)) {
         seen.set(card.name, card);
@@ -158,6 +170,14 @@ export function formatCardReference(card: ReadableCard): string[] {
 
   if (supertype === SUPERTYPES.POKEMON) {
     lines.push(formatPokemonReference(card));
+
+    // Rules text (EX, GX, V, VMAX, BREAK, LEGEND, V-UNION mechanics)
+    const rules = card.rules as string[] | undefined;
+    if (rules && rules.length > 0) {
+      for (const rule of rules) {
+        lines.push(`  ${rule}`);
+      }
+    }
 
     const attacks = card.attacks as Array<{ name: string; cost: string[]; damage: string; effect?: string }> | undefined;
     if (attacks && attacks.length > 0) {
@@ -340,7 +360,21 @@ function formatFieldZoneCompact(label: string, zone: ReadableZone): string[] {
   lines.push(`[${label}] ${formatInstanceStats(pokemon)}`);
 
   if (attached.length > 0) {
-    lines.push(`  Attached: ${condenseNames(attached)}`);
+    // Separate pre-evo Pokemon from energy/tools for display
+    const topSubtypes = pokemon.subtypes as string[] | undefined;
+    const topIsBreak = pokemon.supertype === SUPERTYPES.POKEMON &&
+      (topSubtypes ?? []).includes('BREAK');
+
+    const nonPokemon = attached.filter(c => c.supertype !== SUPERTYPES.POKEMON);
+    const preEvoPokemon = topIsBreak ? attached.filter(c => c.supertype === SUPERTYPES.POKEMON) : [];
+
+    if (nonPokemon.length > 0) {
+      lines.push(`  Attached: ${condenseNames(nonPokemon)}`);
+    }
+    if (preEvoPokemon.length > 0) {
+      const preEvo = preEvoPokemon[preEvoPokemon.length - 1];
+      lines.push(`  Pre-evo: ${preEvo.name} (attacks available — see CARD REFERENCE)`);
+    }
   }
 
   const flags = pokemon.flags as string[] | undefined;
@@ -502,12 +536,12 @@ function formatCombatNotes(readable: ReadableGameState, aiIdx: PlayerIndex = 1):
 
   if (oppWeakMatch.length > 0) {
     for (const w of oppWeakMatch) {
-      lines.push(`Your ${myActive.name} (${myTypes.join('/')}) vs ${oppActive.name}: WEAKNESS applies (${w.type} ${w.value}) — damage is doubled (unless an effect nullifies it)`);
+      lines.push(`Your ${myActive.name} VS ${oppActive.name}: WEAKNESS applies: ${myActive.name} takes 2x damage from ${w.type} types such as ${oppActive.name} (unless an effect nullifies it`);
     }
   }
   if (oppResistMatch.length > 0) {
     for (const r of oppResistMatch) {
-      lines.push(`Your ${myActive.name} (${myTypes.join('/')}) vs ${oppActive.name}: RESISTANCE applies (${r.type} ${r.value}) — damage is reduced (unless an effect nullifies it)`);
+      lines.push(`Your ${myActive.name} VS ${oppActive.name}: RESISTANCE applies: ${myActive.name} takes -30 damage from ${r.type} types such as ${oppActive.name} (unless an effect nullifies it`);
     }
   }
 
@@ -517,12 +551,12 @@ function formatCombatNotes(readable: ReadableGameState, aiIdx: PlayerIndex = 1):
 
   if (myWeakMatch.length > 0) {
     for (const w of myWeakMatch) {
-      lines.push(`Opponent's ${oppActive.name} (${oppTypes.join('/')}) vs your ${myActive.name}: WEAKNESS applies (${w.type} ${w.value}) — you take double damage (unless an effect nullifies it)`);
+      lines.push(`Your ${myActive.name} VS ${oppActive.name}: WEAKNESS applies: ${oppActive.name} takes 2x damage from ${w.type} types such as your ${myActive.name} (unless an effect nullifies it`);
     }
   }
   if (myResistMatch.length > 0) {
     for (const r of myResistMatch) {
-      lines.push(`Opponent's ${oppActive.name} (${oppTypes.join('/')}) vs your ${myActive.name}: RESISTANCE applies (${r.type} ${r.value}) — you take reduced damage (unless an effect nullifies it)`);
+      lines.push(`Your ${myActive.name} VS ${oppActive.name}: RESISTANCE applies: ${oppActive.name} takes -30 damage from ${r.type} types such as your ${myActive.name} (unless an effect nullifies it`);
     }
   }
 

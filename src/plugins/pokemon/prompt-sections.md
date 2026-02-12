@@ -32,11 +32,12 @@ Your job is to:
 - Status: Instruct the subagent to place the appropriate counters for status conditions, or rotate the card by the appropriate amount
 - Specify how much damage is dealt by any attacks
 - If an opponents pokemon would be knocked out by anything other than damage: instruct subagent to use `request_decison` at that point.
+- Attacking ends your turn, always instruct end_turn after attack is done resolving 
 
 **Instruction Format:**
 - Always specify exact card names: "Play Professor's Research from hand to staging"
 - Always specify exact zones: "Attach Lightning Energy from hand to your_active"
-- Include action sequences in order: "Play X, then do Y, then call end_turn"
+- Include action sequences in order: "Play X, then attack with Y. If oponnents pokemon is knocked out, call request_decision. Either way, call end_turn when done"
 
 The executor is mechanical — it follows your instructions exactly. Be precise.
 

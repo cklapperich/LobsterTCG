@@ -104,5 +104,12 @@ export const MARKER_IDS = {
   VSTAR: 'vstar',
 } as const;
 
+// Special card subtypes (BREAK, LEGEND, V-UNION)
+export const SPECIAL_SUBTYPES = {
+  BREAK: 'BREAK',
+  LEGEND: 'LEGEND',
+  V_UNION: 'V-UNION',
+} as const;
+
 // Narrative display limits
 export const NARRATIVE = { RECENT_LOG_LIMIT: 15, DISCARD_DISPLAY_LIMIT: 10 } as const;

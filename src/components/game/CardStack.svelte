@@ -32,6 +32,50 @@
     onCounterDrop,
   }: Props = $props();
 
+  // Display rotation: apply on all stacks EXCEPT fan (hand) and fixedSize (deck/prizes).
+  // This covers active/bench ("down") and discard zones. Cards in hand stay portrait
+  // to avoid revealing identity. Deck/prizes are face-down so rotation is irrelevant.
+  const applyDisplayRotation = $derived(stackDirection !== 'fan' && !fixedSize);
+
+  // Multi-card group detection for special card types.
+  // NOTE: These heuristics use only the generic `card.template.name` and
+  // `card.template.displayRotation` properties (available on all games).
+  // Designed for Pokemon V-UNION (4 pieces) and LEGEND (2 halves).
+  // Known coupling — acceptable tradeoff vs custom rendering hooks.
+
+  // V-UNION: 4+ same-name cards → 2x2 grid, shrunk to fit
+  const vunionGroup = $derived.by(() => {
+    if (!applyDisplayRotation || cards.length < 4) return null;
+    const nameGroups = new Map<string, typeof cards>();
+    for (const card of cards) {
+      const name = card.template.name;
+      const group = nameGroups.get(name);
+      if (group) group.push(card);
+      else nameGroups.set(name, [card]);
+    }
+    for (const [, group] of nameGroups) {
+      if (group.length >= 4) return group.slice(0, 4);
+    }
+    return null;
+  });
+
+  // LEGEND: exactly 2 same-name landscape cards → 2x1 vertical stack, full-size, overflows
+  const legendGroup = $derived.by(() => {
+    if (!applyDisplayRotation || cards.length < 2 || vunionGroup) return null;
+    const nameGroups = new Map<string, typeof cards>();
+    for (const card of cards) {
+      if (!card.template.displayRotation) continue; // only landscape cards
+      const name = card.template.name;
+      const group = nameGroups.get(name);
+      if (group) group.push(card);
+      else nameGroups.set(name, [card]);
+    }
+    for (const [, group] of nameGroups) {
+      if (group.length >= 2) return group.slice(0, 2);
+    }
+    return null;
+  });
+
   // Shuffle animation state (managed internally)
   let isShuffling = $state(false);
   let shufflePacketStart = $state(-1);
@@ -148,33 +192,117 @@
   style={stackStyle}
   bind:this={stackEl}
 >
-  {#each cards as card, i (card.instanceId)}
-    {@const isInPacket = isShuffling && shufflePacketStart >= 0 && i >= shufflePacketStart}
-    <div
-      class="stack-card"
-      class:offset-down={stackDirection === 'down'}
-      class:offset-up={stackDirection === 'up'}
-      class:offset-right={stackDirection === 'right'}
-      class:offset-none={stackDirection === 'none'}
-      class:offset-fan={stackDirection === 'fan'}
-      class:animate-overhand-lift={isInPacket}
-      style="--i: {i}; --fan-offset: {fanOffset}px; --stack-offset: {stackOffset}rem; z-index: {isInPacket ? 200 : i + 1}"
-    >
-      <Card
-        {card}
-        index={i}
-        {zoneKey}
-        isDropTarget={true}
-        {cardBack}
-        {counterDefinitions}
-        {renderFace}
-        {onPreview}
-        {onToggleVisibility}
-        {onCardDrop}
-        {onCounterDrop}
-      />
+  {#if vunionGroup}
+    <!-- V-UNION: 2x2 grid for 4 same-name cards, shrunk to fit one card slot -->
+    {@const otherCards = cards.filter(c => !vunionGroup.includes(c))}
+    {#each otherCards as card, i (card.instanceId)}
+      <div class="stack-card offset-none" style="--i: {i}; z-index: {i + 1}">
+        <Card
+          {card}
+          index={i}
+          {zoneKey}
+          isDropTarget={true}
+          {cardBack}
+          {counterDefinitions}
+          {renderFace}
+          {onPreview}
+          {onToggleVisibility}
+          {onCardDrop}
+          {onCounterDrop}
+        />
+      </div>
+    {/each}
+    <div class="vunion-grid" style="z-index: {otherCards.length + 1}">
+      {#each vunionGroup as card, i (card.instanceId)}
+        <div class="vunion-cell">
+          <Card
+            {card}
+            index={otherCards.length + i}
+            {zoneKey}
+            isDropTarget={true}
+            {cardBack}
+            {counterDefinitions}
+            {renderFace}
+            {onPreview}
+            {onToggleVisibility}
+            {onCardDrop}
+            {onCounterDrop}
+          />
+        </div>
+      {/each}
     </div>
-  {/each}
+  {:else if legendGroup}
+    <!-- LEGEND: 2 landscape halves stacked vertically, full-size, overflows zone -->
+    {@const otherCards = cards.filter(c => !legendGroup.includes(c))}
+    {#each otherCards as card, i (card.instanceId)}
+      <div class="stack-card offset-none" style="--i: {i}; z-index: {i + 1}">
+        <Card
+          {card}
+          index={i}
+          {zoneKey}
+          isDropTarget={true}
+          {cardBack}
+          {counterDefinitions}
+          {renderFace}
+          {applyDisplayRotation}
+          {onPreview}
+          {onToggleVisibility}
+          {onCardDrop}
+          {onCounterDrop}
+        />
+      </div>
+    {/each}
+    {#each legendGroup as card, i (card.instanceId)}
+      <div
+        class="stack-card legend-offset"
+        style="--i: {i}; --legend-base: {otherCards.length}; z-index: {otherCards.length + i + 1}"
+      >
+        <Card
+          {card}
+          index={otherCards.length + i}
+          {zoneKey}
+          isDropTarget={true}
+          {cardBack}
+          {counterDefinitions}
+          {renderFace}
+          {applyDisplayRotation}
+          {onPreview}
+          {onToggleVisibility}
+          {onCardDrop}
+          {onCounterDrop}
+        />
+      </div>
+    {/each}
+  {:else}
+    {#each cards as card, i (card.instanceId)}
+      {@const isInPacket = isShuffling && shufflePacketStart >= 0 && i >= shufflePacketStart}
+      <div
+        class="stack-card"
+        class:offset-down={stackDirection === 'down'}
+        class:offset-up={stackDirection === 'up'}
+        class:offset-right={stackDirection === 'right'}
+        class:offset-none={stackDirection === 'none'}
+        class:offset-fan={stackDirection === 'fan'}
+        class:animate-overhand-lift={isInPacket}
+        style="--i: {i}; --fan-offset: {fanOffset}px; --stack-offset: {stackOffset}rem; z-index: {isInPacket ? 200 : i + 1}"
+      >
+        <Card
+          {card}
+          index={i}
+          {zoneKey}
+          isDropTarget={true}
+          {cardBack}
+          {counterDefinitions}
+          {renderFace}
+          {applyDisplayRotation}
+          {onPreview}
+          {onToggleVisibility}
+          {onCardDrop}
+          {onCounterDrop}
+        />
+      </div>
+    {/each}
+  {/if}
 </div>
 
 <style>
@@ -223,5 +351,39 @@
   /* Hover-to-top: when hovering a card in stacked mode, bring it to front */
   .card-stack.hover-to-top .stack-card:hover {
     z-index: 100 !important;
+  }
+
+  /* LEGEND: two landscape halves stacked vertically, full-size.
+   * Each card is W wide × H tall in layout, but visually H wide × W tall after 90° rotation.
+   * The visual height of each landscape card = card width (W).
+   * Space the second card below the first by W (one card width). */
+  .stack-card.legend-offset {
+    top: calc(var(--i) * var(--spacing-card-w) * var(--zone-scale, 1));
+    left: 0;
+  }
+
+  /* V-UNION: 2x2 grid, scaled to fit one card slot */
+  .vunion-grid {
+    @apply absolute;
+    top: 0;
+    left: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    width: calc(var(--spacing-card-w) * var(--zone-scale, 1));
+    aspect-ratio: 5 / 7;
+    gap: 0;
+  }
+
+  .vunion-cell {
+    @apply overflow-hidden;
+  }
+
+  .vunion-cell :global(.card) {
+    width: 100% !important;
+    height: 100% !important;
+    aspect-ratio: auto;
+    border-width: 1px;
+    border-radius: 0.25rem;
   }
 </style>

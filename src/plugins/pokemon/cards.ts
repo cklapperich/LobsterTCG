@@ -192,6 +192,18 @@ const BASE_SET_CARDS: Array<{ number: number; name: string }> = [
 ];
 
 /**
+ * Compute display rotation for landscape card types (BREAK, LEGEND).
+ * BREAK: detected by subtypes containing 'BREAK'.
+ * LEGEND: detected by name containing 'LEGEND' (subtypes are just ['Basic']).
+ */
+const LANDSCAPE_SUBTYPES = new Set(['BREAK']);
+function getDisplayRotation(name: string, subtypes?: string[]): number | undefined {
+  if (subtypes?.some(s => LANDSCAPE_SUBTYPES.has(s))) return 90;
+  if (name.includes('LEGEND')) return 90;
+  return undefined;
+}
+
+/**
  * Extract game-relevant fields from a western card entry.
  */
 function extractGameFields(card: WesternCard): Partial<PokemonCardTemplate> {
@@ -216,13 +228,16 @@ function createTemplate(setId: string, number: number, name: string): PokemonCar
   const cardId = `${setId}-${number}`;
   const westernCard = westernCardMap!.get(cardId);
   const imageUrl = westernCard ? getWesternCardImageUrl(westernCard) : cardbackImg;
+  const subtypes = westernCard?.subtypes || [];
+  const displayRotation = getDisplayRotation(name, subtypes);
 
   return {
     id: cardId,
     name,
     imageUrl,
+    ...(displayRotation !== undefined && { displayRotation }),
     supertype: westernCard?.supertype || 'Pokemon',
-    subtypes: westernCard?.subtypes || [],
+    subtypes,
     types: westernCard?.types || [],
     ...extractGameFields(westernCard!),
   };
@@ -250,12 +265,17 @@ export function getTemplate(id: string): PokemonCardTemplate | undefined {
   const card = westernCardMap!.get(id);
   if (!card) return undefined;
 
+  const name = card.names.en || Object.values(card.names)[0] || 'Unknown';
+  const subtypes = card.subtypes || [];
+  const displayRotation = getDisplayRotation(name, subtypes);
+
   return {
     id: card.id,
-    name: card.names.en || Object.values(card.names)[0] || 'Unknown',
+    name,
     imageUrl: getWesternCardImageUrl(card),
+    ...(displayRotation !== undefined && { displayRotation }),
     supertype: card.supertype || 'Pokemon',
-    subtypes: card.subtypes || [],
+    subtypes,
     types: card.types || [],
     ...extractGameFields(card),
   };

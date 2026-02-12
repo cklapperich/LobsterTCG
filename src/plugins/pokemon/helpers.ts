@@ -1,5 +1,5 @@
 import type { PokemonCardTemplate, PokemonAttack, PokemonAbility } from './cards';
-import { SUPERTYPES, STAGES, TRAINER_SUBTYPES } from './constants';
+import { SUPERTYPES, STAGES, TRAINER_SUBTYPES, SPECIAL_SUBTYPES } from './constants';
 
 // Normalize subtypes: "Stage 1" and "Stage1" both match
 function hasSubtype(t: PokemonCardTemplate, ...names: string[]): boolean {
@@ -66,4 +66,17 @@ export function isVSTARPower(ability: PokemonAbility): boolean {
 
 export function isVSTARAttack(attack: PokemonAttack): boolean {
   return attack.effect?.includes("can't use more than 1 VSTAR Power") ?? false;
+}
+
+export function isBreakPokemon(t: PokemonCardTemplate): boolean {
+  return t.supertype === SUPERTYPES.POKEMON && hasSubtype(t, SPECIAL_SUBTYPES.BREAK);
+}
+
+// LEGEND cards have subtypes=['Basic'], NOT ['LEGEND']. Detect by name.
+export function isLegendPokemon(t: PokemonCardTemplate): boolean {
+  return t.supertype === SUPERTYPES.POKEMON && t.name.includes('LEGEND');
+}
+
+export function isVUnionPokemon(t: PokemonCardTemplate): boolean {
+  return t.supertype === SUPERTYPES.POKEMON && hasSubtype(t, SPECIAL_SUBTYPES.V_UNION);
 }
