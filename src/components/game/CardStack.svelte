@@ -278,6 +278,7 @@
   {:else}
     {#each cards as card, i (card.instanceId)}
       {@const isInPacket = isShuffling && shufflePacketStart >= 0 && i >= shufflePacketStart}
+      {@const isLandscapeCard = applyDisplayRotation && !!card.template.displayRotation}
       <div
         class="stack-card"
         class:offset-down={stackDirection === 'down'}
@@ -285,6 +286,7 @@
         class:offset-right={stackDirection === 'right'}
         class:offset-none={stackDirection === 'none'}
         class:offset-fan={stackDirection === 'fan'}
+        class:landscape-shift={isLandscapeCard}
         class:animate-overhand-lift={isInPacket}
         style="--i: {i}; --fan-offset: {fanOffset}px; --stack-offset: {stackOffset}rem; z-index: {isInPacket ? 200 : i + 1}"
       >
@@ -361,6 +363,14 @@
    * Space the second card below the first by W (one card width).
    * Subtract W/5 to pin each card's visual top edge to the layout position
    * (compensates for rotation around center displacing the top edge down by W/5). */
+  /* BREAK: landscape card shifted up so it's halfway outside the zone.
+   * A 5:7 card rotated 90° has visual center at H/2 = 0.7W below wrapper top.
+   * Pulling the wrapper up by 0.7W puts the visual center at the top edge,
+   * so half the rotated card overflows above and half sits below. */
+  .stack-card.offset-down.landscape-shift {
+    top: calc(var(--i) * var(--stack-offset, 1.5rem) - var(--spacing-card-w) * var(--zone-scale, 1) * 7 / 10);
+  }
+
   .stack-card.legend-offset {
     top: calc(var(--i) * var(--spacing-card-w) * var(--zone-scale, 1) - var(--spacing-card-w) * var(--zone-scale, 1) / 5);
     left: 0;
