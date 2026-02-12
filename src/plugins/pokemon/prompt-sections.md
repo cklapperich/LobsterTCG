@@ -272,6 +272,7 @@ Sometimes during a turn, one player needs the other to make a decision (e.g., af
 - Consider "sacrificing" a damaged Active while building up a Benched Pokemon rather than attaching more energy to the Active
 - Keep backup attackers on your bench at all times
 - Before using a "draw Supporter" that shuffles hand into deck, play as many cards as possible to maximize value
+- Count how many energy a pokemon needs to attack, don't attach more than that!
 
 **Board State Analysis:**
 - Evaluate: How many turns until the opponent powers up their threats?
