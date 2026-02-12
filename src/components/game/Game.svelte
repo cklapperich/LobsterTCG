@@ -25,7 +25,7 @@
   import { playSfx, playBgm, stopBgm, toggleMute, audioSettings } from '../../lib/audio.svelte';
   import { settings } from '../../lib/settings.svelte';
   import SettingsModal from './SettingsModal.svelte';
-  import { runAutonomousAgent, MODEL_OPTIONS } from '../../ai';
+  import { runAutonomousTurn, MODEL_OPTIONS, createModel, DEFAULT_PLANNER } from '../../ai';
   import { contextMenuStore, openContextMenu, closeContextMenu as closeContextMenuStore } from './contextMenu.svelte';
   import { cardModalStore, openCardModal, closeCardModal as closeCardModalStore } from './cardModal.svelte';
 
@@ -37,12 +37,11 @@
     playmatImage?: string;
     aiModel?: string;
     aiMode?: 'autonomous' | 'pipeline';
-    plannerModel?: string;
     playerConfig?: PlayerConfig;
     onBackToMenu?: () => void;
   }
 
-  let { gameType, decks, testFlags = {}, playmatImage, aiModel, aiMode = 'autonomous', plannerModel, playerConfig = DEFAULT_CONFIG, onBackToMenu }: Props = $props();
+  let { gameType, decks, testFlags = {}, playmatImage, aiModel, aiMode = 'autonomous', playerConfig = DEFAULT_CONFIG, onBackToMenu }: Props = $props();
 
   // Convenience accessors for player decks
   const player1Deck = $derived(decks?.[0]?.deckList);
@@ -57,11 +56,6 @@
 
   // Resolve model config from selected model ID
   const selectedModel = $derived(MODEL_OPTIONS.find(m => m.id === aiModel) ?? MODEL_OPTIONS[0]);
-  const selectedPlannerModel = $derived(
-    aiMode === 'pipeline' && plannerModel
-      ? (MODEL_OPTIONS.find(m => m.id === plannerModel) ?? MODEL_OPTIONS.find(m => m.id === 'sonnet-4.5') ?? MODEL_OPTIONS[0])
-      : undefined
-  );
 
   // Plugin manager for warnings/hooks
   const pluginManager = new PluginManager<CardTemplate>();
@@ -572,8 +566,9 @@
 
   async function runAIPhase(phase: AIPhase) {
     if (!gameState || aiThinking || !hasAI) return;
-    const apiKey = import.meta.env[selectedModel.apiKeyEnv];
-    if (!apiKey) return;
+    
+    const mainApiKey = import.meta.env[selectedModel.apiKeyEnv];
+    if (!mainApiKey) return;
 
     const currentPlayer = phase === 'decision'
       ? (gameState.pendingDecision?.targetPlayer ?? gameState.activePlayer)
@@ -587,19 +582,34 @@
       phase === 'decision' ? { isDecisionResponse: true } : undefined
     );
 
+    // Create main model from user selection
+    const mainModel = createModel(
+      selectedModel.provider,
+      selectedModel.modelId,
+      mainApiKey
+    );
+
+    // Always create planner model (uses default)
+    const plannerApiKey = import.meta.env[DEFAULT_PLANNER.apiKeyEnv];
+    if (!plannerApiKey) {
+      console.error('Anthropic API key required for planner');
+      aiThinking = false;
+      return;
+    }
+    
+    const plannerModel = createModel(
+      DEFAULT_PLANNER.provider,
+      DEFAULT_PLANNER.modelId,
+      plannerApiKey
+    );
+
     try {
-      await runAutonomousAgent({
+      await runAutonomousTurn({
         context: ctx,
         plugin,
-        apiKey,
-        model: selectedModel.modelId,
-        provider: selectedModel.provider,
+        model: mainModel,
+        plannerModel,
         aiMode,
-        planner: selectedPlannerModel ? {
-          model: selectedPlannerModel.modelId,
-          provider: selectedPlannerModel.provider,
-          apiKey: import.meta.env[selectedPlannerModel.apiKeyEnv],
-        } : undefined,
         deckStrategy: decks?.[currentPlayer]?.strategy,
         logging: true,
       });

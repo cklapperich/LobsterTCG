@@ -45,4 +45,5 @@
     18. re-add the staging cards in staging area reminder to prompt and to the pre-hooks in pokemon.ts
 
     19. Executor needs to use parallel tool calls
+
     20. remove autonomous agent?

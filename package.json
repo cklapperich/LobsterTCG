@@ -22,14 +22,15 @@
     "vitest": "^3.2.4"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^1.2.12",
-    "@ai-sdk/fireworks": "^0.1.0",
+    "@ai-sdk/anthropic": "^2.0.0",
+    "@ai-sdk/fireworks": "^0.2.13",
+    "@ai-sdk/openai": "^2.0.0",
     "@langfuse/otel": "^4.5.1",
     "@langfuse/tracing": "^4.5.1",
     "@opentelemetry/sdk-node": "^0.211.0",
     "@supabase/supabase-js": "^2.45.0",
     "@tailwindcss/vite": "^4.1.18",
-    "ai": "^4.0.0",
+    "ai": "^5.0.89",
     "lucide-svelte": "^0.563.0",
     "tailwindcss": "^4.1.18"
   }
