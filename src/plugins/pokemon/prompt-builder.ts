@@ -4,14 +4,11 @@
  * Colocates prompt sections AND tool filter rules so adding or changing
  * a mode is a single edit in this file. Tool factory implementations
  * live in tools.ts; this file only *lists* what to include/exclude.
- *
- * Mirrors the buildPrompt() pattern:
- *   buildPrompt(...sections)  → composes prompt text from section names
- *   buildToolList(ctx, mode)  → composes a tool set from declarative config
  */
+import type { ToolSet } from 'ai';
 import sectionsRaw from './prompt-sections.md?raw';
 import { ACTION_TYPES } from '../../core';
-import { createDefaultTools, type RunnableTool, type ToolContext } from '../../core/ai-tools';
+import { createDefaultTools, type ToolContext } from '../../core/ai-tools';
 import {
   createPokemonCustomTools,
   createSetStatusTool,
@@ -19,9 +16,6 @@ import {
   HIDDEN_DEFAULT_TOOLS,
 } from './tools';
 
-// ── Prompt Section Parser ────────────────────────────────────────
-
-/** Parse ## @SECTION_NAME delimited markdown into a Record<string, string> */
 function parseSections(raw: string): Record<string, string> {
   const sections: Record<string, string> = {};
   const regex = /^## @(\w+)\s*$/gm;
@@ -46,7 +40,6 @@ function parseSections(raw: string): Record<string, string> {
 
 const SECTIONS = parseSections(sectionsRaw);
 
-/** Compose a prompt from section names. */
 export function buildPrompt(...keys: string[]): string {
   return keys.map(k => {
     const s = SECTIONS[k];
@@ -55,26 +48,15 @@ export function buildPrompt(...keys: string[]): string {
   }).join('\n\n');
 }
 
-// ── Types ────────────────────────────────────────────────────────
-
 export type AgentMode = 'setup' | 'startOfTurn' | 'main' | 'decision' | 'planner' | 'executor';
 
 interface ModeConfig {
-  /** Prompt section keys composed via buildPrompt(). */
   sections: string[];
-  /**
-   * 'include' — only keep core tools whose names are in `coreTools`.
-   * 'exclude' — keep all core tools EXCEPT those in `coreTools`.
-   */
   coreToolFilter: 'include' | 'exclude';
-  /** Core tool names to include or exclude (depends on coreToolFilter). */
   coreTools: string[];
-  /** Whether to add all Pokemon-specific custom tools (attacks, retreat, etc.). */
   addCustomTools: boolean;
-  /** Optional extra tools specific to this mode (e.g. set_status, end_phase). */
-  extras?: (ctx: ToolContext) => RunnableTool[];
+  extras?: (ctx: ToolContext) => ToolSet;
 }
-// ── Declarative Mode Configs ─────────────────────────────────────
 
 const MODE_CONFIGS: Record<AgentMode, ModeConfig> = {
   setup: {
@@ -93,13 +75,12 @@ const MODE_CONFIGS: Record<AgentMode, ModeConfig> = {
     ],
     addCustomTools: false,
     extras: (ctx) => {
-      // end_phase alias — prompt-sections.md references it
       const tools = createDefaultTools(ctx);
-      const endTurnTool = tools.find(t => t.name === ACTION_TYPES.END_TURN);
-      if (endTurnTool) {
-        return [{ ...endTurnTool, name: 'end_phase', description: 'End the setup phase' }];
+      const endTurnTool = tools[ACTION_TYPES.END_TURN];
+      if (!endTurnTool) {
+        return { end_phase: createEndPhaseTool('End the setup phase.') };
       }
-      return [];
+      return { end_phase: { ...endTurnTool, description: 'End the setup phase' } };
     },
   },
 
@@ -120,10 +101,10 @@ const MODE_CONFIGS: Record<AgentMode, ModeConfig> = {
       ACTION_TYPES.CONCEDE,
     ],
     addCustomTools: false,
-    extras: (ctx) => [
-      createSetStatusTool(ctx),
-      createEndPhaseTool('Signal that start-of-turn phase is complete.'),
-    ],
+    extras: (ctx) => ({
+      set_status: createSetStatusTool(ctx),
+      end_phase: createEndPhaseTool('Signal that start-of-turn phase is complete.'),
+    }),
   },
 
   main: {
@@ -165,7 +146,7 @@ const MODE_CONFIGS: Record<AgentMode, ModeConfig> = {
       'STATUS_CONDITIONS', 'DAMAGE', 'STRATEGY_PLANNING',
     ],
     coreToolFilter: 'include',
-    coreTools: [],  // launch_subagent added externally by run-turn.ts
+    coreTools: [],
     addCustomTools: false,
   },
 
@@ -183,39 +164,41 @@ const MODE_CONFIGS: Record<AgentMode, ModeConfig> = {
   },
 };
 
-// ── Tool List Builder ────────────────────────────────────────────
+function filterToolSet(tools: ToolSet, filter: 'include' | 'exclude', names: string[]): ToolSet {
+  const nameSet = new Set(names);
+  const result: ToolSet = {};
+  
+  for (const [name, tool] of Object.entries(tools)) {
+    const matches = nameSet.has(name);
+    if ((filter === 'include' && matches) || (filter === 'exclude' && !matches)) {
+      result[name] = tool;
+    }
+  }
+  
+  return result;
+}
 
-/** Assemble the tool set for a given mode from its declarative config. */
-function buildToolList(ctx: ToolContext, mode: AgentMode): RunnableTool[] {
+function buildToolSet(ctx: ToolContext, mode: AgentMode): ToolSet {
   const config = MODE_CONFIGS[mode];
   let tools = createDefaultTools(ctx);
 
-  if (config.coreToolFilter === 'include') {
-    const allowed = new Set(config.coreTools);
-    tools = tools.filter(t => allowed.has(t.name));
-  } else {
-    const blocked = new Set(config.coreTools);
-    tools = tools.filter(t => !blocked.has(t.name));
-  }
+  tools = filterToolSet(tools, config.coreToolFilter, config.coreTools);
 
   if (config.addCustomTools) {
-    tools.push(...createPokemonCustomTools(ctx));
+    tools = { ...tools, ...createPokemonCustomTools(ctx) };
   }
 
   if (config.extras) {
-    tools.push(...config.extras(ctx));
+    tools = { ...tools, ...config.extras(ctx) };
   }
 
   return tools;
 }
 
-// ── Public API ───────────────────────────────────────────────────
-
-/** Single entry point: returns prompt + tools for a given agent mode. */
-export function getAgentConfig(ctx: ToolContext, mode: AgentMode): { prompt: string; tools: RunnableTool[] } {
+export function getAgentConfig(ctx: ToolContext, mode: AgentMode): { prompt: string; tools: ToolSet } {
   const config = MODE_CONFIGS[mode];
   return {
     prompt: buildPrompt(...config.sections),
-    tools: buildToolList(ctx, mode),
+    tools: buildToolSet(ctx, mode),
   };
 }

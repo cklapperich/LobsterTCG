@@ -2,9 +2,10 @@ import type { Playmat } from './playmat';
 import type { GameState } from './game';
 import type { CardTemplate, PlayerIndex } from './card';
 import type { CounterDefinition } from './counter';
-import type { RunnableTool, ToolContext } from '../ai-tools';
+import type { ToolContext } from '../ai-tools';
 import type { ActionPanel } from './action-panel';
 import type { Action } from './action';
+import type { ToolSet } from 'ai';
 
 export interface MarkerState {
   id: string;
@@ -67,7 +68,7 @@ export interface GamePlugin<T extends CardTemplate = CardTemplate> {
    * Return the system prompt and tool set for a given AI agent mode.
    * Colocates prompt + tools so they stay in sync.
    */
-  getAgentConfig?(ctx: ToolContext, mode: 'setup' | 'startOfTurn' | 'main' | 'decision' | 'planner' | 'executor'): { prompt: string; tools: RunnableTool[] };
+  getAgentConfig?(ctx: ToolContext, mode: 'setup' | 'startOfTurn' | 'main' | 'decision' | 'planner' | 'executor'): { prompt: string; tools: ToolSet };
 
   /** Return action panels for the sidebar UI. */
   getActionPanels?(state: GameState<T>, player: PlayerIndex): ActionPanel[];

@@ -47,3 +47,5 @@
     19. Executor needs to use parallel tool calls
 
     20. remove autonomous agent?
+
+    21. add surrender and declare_victory tools to the planner
