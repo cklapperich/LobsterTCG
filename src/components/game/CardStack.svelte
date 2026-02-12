@@ -358,9 +358,11 @@
   /* LEGEND: two landscape halves stacked vertically, full-size.
    * Each card is W wide × H tall in layout, but visually H wide × W tall after 90° rotation.
    * The visual height of each landscape card = card width (W).
-   * Space the second card below the first by W (one card width). */
+   * Space the second card below the first by W (one card width).
+   * Subtract W/5 to pin each card's visual top edge to the layout position
+   * (compensates for rotation around center displacing the top edge down by W/5). */
   .stack-card.legend-offset {
-    top: calc(var(--i) * var(--spacing-card-w) * var(--zone-scale, 1));
+    top: calc(var(--i) * var(--spacing-card-w) * var(--zone-scale, 1) - var(--spacing-card-w) * var(--zone-scale, 1) / 5);
     left: 0;
   }
 
