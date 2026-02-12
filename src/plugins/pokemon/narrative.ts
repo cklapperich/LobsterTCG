@@ -427,7 +427,8 @@ function formatCountLine(zones: Record<string, ReadableZone>, prefix: string, ow
   for (let i = 1; i <= 6; i++) {
     prizesCount += zones[`${prefix}_prizes_${i}`]?.count ?? 0;
   }
-  return `${owner} Deck: ${deckCount} | ${owner} Discard: ${discardCount} | ${owner} Prizes: ${prizesCount}`;
+  const prizesTaken = 6 - prizesCount;
+  return `${owner} Deck: ${deckCount} | ${owner} Discard: ${discardCount} | ${owner} Prizes: ${prizesCount} remaining (${prizesTaken} taken)`;
 }
 
 // ── Actions formatting ───────────────────────────────────────────
