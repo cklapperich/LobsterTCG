@@ -1414,9 +1414,13 @@
     @apply rounded-xl;
   }
 
-  /* LEGEND: two halves stacked vertically */
+  /* LEGEND: two portrait halves stacked vertically, each rotated 90° to landscape.
+   * CSS rotation doesn't affect layout, so rotated images have dead vertical space.
+   * Negative margin collapses that space so the two halves visually touch.
+   * Dead space per image ≈ H * (1 - W/H) / 2 = H * 1/7 for a 5:7 card. */
   .preview-composite-legend {
-    @apply flex flex-col items-center gap-1;
+    @apply flex flex-col items-center;
+    gap: 0;
     pointer-events: none;
   }
 
@@ -1425,6 +1429,7 @@
     max-width: 90vw;
     object-fit: contain;
     @apply rounded-xl;
+    margin-block: -5.5vh;
   }
 
   /* V-UNION: 2x2 grid */

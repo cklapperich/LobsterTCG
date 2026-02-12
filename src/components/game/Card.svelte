@@ -47,7 +47,6 @@
   const effectiveDisplayRotation = $derived(
     applyDisplayRotation ? (card.template.displayRotation ?? 0) : 0
   );
-  const isLandscape = $derived(effectiveDisplayRotation !== 0);
 
   let isDragging = $state(false);
   let isDragOver = $state(false);
@@ -204,7 +203,6 @@
   class:dragging={isDragging}
   class:drop-target={isDragOver}
   class:counter-drop-target={isCounterDragOver}
-  class:landscape={isLandscape}
   style="--i: {index}; --base-rot: {effectiveDisplayRotation}deg; --status-rot: {parseInt(card.orientation ?? '0')}deg"
   {draggable}
   ondragstart={handleDragStart}
@@ -275,10 +273,6 @@
   @reference "../../app.css";
 
   .card {
-    /* Landscape offset: 0 for portrait cards, shifts up for rotated landscape cards.
-     * A 5:7 card rotated 90° displaces its top edge down by cardWidth/5.
-     * translateY compensates BEFORE rotation (in screen space). */
-    --landscape-offset: 0px;
     width: calc(var(--spacing-card-w) * var(--zone-scale, 1));
     aspect-ratio: 5 / 7;
     @apply rounded-lg overflow-hidden p-0 cursor-pointer;
@@ -286,8 +280,7 @@
     box-shadow: 0.125rem 0.125rem 0 rgba(0,0,0,0.2);
     position: relative;
     user-select: none;
-    /* Combined: landscape offset (screen Y) then rotation (display + status) */
-    transform: translateY(var(--landscape-offset)) rotate(calc(var(--base-rot, 0deg) + var(--status-rot, 0deg)));
+    transform: rotate(calc(var(--base-rot, 0deg) + var(--status-rot, 0deg)));
   }
 
   @media (max-width: 640px) {
@@ -298,15 +291,10 @@
 
   .card:hover {
     z-index: 100;
-    transform: translateY(calc(var(--landscape-offset) - 0.25rem)) rotate(calc(var(--base-rot, 0deg) + var(--status-rot, 0deg)));
+    transform: translateY(-0.25rem) rotate(calc(var(--base-rot, 0deg) + var(--status-rot, 0deg)));
     box-shadow:
       0 0.25rem 0 rgba(0,0,0,0.3),
       0 0 0 0.125rem var(--color-gbc-yellow);
-  }
-
-  /* Landscape cards (BREAK/LEGEND): shift up so rotated card's top edge aligns with zone top */
-  .card.landscape {
-    --landscape-offset: calc(-1 * var(--spacing-card-w) * var(--zone-scale, 1) / 5);
   }
 
   .card.dragging {

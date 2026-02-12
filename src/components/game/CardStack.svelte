@@ -142,6 +142,8 @@
   // Calculate dynamic min-width style based on direction
   const stackStyle = $derived.by(() => {
     if (fixedSize) return '';
+    // V-UNION grid fits in one card slot — don't add extra height for grouped cards
+    if (vunionGroup) return '';
     if (stackDirection === 'down') {
       return `min-height: calc(var(--spacing-card-w) * ${scale} * 1.4 + ${extraHeight}rem)`;
     }
