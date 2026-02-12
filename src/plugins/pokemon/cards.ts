@@ -4,6 +4,9 @@ import cardsData from './cards-western.json';
 import setCodes from './set-codes.json';
 import cardbackImg from './cardback.png';
 
+/** Subtypes whose card images are landscape and need 90° display rotation */
+const LANDSCAPE_SUBTYPES = new Set(['BREAK', 'LEGEND']);
+
 /**
  * Attack data from the card database.
  */
@@ -191,6 +194,14 @@ const BASE_SET_CARDS: Array<{ number: number; name: string }> = [
   { number: 30, name: 'Ivysaur' },
 ];
 
+/** Check if a card should display rotated 90° (landscape images) */
+function getDisplayRotation(name: string, subtypes: string[] | undefined): number | undefined {
+  if (subtypes?.some(s => LANDSCAPE_SUBTYPES.has(s))) return 90;
+  // LEGEND cards have subtypes: ['Basic'] but "LEGEND" in the name
+  if (name.includes('LEGEND')) return 90;
+  return undefined;
+}
+
 /**
  * Extract game-relevant fields from a western card entry.
  */
@@ -217,13 +228,17 @@ function createTemplate(setId: string, number: number, name: string): PokemonCar
   const westernCard = westernCardMap!.get(cardId);
   const imageUrl = westernCard ? getWesternCardImageUrl(westernCard) : cardbackImg;
 
+  const subtypes = westernCard?.subtypes || [];
+  const displayRotation = getDisplayRotation(name, subtypes);
+
   return {
     id: cardId,
     name,
     imageUrl,
     supertype: westernCard?.supertype || 'Pokemon',
-    subtypes: westernCard?.subtypes || [],
+    subtypes,
     types: westernCard?.types || [],
+    ...(displayRotation !== undefined && { displayRotation }),
     ...extractGameFields(westernCard!),
   };
 }
@@ -250,13 +265,18 @@ export function getTemplate(id: string): PokemonCardTemplate | undefined {
   const card = westernCardMap!.get(id);
   if (!card) return undefined;
 
+  const subtypes = card.subtypes || [];
+  const name = card.names.en || Object.values(card.names)[0] || 'Unknown';
+  const displayRotation = getDisplayRotation(name, subtypes);
+
   return {
     id: card.id,
-    name: card.names.en || Object.values(card.names)[0] || 'Unknown',
+    name,
     imageUrl: getWesternCardImageUrl(card),
     supertype: card.supertype || 'Pokemon',
-    subtypes: card.subtypes || [],
+    subtypes,
     types: card.types || [],
+    ...(displayRotation !== undefined && { displayRotation }),
     ...extractGameFields(card),
   };
 }

@@ -1,4 +1,4 @@
-import type { GameState, Playmat, DeckList, PlayerIndex, CardTemplate, GameConfig, GamePlugin, CounterDefinition, ActionPanel, Action, MarkerState } from '../../core';
+import type { GameState, Playmat, DeckList, PlayerIndex, CardTemplate, CardInstance, GameConfig, GamePlugin, CounterDefinition, ActionPanel, Action, MarkerState } from '../../core';
 import {
   createGameState,
   createCardInstance,
@@ -27,7 +27,7 @@ import {
   getCardBack,
   getTemplate as getCardTemplate,
 } from './cards';
-import { isBasicPokemon, isFieldZone } from './helpers';
+import { isBasicPokemon, isFieldZone, isLegendPokemon, isVUnionPokemon } from './helpers';
 import { formatCardReference } from './narrative';
 import { getAgentConfig } from './prompt-builder';
 import {
@@ -436,6 +436,26 @@ function onMarkerClick(state: GameState<PokemonCardTemplate>, playerIndex: Playe
   }
 }
 
+// ── Composite Preview (LEGEND / V-UNION) ────────────────────────
+
+function getCompositePreview(
+  card: CardInstance<PokemonCardTemplate>,
+  state: GameState<PokemonCardTemplate>
+): CardInstance<PokemonCardTemplate>[] | undefined {
+  const t = getCardTemplate(card.template.id);
+  if (!t || (!isLegendPokemon(t) && !isVUnionPokemon(t))) return undefined;
+
+  // Find related cards in the same zone (LEGEND/V-UNION parts share the same name)
+  const baseName = card.template.name;
+  for (const zone of Object.values(state.zones)) {
+    const related = zone.cards.filter(c => c.template.name === baseName);
+    if (related.length > 1 && related.some(c => c.instanceId === card.instanceId)) {
+      return related;
+    }
+  }
+  return undefined;
+}
+
 // Plugin object conforming to GamePlugin interface
 export const plugin: GamePlugin<PokemonCardTemplate> = {
   getPlaymat: getPokemonPlaymat,
@@ -453,6 +473,7 @@ export const plugin: GamePlugin<PokemonCardTemplate> = {
   onActionPanelClick,
   getMarkers,
   onMarkerClick,
+  getCompositePreview,
 };
 
 /**

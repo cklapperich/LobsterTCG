@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { CardInstance, CardTemplate, CounterDefinition } from '../../core';
-  import { ORIENTATIONS } from '../../core';
   import { startDrag, updateDragPosition, endDrag } from './dragState.svelte';
   import {
     startCounterDrag,
@@ -17,6 +16,7 @@
     draggable?: boolean;
     zoneKey: string;
     isDropTarget?: boolean;
+    applyDisplayRotation?: boolean;
     cardBack?: string;
     counterDefinitions?: CounterDefinition[];
     // For playing cards without images - render functions
@@ -33,6 +33,7 @@
     draggable = true,
     zoneKey,
     isDropTarget = false,
+    applyDisplayRotation = false,
     cardBack,
     counterDefinitions = [],
     renderFace,
@@ -52,6 +53,7 @@
   // Get render data if renderFace provided, otherwise use template.imageUrl
   const faceData = $derived(renderFace ? renderFace(template) : null);
   const hasImage = $derived(!!template.imageUrl);
+  const effectiveDisplayRotation = $derived(applyDisplayRotation ? (card.template.displayRotation ?? 0) : 0);
 
   // Get counters on this card with their definitions
   const cardCounters = $derived(() => {
@@ -197,8 +199,8 @@
   class:dragging={isDragging}
   class:drop-target={isDragOver}
   class:counter-drop-target={isCounterDragOver}
-  data-orientation={card.orientation ?? ORIENTATIONS.NORMAL}
-  style="--i: {index}"
+  class:landscape={!!effectiveDisplayRotation}
+  style="--base-rot: {effectiveDisplayRotation}deg; --status-rot: {parseInt(card.orientation ?? '0')}deg; --i: {index}"
   {draggable}
   ondragstart={handleDragStart}
   ondrag={handleDrag}
@@ -275,6 +277,7 @@
     box-shadow: 0.125rem 0.125rem 0 rgba(0,0,0,0.2);
     position: relative;
     user-select: none;
+    transform: rotate(calc(var(--base-rot, 0deg) + var(--status-rot, 0deg)));
   }
 
   @media (max-width: 640px) {
@@ -283,21 +286,18 @@
     }
   }
 
-  .card[data-orientation="90"] { transform: rotate(90deg); }
-  .card[data-orientation="-90"] { transform: rotate(-90deg); }
-  .card[data-orientation="180"] { transform: rotate(180deg); }
+  .card.landscape {
+    /* Shift up so rotated card's top edge aligns with zone top */
+    margin-top: calc(-1 * var(--spacing-card-w) * var(--zone-scale, 1) / 5);
+  }
 
   .card:hover {
     z-index: 100;
-    transform: translateY(-0.25rem);
+    transform: rotate(calc(var(--base-rot, 0deg) + var(--status-rot, 0deg))) translateY(-0.25rem);
     box-shadow:
       0 0.25rem 0 rgba(0,0,0,0.3),
       0 0 0 0.125rem var(--color-gbc-yellow);
   }
-
-  .card[data-orientation="90"]:hover { transform: rotate(90deg) translateY(-0.25rem); }
-  .card[data-orientation="-90"]:hover { transform: rotate(-90deg) translateY(-0.25rem); }
-  .card[data-orientation="180"]:hover { transform: rotate(180deg) translateY(-0.25rem); }
 
   .card.dragging {
     opacity: 0;

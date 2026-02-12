@@ -138,7 +138,14 @@ function collectUniqueCards(readable: ReadableGameState): ReadableCard[] {
       const isPokemon = card.supertype === SUPERTYPES.POKEMON;
 
       // Skip non-top Pokemon in field zones (evolved-from cards under the stack)
-      if (field && !isTop && isPokemon) continue;
+      // Exception: modifyReadableState already preserves pre-evo under BREAK,
+      // so any Pokemon that survived the filter should be included.
+      if (field && !isTop && isPokemon) {
+        // Check if top is BREAK — if so, include this pre-evo (it survived filtering)
+        const topCard = zone.cards[zone.cards.length - 1];
+        const topIsBreak = (topCard.subtypes as string[] ?? []).includes('BREAK');
+        if (!topIsBreak) continue;
+      }
 
       if (!seen.has(card.name)) {
         seen.set(card.name, card);
@@ -158,6 +165,14 @@ export function formatCardReference(card: ReadableCard): string[] {
 
   if (supertype === SUPERTYPES.POKEMON) {
     lines.push(formatPokemonReference(card));
+
+    // Rules text (EX, GX, V, VMAX, BREAK, LEGEND, V-UNION mechanics)
+    const rules = card.rules as string[] | undefined;
+    if (rules && rules.length > 0) {
+      for (const rule of rules) {
+        lines.push(`  ${rule}`);
+      }
+    }
 
     const attacks = card.attacks as Array<{ name: string; cost: string[]; damage: string; effect?: string }> | undefined;
     if (attacks && attacks.length > 0) {
@@ -335,9 +350,21 @@ function formatFieldZoneCompact(label: string, zone: ReadableZone): string[] {
 
   // Top card is the Pokemon
   const pokemon = cards[cards.length - 1];
-  const attached = cards.slice(0, -1);
+  const topIsBreak = (pokemon.subtypes as string[] ?? []).includes('BREAK');
+
+  // Separate pre-evolution Pokemon (under BREAK) from attached cards (energy/tools)
+  const preEvo: ReadableCard | undefined = topIsBreak
+    ? cards.slice(0, -1).findLast(c => c.supertype === SUPERTYPES.POKEMON)
+    : undefined;
+  const attached = cards.slice(0, -1).filter(c =>
+    c !== preEvo && (c.supertype !== SUPERTYPES.POKEMON || !topIsBreak)
+  );
 
   lines.push(`[${label}] ${formatInstanceStats(pokemon)}`);
+
+  if (preEvo) {
+    lines.push(`  Pre-evo: ${preEvo.name} (attacks available — see CARD REFERENCE)`);
+  }
 
   if (attached.length > 0) {
     lines.push(`  Attached: ${condenseNames(attached)}`);

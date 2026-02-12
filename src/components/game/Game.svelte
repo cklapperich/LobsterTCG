@@ -152,8 +152,8 @@
     return counterDefinitions.find((c) => c.id === id);
   }
 
-  // Preview state
-  let previewCard = $state<CardInstance<CardTemplate> | null>(null);
+  // Preview state — array for composite previews (LEGEND/V-UNION)
+  let previewCards = $state<CardInstance<CardTemplate>[]>([]);
 
   // Game log entries - derived from state.log (canonical source for AI agents)
   const logEntries = $derived(gameState?.log ?? []);
@@ -383,9 +383,9 @@
   }
 
   function handlePreview(card: CardInstance<CardTemplate>) {
-    if (card.visibility[local]) {
-      previewCard = card;
-    }
+    if (!card.visibility[local]) return;
+    const composite = gameState && plugin.getCompositePreview?.(card as any, gameState as any);
+    previewCards = composite ? [...composite] as CardInstance<CardTemplate>[] : [card];
   }
 
   function handleToggleVisibility(cardInstanceId: string) {
@@ -502,7 +502,7 @@
     plugin.startGame().then((state) => {
       initializeGameState(state);
       gameState = state;
-      previewCard = null;
+      previewCards = [];
       closeContextMenuStore();
       closeCardModalStore();
       if (hasAI) playBgm();
@@ -556,7 +556,7 @@
       counterTypes: plugin.getAICounterTypes?.(),
       translateZoneKey: (key, aiIdx) => fromAIPerspective(key, aiIdx as 0 | 1),
       describeAction: (state, action) => describeAction(state, action, counterNameResolver),
-      onPreviewCard: (card) => { previewCard = card; },
+      onPreviewCard: (card) => { previewCards = [card]; },
       createCheckpoint: () => JSON.parse(JSON.stringify($state.snapshot(gameState!))),
       restoreState: (snapshot) => { gameState = snapshot as GameState<CardTemplate>; gameState = { ...gameState }; },
     };
@@ -1149,11 +1149,30 @@
   {/if}
 
   <!-- Fullscreen Card Preview -->
-  {#if previewCard && previewCard.visibility[local] && previewCard.template.imageUrl}
-    <div class="preview-overlay" onclick={() => previewCard = null} onkeydown={(e) => e.key === 'Escape' && (previewCard = null)} role="button" tabindex="-1">
-      <div class="preview-overlay-card">
-        <img src={previewCard.template.imageUrl} alt={previewCard.template.name} />
-      </div>
+  {#if previewCards.length > 0}
+    <div class="preview-overlay" onclick={() => previewCards = []} onkeydown={(e) => e.key === 'Escape' && (previewCards = [])} role="button" tabindex="-1">
+      {#if previewCards.length === 1}
+        <!-- Single card preview (with displayRotation for landscape cards) -->
+        <div class="preview-overlay-card"
+             style="transform: rotate({previewCards[0].template.displayRotation ?? 0}deg)">
+          <img src={previewCards[0].template.imageUrl} alt={previewCards[0].template.name} />
+        </div>
+      {:else if previewCards.length === 2}
+        <!-- LEGEND: two halves composed side by side -->
+        <div class="preview-composite-legend">
+          {#each previewCards as card}
+            <img src={card.template.imageUrl} alt={card.template.name}
+                 style="transform: rotate({card.template.displayRotation ?? 0}deg)" />
+          {/each}
+        </div>
+      {:else}
+        <!-- V-UNION: 2x2 grid -->
+        <div class="preview-composite-vunion">
+          {#each previewCards.slice(0, 4) as card}
+            <img src={card.template.imageUrl} alt={card.template.name} />
+          {/each}
+        </div>
+      {/if}
     </div>
   {/if}
 
@@ -1386,6 +1405,35 @@
   .preview-overlay-card img {
     max-height: 85vh;
     max-width: 90vw;
+    object-fit: contain;
+    @apply rounded-xl;
+  }
+
+  .preview-composite-legend {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    align-items: center;
+    pointer-events: none;
+  }
+
+  .preview-composite-legend img {
+    max-height: 40vh;
+    max-width: 90vw;
+    object-fit: contain;
+    @apply rounded-xl;
+  }
+
+  .preview-composite-vunion {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.25rem;
+    pointer-events: none;
+  }
+
+  .preview-composite-vunion img {
+    max-height: 40vh;
+    max-width: 44vw;
     object-fit: contain;
     @apply rounded-xl;
   }

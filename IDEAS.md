@@ -33,12 +33,11 @@
 
     7 add a pokemon plugin hook for stadium auto-discard in stadium zone
 
-
     8 VERY difficult to place cards under the deck right now as a human!!
 
     9 Playing stadiums doesnt read the stadium text out loud into the chatlog - needed?
 
-    14. Really big Pop-up with pretty text, a sound effect, and the card text description whenever oponnent declares an attack
+    14. Really big Pop-up with pretty text, a sound effect, and the card text description whenever EITHER player declares an attack or ability.
 
     17. add a little buzzing noise for normally-illegal stuff, unless it comes from staging
 

@@ -308,11 +308,21 @@ export async function runAutonomousTurn(config: AIConfig): Promise<void> {
           logging: config.logging,
           deckStrategy,
         });
+
+        // Planner needs access to terminal actions to end the game
+        const plannerTools: ToolSet = {
+          launch_subagent: launchTool,
+        };
+
+        // Add concede and declare_victory from executor tools
+        if (execTools.concede) plannerTools.concede = execTools.concede;
+        if (execTools.declare_victory) plannerTools.declare_victory = execTools.declare_victory;
+
         await runAgent({
           model: plannerModel,
           systemPrompt: withStrategy(planPrompt),
           getState: () => ctx.getReadableState(),
-          tools: { launch_subagent: launchTool },
+          tools: plannerTools,
           label: 'Planner',
           logging: config.logging,
           abort: plannerAbort,
