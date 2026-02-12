@@ -17,6 +17,7 @@ import {
   isGXAttackByName,
   isVSTARPower,
   isVSTARAttack,
+  isBreakPokemon,
 } from './helpers';
 import { ZONE_IDS } from './zones';
 import type { ReadableGameState } from '../../core/readable';
@@ -116,6 +117,7 @@ function reorderFieldZone(state: PokemonState, action: Action): PostHookResult {
     if (isBasicPokemon(t)) return 2;
     if (isStage1(t)) return 3;
     if (isStage2(t)) return 4;
+    if (isBreakPokemon(t)) return 5;
     return 2;
   }
 
@@ -235,6 +237,19 @@ function logDeclareEffectText(state: PokemonState, action: Action): PostHookResu
 // ── Readable State Modifier ──────────────────────────────────────
 
 /**
+ * Find the index of the direct pre-evolution Pokemon (highest-index non-BREAK Pokemon below the top).
+ */
+function findDirectPreEvoIndex(cards: Record<string, unknown>[]): number {
+  for (let i = cards.length - 2; i >= 0; i--) {
+    if (cards[i].supertype === SUPERTYPES.POKEMON &&
+        !((cards[i].subtypes as string[] ?? []).includes('BREAK'))) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+/**
  * Modify readable state for Pokemon TCG:
  * - Compute totalDamage from damage counters (10/50/100)
  * - Convert retreatCost from string[] to integer (count)
@@ -271,11 +286,25 @@ export function modifyReadableState(
     // Strip pre-evolved Pokemon from field zones — they're evolution stages
     // buried under the top Pokemon, irrelevant to AI decision-making.
     // Keeps top card (active Pokemon) and non-Pokemon (energy, tools).
+    // Exception: BREAK keeps pre-evolution's attacks, so include the direct pre-evo.
     if (isFieldZone(zoneKey) && zone.cards.length > 1) {
       const topIdx = zone.cards.length - 1;
-      zone.cards = zone.cards.filter((card, i) =>
-        i === topIdx || card.supertype !== SUPERTYPES.POKEMON
-      );
+      const topCard = zone.cards[topIdx];
+      const topSubtypes = topCard.subtypes as string[] | undefined;
+      const topIsBreak = topCard.supertype === SUPERTYPES.POKEMON &&
+        (topSubtypes ?? []).includes('BREAK');
+
+      if (topIsBreak) {
+        // Keep top (BREAK) + the highest-index non-BREAK Pokemon (direct pre-evo) + non-Pokemon
+        const preEvoIdx = findDirectPreEvoIndex(zone.cards);
+        zone.cards = zone.cards.filter((card, i) =>
+          i === topIdx || i === preEvoIdx || card.supertype !== SUPERTYPES.POKEMON
+        );
+      } else {
+        zone.cards = zone.cards.filter((card, i) =>
+          i === topIdx || card.supertype !== SUPERTYPES.POKEMON
+        );
+      }
       zone.count = zone.cards.length;
     }
   }
