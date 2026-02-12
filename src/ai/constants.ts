@@ -4,11 +4,6 @@ export const AI_CONFIG = {
   MAX_STEPS: 30,
 } as const;
 
-export const PLANNER_CONFIG = {
-  MODEL: 'claude-sonnet-4-5-20250929',
-  MAX_TOKENS: 4096,
-} as const;
-
 export const TERMINAL_TOOL_NAMES = [
   'end_turn', 'end_phase', 'concede', 'declare_victory', 'resolve_decision',
 ] as const;

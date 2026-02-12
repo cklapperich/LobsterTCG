@@ -1,53 +1,10 @@
 import { streamText, jsonSchema } from 'ai';
-import type { LanguageModelV1, ToolSet, CoreMessage } from 'ai';
-import { createFireworks } from '@ai-sdk/fireworks';
-import { createAnthropic } from '@ai-sdk/anthropic';
+import type { LanguageModel, ToolSet, CoreMessage } from 'ai';
 import type { GamePlugin } from '../core';
 import type { ToolContext, RunnableTool } from '../core/ai-tools';
 import { logStepFinish } from './logging';
 import { AI_CONFIG, TERMINAL_TOOL_NAMES, KEEP_LATEST_INFO_TOOL_NAMES } from './constants';
 import { startActiveObservation } from '@langfuse/tracing';
-
-export type AIProvider = 'fireworks' | 'anthropic';
-
-export interface ModelOption {
-  id: string;
-  label: string;
-  provider: AIProvider;
-  modelId: string;
-  apiKeyEnv: string;
-}
-
-export const MODEL_OPTIONS: ModelOption[] = [
-  {
-    id: 'kimi-k2',
-    label: 'Kimi K2',
-    provider: 'fireworks',
-    modelId: AI_CONFIG.DEFAULT_MODEL,
-    apiKeyEnv: 'VITE_FIREWORKS_API_KEY',
-  },
-  {
-    id: 'kimi-k2p5',
-    label: 'Kimi K2.5',
-    provider: 'fireworks',
-    modelId: AI_CONFIG.DEFAULT_MODEL,
-    apiKeyEnv: 'VITE_FIREWORKS_API_KEY',
-  },
-  {
-    id: 'glm-4p7',
-    label: 'GLM 4p7',
-    provider: 'fireworks',
-    modelId: 'accounts/fireworks/models/glm-4p7',
-    apiKeyEnv: 'VITE_FIREWORKS_API_KEY',
-  },
-  {
-    id: 'sonnet-4.5',
-    label: 'Sonnet 4.5',
-    provider: 'anthropic',
-    modelId: 'claude-sonnet-4-5-20250929',
-    apiKeyEnv: 'VITE_ANTHROPIC_API_KEY',
-  },
-];
 
 
 /** Tools that signal the end of an AI turn — no further steps needed. */
@@ -138,7 +95,7 @@ export function toAISDKTools(
 // ── Agent Runner ────────────────────────────────────────────────
 
 interface AgentConfig {
-  model: LanguageModelV1;
+  model: LanguageModel;
   /** Base system prompt (heuristics/rules). Fresh game state is appended as the last message. */
   systemPrompt: string;
   /** Called before every LLM call to get fresh readable state. */
@@ -267,11 +224,10 @@ async function runAgent(config: AgentConfig): Promise<AgentResult> {
 
         const stream = streamText({
           model,
-          maxTokens: AI_CONFIG.MAX_TOKENS,
+          maxOutputTokens: AI_CONFIG.MAX_TOKENS,
           maxRetries: 0,
           system: systemPrompt,
           tools: sdkTools,
-          maxSteps: 1,
           messages: messagesWithState,
           onStepFinish: (s: any) => {
             if (logging) logStepFinish(s);
@@ -297,8 +253,8 @@ async function runAgent(config: AgentConfig): Promise<AgentResult> {
             responseMessages: res.response.messages,
           },
           usageDetails: {
-            input: res.usage?.promptTokens ?? 0,
-            output: res.usage?.completionTokens ?? 0,
+            input: res.usage?.inputTokens ?? 0,
+            output: res.usage?.outputTokens ?? 0,
             total: res.usage?.totalTokens ?? 0,
           },
         });
@@ -382,7 +338,7 @@ async function runAgent(config: AgentConfig): Promise<AgentResult> {
  * Create the launch_subagent tool for the planner to delegate tasks.
  */
 function createLaunchSubagentTool(opts: {
-  executorModel: LanguageModelV1;
+  executorModel: LanguageModel;
   executorSystemPrompt: string;
   executorTools: RunnableTool[];
   getState: () => string;
@@ -425,18 +381,12 @@ function createLaunchSubagentTool(opts: {
 
 // ── Autonomous Agent ────────────────────────────────────────────
 
-export interface AIAutonomousConfig {
+export interface AIConfig {
   context: ToolContext;
   plugin: GamePlugin;
-  model?: string;
-  provider?: AIProvider;
-  apiKey: string;
-  aiMode?: 'autonomous' | 'pipeline';
-  planner?: {
-    model: string;
-    provider: AIProvider;
-    apiKey: string;
-  };
+  model: LanguageModel;
+  plannerModel: LanguageModel;
+  aiMode: 'autonomous' | 'pipeline';
   deckStrategy?: string;
   logging?: boolean;
 }
@@ -461,19 +411,10 @@ function resolveMode(ctx: ToolContext): 'setup' | 'startOfTurn' | 'main' | 'deci
  *
  * For setup and decision modes: single agent call with the appropriate config.
  */
-export async function runAutonomousAgent(config: AIAutonomousConfig): Promise<void> {
-  const modelId = config.model ?? AI_CONFIG.DEFAULT_MODEL;
-  const provider = config.provider ?? 'fireworks';
+export async function runAutonomousTurn(config: AIConfig): Promise<void> {
+  const { context: ctx, plugin, model, plannerModel, deckStrategy } = config;
 
-  await startActiveObservation('ai-autonomous', async (agent) => {
-    const { context: ctx, plugin, apiKey, deckStrategy } = config;
-
-    agent.update({ metadata: { model: modelId, provider } });
-
-    const model = (provider === 'anthropic'
-      ? createAnthropic({ apiKey, baseURL: '/api/anthropic/v1' })(modelId)
-      : createFireworks({ apiKey })(modelId)) as any;
-
+  await startActiveObservation('ai-autonomous', async () => {
     /** Append deck strategy to a prompt if available. */
     const withStrategy = (prompt: string) =>
       deckStrategy ? prompt + '\n\n## YOUR DECK STRATEGY\n' + deckStrategy : prompt;
@@ -498,17 +439,12 @@ export async function runAutonomousAgent(config: AIAutonomousConfig): Promise<vo
       }
 
       // ── Main phase: FORK ──
-      if (config.aiMode === 'pipeline' && config.planner) {
-        const { model: planModelId, provider: planProvider, apiKey: planApiKey } = config.planner;
-        const plannerModel = (planProvider === 'anthropic'
-          ? createAnthropic({ apiKey: planApiKey, baseURL: '/api/anthropic/v1' })(planModelId)
-          : createFireworks({ apiKey: planApiKey })(planModelId)) as any;
-
+      if (config.aiMode === 'pipeline') {
         const { prompt: execPrompt, tools: execTools } = plugin.getAgentConfig!(ctx, 'executor');
         const { prompt: planPrompt } = plugin.getAgentConfig!(ctx, 'planner');
         const plannerAbort = new AbortController();
         const launchTool = createLaunchSubagentTool({
-          executorModel: model,  // executor model (from dropdown)
+          executorModel: model,
           executorSystemPrompt: execPrompt,
           executorTools: execTools,
           getState: () => ctx.getReadableState(),

@@ -1,3 +1,9 @@
-export { runAutonomousAgent, MODEL_OPTIONS } from './run-turn';
-export type { AIAutonomousConfig, AIProvider, ModelOption } from './run-turn';
-export { PLANNER_CONFIG } from './constants';
+export { runAutonomousTurn, type AIConfig } from './run-turn';
+export {
+  MODEL_OPTIONS,
+  createModel,
+  DEFAULT_PLANNER,
+  getModelOptionById,
+  type AIProvider,
+  type ModelOption,
+} from './providers';

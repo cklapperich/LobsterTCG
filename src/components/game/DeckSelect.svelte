@@ -4,7 +4,7 @@
   import { parsePTCGODeck } from '../../plugins/pokemon/cards';
   import { playSfx } from '../../lib/audio.svelte';
   import SettingsModal from './SettingsModal.svelte';
-  import { MODEL_OPTIONS, PLANNER_CONFIG } from '../../ai';
+  import { MODEL_OPTIONS, DEFAULT_PLANNER } from '../../ai';
   import { DEFAULT_CONFIG, type PlayerConfig } from './player-config';
   import GbcDropdown from './GbcDropdown.svelte';
   import { GAME_TYPES, DEFAULT_GAME_TYPE } from '../../game-types';
@@ -47,7 +47,7 @@
   let playmatImage = $state<string>('');
   let aiModel = $state<string>('kimi-k2p5');
   let aiMode = $state<string>('autonomous');
-  let plannerModel = $state<string>(PLANNER_CONFIG.MODEL === 'claude-sonnet-4-5-20250929' ? 'sonnet-4.5' : PLANNER_CONFIG.MODEL);
+  let plannerModel = $state<string>(DEFAULT_PLANNER.modelId === 'claude-sonnet-4-5-20250929' ? 'sonnet-4.5' : DEFAULT_PLANNER.modelId);
   let showSettings = $state(false);
 
   const gameConfig = $derived(GAME_TYPES[gameType]);
