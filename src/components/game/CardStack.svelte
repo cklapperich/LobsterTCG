@@ -136,7 +136,13 @@
 
   // Calculate stack size based on card count and offset (1.5rem = 24px at base, but use rem)
   const stackOffset = $derived(1.5 * scale); // rem, scaled
-  const extraHeight = $derived(Math.max(0, cards.length - 1) * stackOffset);
+  // Landscape-shifted cards (BREAK) overflow upward, so don't count the top card
+  // in the height calculation when it's landscape
+  const topCardIsLandscape = $derived(
+    applyDisplayRotation && cards.length > 0 && !!cards[cards.length - 1].template.displayRotation
+  );
+  const effectiveCardCount = $derived(topCardIsLandscape ? cards.length - 1 : cards.length);
+  const extraHeight = $derived(Math.max(0, effectiveCardCount - 1) * stackOffset);
   const extraWidth = $derived(Math.max(0, cards.length - 1) * stackOffset);
 
   // Calculate dynamic min-width style based on direction
