@@ -12,6 +12,7 @@ import {
   isStage1,
   isStage2,
   isTool,
+  isBreakPokemon,
   isFieldZone,
   isGXAttack,
   isGXAttackByName,
@@ -116,6 +117,7 @@ function reorderFieldZone(state: PokemonState, action: Action): PostHookResult {
     if (isBasicPokemon(t)) return 2;
     if (isStage1(t)) return 3;
     if (isStage2(t)) return 4;
+    if (isBreakPokemon(t)) return 5;
     return 2;
   }
 
@@ -271,11 +273,25 @@ export function modifyReadableState(
     // Strip pre-evolved Pokemon from field zones — they're evolution stages
     // buried under the top Pokemon, irrelevant to AI decision-making.
     // Keeps top card (active Pokemon) and non-Pokemon (energy, tools).
+    // Exception: BREAK keeps pre-evolution's attacks, so include the direct pre-evo.
     if (isFieldZone(zoneKey) && zone.cards.length > 1) {
       const topIdx = zone.cards.length - 1;
-      zone.cards = zone.cards.filter((card, i) =>
-        i === topIdx || card.supertype !== SUPERTYPES.POKEMON
-      );
+      const topCard = zone.cards[topIdx];
+      const topIsBreak = topCard.supertype === SUPERTYPES.POKEMON &&
+        (topCard.subtypes as string[] ?? []).includes('BREAK');
+
+      zone.cards = zone.cards.filter((card, i) => {
+        if (i === topIdx) return true;
+        if (card.supertype !== SUPERTYPES.POKEMON) return true;
+        // Keep the highest-index non-BREAK Pokemon under a BREAK top
+        if (topIsBreak) {
+          const isHighestPreEvo = !zone.cards.slice(i + 1, topIdx).some(c =>
+            c.supertype === SUPERTYPES.POKEMON && !(c.subtypes as string[] ?? []).includes('BREAK')
+          );
+          return isHighestPreEvo;
+        }
+        return false;
+      });
       zone.count = zone.cards.length;
     }
   }

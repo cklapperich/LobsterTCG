@@ -1,5 +1,5 @@
 import type { PokemonCardTemplate, PokemonAttack, PokemonAbility } from './cards';
-import { SUPERTYPES, STAGES, TRAINER_SUBTYPES } from './constants';
+import { SUPERTYPES, STAGES, TRAINER_SUBTYPES, SPECIAL_SUBTYPES } from './constants';
 
 // Normalize subtypes: "Stage 1" and "Stage1" both match
 function hasSubtype(t: PokemonCardTemplate, ...names: string[]): boolean {
@@ -39,6 +39,23 @@ export function isEnergy(t: PokemonCardTemplate): boolean {
 
 export function isTool(t: PokemonCardTemplate): boolean {
   return t.supertype === SUPERTYPES.TRAINER && hasSubtype(t, 'Tool');
+}
+
+export function isBreakPokemon(t: PokemonCardTemplate): boolean {
+  return t.supertype === SUPERTYPES.POKEMON && hasSubtype(t, SPECIAL_SUBTYPES.BREAK);
+}
+
+export function isLegendPokemon(t: PokemonCardTemplate): boolean {
+  // LEGEND cards have subtypes: ['Basic'] but "LEGEND" in the card name
+  return t.supertype === SUPERTYPES.POKEMON && t.name.includes('LEGEND');
+}
+
+export function isVUnionPokemon(t: PokemonCardTemplate): boolean {
+  return t.supertype === SUPERTYPES.POKEMON && hasSubtype(t, SPECIAL_SUBTYPES.V_UNION);
+}
+
+export function isNaturallyLandscape(t: PokemonCardTemplate): boolean {
+  return isBreakPokemon(t) || isLegendPokemon(t);
 }
 
 export function isFieldZone(zoneKey: string): boolean {

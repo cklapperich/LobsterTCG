@@ -85,6 +85,36 @@
     return Math.max(MIN_OFFSET_PX, neededOffset);
   });
 
+  // Only apply landscape display rotation on field-like zones (stacked, not fixed-size decks)
+  const applyDisplayRotation = $derived(stackDirection === 'none' && !fixedSize);
+
+  // Detect composite cards: 4+ cards with the same name in a field zone → render as 2x2 grid.
+  // This is a heuristic that works for Pokemon V-UNION (4 pieces, same name).
+  // KNOWN COUPLING: If another game legitimately stacks 4+ same-name cards in one zone,
+  // this would falsely trigger. A cleaner approach would be a plugin-provided getZoneLayout()
+  // hook, but for now this is the simplest path. Only fires on field-like zones
+  // (stackDirection 'none', not fixedSize) so hand/deck/discard are unaffected.
+  const vunionGroupName = $derived.by(() => {
+    if (stackDirection !== 'none' || fixedSize) return null;
+    const nameCounts = new Map<string, number>();
+    for (const card of cards) {
+      const n = card.template.name;
+      nameCounts.set(n, (nameCounts.get(n) ?? 0) + 1);
+    }
+    for (const [name, count] of nameCounts) {
+      if (count >= 4) return name;
+    }
+    return null;
+  });
+
+  // Split cards into V-UNION grid group and base (energy/tools) when applicable
+  const vunionCards = $derived(
+    vunionGroupName ? cards.filter(c => c.template.name === vunionGroupName) : []
+  );
+  const baseCards = $derived(
+    vunionGroupName ? cards.filter(c => c.template.name !== vunionGroupName) : cards
+  );
+
   // Enable hover-to-top when cards are overlapping
   const hoverToTop = $derived(
     stackDirection === 'fan' && cardWidth > 0 && fanOffset < cardWidth
@@ -148,7 +178,8 @@
   style={stackStyle}
   bind:this={stackEl}
 >
-  {#each cards as card, i (card.instanceId)}
+  <!-- Base cards (or all cards when no V-UNION) -->
+  {#each baseCards as card, i (card.instanceId)}
     {@const isInPacket = isShuffling && shufflePacketStart >= 0 && i >= shufflePacketStart}
     <div
       class="stack-card"
@@ -165,6 +196,7 @@
         index={i}
         {zoneKey}
         isDropTarget={true}
+        {applyDisplayRotation}
         {cardBack}
         {counterDefinitions}
         {renderFace}
@@ -175,6 +207,30 @@
       />
     </div>
   {/each}
+
+  <!-- V-UNION: 2x2 grid overlay when 4+ same-name cards detected -->
+  {#if vunionCards.length >= 4}
+    <div class="vunion-grid" style="z-index: {baseCards.length + 1}">
+      {#each vunionCards.slice(0, 4) as card, i (card.instanceId)}
+        <div class="vunion-cell">
+          <Card
+            {card}
+            index={baseCards.length + i}
+            {zoneKey}
+            isDropTarget={true}
+            applyDisplayRotation={false}
+            {cardBack}
+            {counterDefinitions}
+            {renderFace}
+            {onPreview}
+            {onToggleVisibility}
+            {onCardDrop}
+            {onCounterDrop}
+          />
+        </div>
+      {/each}
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -223,5 +279,20 @@
   /* Hover-to-top: when hovering a card in stacked mode, bring it to front */
   .card-stack.hover-to-top .stack-card:hover {
     z-index: 100 !important;
+  }
+
+  /* V-UNION: 2x2 grid of cards shrunk to fit one zone slot */
+  .vunion-grid {
+    @apply absolute;
+    top: 0;
+    left: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.1rem;
+    --zone-scale: 0.5;
+  }
+
+  .vunion-cell {
+    @apply relative;
   }
 </style>

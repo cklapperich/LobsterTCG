@@ -1,6 +1,6 @@
 import type { Playmat } from './playmat';
 import type { GameState } from './game';
-import type { CardTemplate, PlayerIndex } from './card';
+import type { CardTemplate, CardInstance, PlayerIndex } from './card';
 import type { CounterDefinition } from './counter';
 import type { ToolContext } from '../ai-tools';
 import type { ActionPanel } from './action-panel';
@@ -81,4 +81,7 @@ export interface GamePlugin<T extends CardTemplate = CardTemplate> {
 
   /** Handle a marker click (manual flip). */
   onMarkerClick?(state: GameState<T>, playerIndex: PlayerIndex, markerId: string): void;
+
+  /** Return multiple cards for composite preview (LEGEND halves, V-UNION parts). */
+  getCompositePreview?(card: CardInstance<T>, state: GameState<T>): CardInstance<T>[] | undefined;
 }
