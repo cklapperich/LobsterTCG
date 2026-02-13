@@ -5,7 +5,7 @@ import type { GamePlugin } from '../core';
 import type { ToolContext } from '../core/ai-tools';
 import { wrapToolsWithContext } from '../core/ai-tools';
 import { logStepFinish } from './logging';
-import { resolveModel } from './providers';
+import { resolveModel, MODEL_OPTIONS } from './providers';
 import { AI_CONFIG, KEEP_LATEST_INFO_TOOL_NAMES, TERMINAL_TOOL_NAMES } from './constants';
 import { startActiveObservation } from '@langfuse/tracing';
 
@@ -99,12 +99,13 @@ async function runAgent(config: AgentConfig): Promise<AgentResult> {
     const history: ModelMessage[] = [];
 
     span.update({
+      model,
       input: { systemPrompt: systemPrompt },
       metadata: { toolCount, toolNames },
     });
 
     if (logging) {
-      console.group(`[AI: ${label}]`);
+      console.group(`[AI: ${label}] model=${model}`);
       console.log('%c[system]', 'color: #88f', systemPrompt.slice(0, 200) + '...');
     }
 
@@ -120,6 +121,7 @@ async function runAgent(config: AgentConfig): Promise<AgentResult> {
 
       const result = await startActiveObservation(`${label}/step-${step}`, async (gen) => {
         gen.update({
+          model,
           input: { systemPrompt: systemPrompt, messages: messagesWithState },
         });
 
@@ -145,6 +147,12 @@ async function runAgent(config: AgentConfig): Promise<AgentResult> {
           usage: await stream.usage,
         };
 
+        const inputTokens = res.usage?.inputTokens ?? 0;
+        const outputTokens = res.usage?.outputTokens ?? 0;
+        const pricing = MODEL_OPTIONS.find(m => m.modelId === model)?.costPerMTok;
+        const inputCost = pricing ? (inputTokens / 1_000_000) * pricing[0] : 0;
+        const outputCost = pricing ? (outputTokens / 1_000_000) * pricing[1] : 0;
+
         gen.update({
           output: {
             text: res.text,
@@ -153,11 +161,20 @@ async function runAgent(config: AgentConfig): Promise<AgentResult> {
             responseMessages: res.response.messages,
           },
           usageDetails: {
-            input: res.usage?.inputTokens ?? 0,
-            output: res.usage?.outputTokens ?? 0,
-            total: res.usage?.totalTokens ?? 0,
+            input: inputTokens,
+            output: outputTokens,
+            total: inputTokens + outputTokens,
+          },
+          costDetails: {
+            input: inputCost,
+            output: outputCost,
+            total: inputCost + outputCost,
           },
         });
+
+        if (logging) {
+          console.log(`%c[${label}] step ${step}: ${inputTokens} in / ${outputTokens} out — $${(inputCost + outputCost).toFixed(4)}`, 'color: #8cf');
+        }
 
         return res;
       }, { asType: 'generation' });
@@ -228,7 +245,6 @@ function createLaunchSubagentTool(opts: {
   getState: () => string;
   plannerAbort: AbortController;
   logging?: boolean;
-  deckStrategy?: string;
 }): ToolSet[string] {
   return tool({
     description: 'Launch an executor subagent to perform a specific task. Provide clear, concrete instructions with card names and zones.',
@@ -260,7 +276,6 @@ export interface AIConfig {
   model: string; // AI SDK v6+ accepts model strings directly
   plannerModel: string; // AI SDK v6+ accepts model strings directly
   aiMode: 'autonomous' | 'pipeline';
-  deckStrategy?: string;
   logging?: boolean;
 }
 
@@ -270,13 +285,10 @@ function resolveMode(ctx: ToolContext): 'setup' | 'startOfTurn' | 'main' | 'deci
   return 'main';
 }
 
-export async function runAutonomousTurn(config: AIConfig): Promise<void> {
-  const { context: ctx, plugin, model, plannerModel, deckStrategy } = config;
+export async function runTurn(config: AIConfig): Promise<void> {
+  const { context: ctx, plugin, model, plannerModel } = config;
 
   await startActiveObservation('ai-autonomous', async () => {
-    const withStrategy = (prompt: string) =>
-      deckStrategy ? prompt + '\n\n## YOUR DECK STRATEGY\n' + deckStrategy : prompt;
-
     const mode = resolveMode(ctx);
     const isNormalTurn = mode === 'main';
     console.log(mode);
@@ -288,7 +300,7 @@ export async function runAutonomousTurn(config: AIConfig): Promise<void> {
         const { prompt, tools } = plugin.getAgentConfig!(ctx, 'startOfTurn');
         await runAgent({
           model,
-          systemPrompt: withStrategy(prompt),
+          systemPrompt: prompt,
           getState: () => ctx.getReadableState(),
           tools,
           label: 'StartOfTurn',
@@ -298,7 +310,7 @@ export async function runAutonomousTurn(config: AIConfig): Promise<void> {
 
       if (config.aiMode === 'pipeline') {
         const { prompt: execPrompt, tools: execTools } = plugin.getAgentConfig!(ctx, 'executor');
-        const { prompt: planPrompt } = plugin.getAgentConfig!(ctx, 'planner');
+        const { prompt: planPrompt, tools: plannerTools } = plugin.getAgentConfig!(ctx, 'planner');
         const plannerAbort = new AbortController();
         const launchTool = createLaunchSubagentTool({
           executorModel: model,
@@ -307,13 +319,12 @@ export async function runAutonomousTurn(config: AIConfig): Promise<void> {
           getState: () => ctx.getReadableState(),
           plannerAbort,
           logging: config.logging,
-          deckStrategy,
         });
         await runAgent({
           model: plannerModel,
-          systemPrompt: withStrategy(planPrompt),
+          systemPrompt: planPrompt,
           getState: () => ctx.getReadableState(),
-          tools: { launch_subagent: launchTool },
+          tools: { ...plannerTools, launch_subagent: launchTool },
           label: 'Planner',
           logging: config.logging,
           abort: plannerAbort,
@@ -325,7 +336,7 @@ export async function runAutonomousTurn(config: AIConfig): Promise<void> {
           : undefined;
         await runAgent({
           model,
-          systemPrompt: withStrategy(prompt),
+          systemPrompt: prompt,
           getState: () => ctx.getReadableState(),
           tools,
           label: 'Main',
@@ -340,7 +351,7 @@ export async function runAutonomousTurn(config: AIConfig): Promise<void> {
         : undefined;
       await runAgent({
         model,
-        systemPrompt: withStrategy(prompt),
+        systemPrompt: prompt,
         getState: () => ctx.getReadableState(),
         tools,
         label: 'Decision',
@@ -351,7 +362,7 @@ export async function runAutonomousTurn(config: AIConfig): Promise<void> {
       const { prompt, tools } = plugin.getAgentConfig!(ctx, mode);
       await runAgent({
         model,
-        systemPrompt: withStrategy(prompt),
+        systemPrompt: prompt,
         getState: () => ctx.getReadableState(),
         tools,
         label: 'Setup',

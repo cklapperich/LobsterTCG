@@ -13,5 +13,6 @@ export const pokemonConfig: GameTypeConfig = {
   needsDeckSelection: true,
   needsAIModel: true,
   executeSetup: executeSetup,
-  onSetupComplete:onSetupComplete
+  onSetupComplete:onSetupComplete,
+  tcgFilter: 'Pokemon',
 };

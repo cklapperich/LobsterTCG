@@ -146,7 +146,10 @@ const MODE_CONFIGS: Record<AgentMode, ModeConfig> = {
       'STATUS_CONDITIONS', 'DAMAGE', 'STRATEGY_PLANNING',
     ],
     coreToolFilter: 'include',
-    coreTools: [],
+    coreTools: [
+      ACTION_TYPES.DECLARE_VICTORY,
+      ACTION_TYPES.CONCEDE,
+    ],
     addCustomTools: false,
   },
 

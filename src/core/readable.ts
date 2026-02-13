@@ -60,6 +60,7 @@ export interface ReadableGameState {
   result: GameResult | null;
   log: string[];
   pluginState?: Record<string, unknown>;
+  deckStrategy?: string;
 }
 
 /**
@@ -72,11 +73,12 @@ export interface ReadableGameState {
 export function toReadableState<T extends CardTemplate>(
   state: GameState<T>,
   playerIndex: PlayerIndex,
+  omniscientZones?: Set<string>,
 ): ReadableGameState {
   const readableZones: Record<string, ReadableZone> = {};
 
   for (const [zoneKey, zone] of Object.entries(state.zones)) {
-    readableZones[zoneKey] = convertZone(zone, playerIndex);
+    readableZones[zoneKey] = convertZone(zone, playerIndex, omniscientZones?.has(zoneKey));
   }
 
   // Build instanceId → card name lookup for action conversion (visibility-aware)
@@ -214,9 +216,12 @@ const STRIP_TEMPLATE_KEYS = new Set(['id', 'imageUrl', 'name']);
 
 function convertZone<T extends CardTemplate>(
   zone: Zone<T>,
-  playerIndex: PlayerIndex
+  playerIndex: PlayerIndex,
+  omniscient: boolean = false,
 ): ReadableZone {
-  const visibleCards = zone.cards.filter(c => c.visibility[playerIndex]);
+  const visibleCards = omniscient
+    ? zone.cards
+    : zone.cards.filter(c => c.visibility[playerIndex]);
   const ambiguousNames = findAmbiguousNames(visibleCards);
   const readableCards: ReadableCard[] = [];
 

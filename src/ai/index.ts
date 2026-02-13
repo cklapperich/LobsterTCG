@@ -1,4 +1,4 @@
-export { runAutonomousTurn, type AIConfig } from './run-turn';
+export { runTurn, type AIConfig } from './run-turn';
 export {
   MODEL_OPTIONS,
   DEFAULT_PLANNER,

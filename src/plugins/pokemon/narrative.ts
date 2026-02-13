@@ -31,6 +31,13 @@ export function formatNarrativeState(readable: ReadableGameState): string {
     }
   }
 
+  // Deck strategy
+  if (readable.deckStrategy) {
+    lines.push('=== YOUR DECK STRATEGY ===');
+    lines.push(readable.deckStrategy);
+    lines.push('');
+  }
+
   // Header
   lines.push('=== GAME STATE ===');
   const turnRestrictions: string[] = [];
@@ -70,6 +77,15 @@ export function formatNarrativeState(readable: ReadableGameState): string {
   lines.push('--- YOUR BOARD ---');
   lines.push('');
   lines.push(...formatBoard(readable, aiPrefix, 'Your'));
+
+  // AI's deck contents (just names)
+  const deckKey = `${aiPrefix}_deck`;
+  const deck = readable.zones[deckKey];
+  if (deck && deck.cards.length > 0) {
+    lines.push('');
+    lines.push(`--- YOUR DECK (${deck.count} cards) ---`);
+    lines.push(condenseNames(deck.cards));
+  }
 
   // Opponent's board
   lines.push('');
@@ -130,6 +146,9 @@ function collectUniqueCards(readable: ReadableGameState): ReadableCard[] {
   const seen = new Map<string, ReadableCard>();
 
   for (const [zoneKey, zone] of Object.entries(readable.zones)) {
+    // Skip deck zones — deck contents are listed as names only, no full reference
+    if (zoneKey.endsWith('_deck')) continue;
+
     const field = isFieldZone(zoneKey);
 
     for (let i = 0; i < zone.cards.length; i++) {

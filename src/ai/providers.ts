@@ -25,15 +25,17 @@ export function resolveModel(modelId: string) {
   });
 }
 
-export const MODEL_OPTIONS = [
-  { label: 'GLM-5', modelId: 'z-ai/glm-5' },
-  { label: 'Kimi K2.5', modelId: 'moonshotai/kimi-k2.5' },
-  { label: 'Claude Sonnet 4.5', modelId: 'anthropic/claude-sonnet-4-5-20250929' },
+// Cost per million tokens: [input, output]
+export const MODEL_OPTIONS: ModelOption[] = [
+  { label: 'GLM-5', modelId: 'z-ai/glm-5', costPerMTok: [1.00, 3.20] },
+  { label: 'Kimi K2.5', modelId: 'moonshotai/kimi-k2.5', costPerMTok: [0.60, 3.00] },
+  { label: 'Claude Sonnet 4.5', modelId: 'anthropic/claude-sonnet-4-5-20250929', costPerMTok: [3.00, 15.00] },
 ];
 
 export interface ModelOption {
   label: string;
   modelId: string;
+  costPerMTok: [number, number]; // [input, output] per million tokens
 }
 
 export const DEFAULT_PLANNER = MODEL_OPTIONS[0];
