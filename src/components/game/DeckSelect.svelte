@@ -45,9 +45,9 @@
   let player2Deck = $state<string>('7-18 relentless-flame');
   let testFlags = $state<Record<string, boolean>>({});
   let playmatImage = $state<string>('');
-  let aiModel = $state<string>('kimi-k2p5');
-  let aiMode = $state<string>('autonomous');
-  let plannerModel = $state<string>(DEFAULT_PLANNER.modelId === 'claude-sonnet-4-5-20250929' ? 'sonnet-4.5' : DEFAULT_PLANNER.modelId);
+  let aiModel = $state<string>('moonshotai/kimi-k2.5');
+  let aiMode = $state<string>('pipeline');
+  let plannerModel = $state<string>(DEFAULT_PLANNER.modelId);
   let showSettings = $state(false);
 
   const gameConfig = $derived(GAME_TYPES[gameType]);
@@ -273,7 +273,7 @@
             AI MODEL
           </div>
           <GbcDropdown
-            options={MODEL_OPTIONS.map(m => ({ value: m.id, label: m.label }))}
+            options={MODEL_OPTIONS.map(m => ({ value: m.modelId, label: m.label }))}
             bind:value={aiModel}
           />
         </div>
@@ -301,7 +301,7 @@
               PLANNER MODEL
             </div>
             <GbcDropdown
-              options={MODEL_OPTIONS.map(m => ({ value: m.id, label: m.label }))}
+            options={MODEL_OPTIONS.map(m => ({ value: m.modelId, label: m.label }))}
               bind:value={plannerModel}
             />
           </div>

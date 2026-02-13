@@ -48,4 +48,9 @@
 
     20. remove autonomous agent?
 
-    21. add surrender and declare_victory tools to the planner
+    22. Ai doesnt have access to hand knowledge
+    1. add a cheating mode so it can see your hand?
+    2. or somehow make AI aware of whats in oponnents hand after a search like a timer ball
+
+
+    23. Auto-deck-strategy-generator. could probably just use a search engine, partially.

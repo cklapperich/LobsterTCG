@@ -1,10 +1,11 @@
 import { streamText, tool } from 'ai';
-import type { LanguageModel, ToolSet, ModelMessage } from 'ai';
+import type { ToolSet, ModelMessage } from 'ai';
 import { z } from 'zod';
 import type { GamePlugin } from '../core';
 import type { ToolContext } from '../core/ai-tools';
 import { wrapToolsWithContext } from '../core/ai-tools';
 import { logStepFinish } from './logging';
+import { resolveModel } from './providers';
 import { AI_CONFIG, KEEP_LATEST_INFO_TOOL_NAMES, TERMINAL_TOOL_NAMES } from './constants';
 import { startActiveObservation } from '@langfuse/tracing';
 
@@ -20,7 +21,7 @@ export interface RewindSignal {
 }
 
 interface AgentConfig {
-  model: LanguageModel;
+  model: string; // AI SDK v6+ accepts model strings directly
   systemPrompt: string;
   getState: () => string;
   tools: ToolSet;
@@ -123,7 +124,7 @@ async function runAgent(config: AgentConfig): Promise<AgentResult> {
         });
 
         const stream = streamText({
-          model,
+          model: resolveModel(model),
           maxOutputTokens: AI_CONFIG.MAX_TOKENS,
           maxRetries: 0,
           system: systemPrompt,
@@ -221,7 +222,7 @@ async function runAgent(config: AgentConfig): Promise<AgentResult> {
 }
 
 function createLaunchSubagentTool(opts: {
-  executorModel: LanguageModel;
+  executorModel: string; // AI SDK v6+ accepts model strings directly
   executorSystemPrompt: string;
   executorTools: ToolSet;
   getState: () => string;
@@ -256,8 +257,8 @@ function createLaunchSubagentTool(opts: {
 export interface AIConfig {
   context: ToolContext;
   plugin: GamePlugin;
-  model: LanguageModel;
-  plannerModel: LanguageModel;
+  model: string; // AI SDK v6+ accepts model strings directly
+  plannerModel: string; // AI SDK v6+ accepts model strings directly
   aiMode: 'autonomous' | 'pipeline';
   deckStrategy?: string;
   logging?: boolean;
