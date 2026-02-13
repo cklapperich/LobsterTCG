@@ -25,7 +25,7 @@
   import { playSfx, playBgm, stopBgm, toggleMute, audioSettings } from '../../lib/audio.svelte';
   import { settings } from '../../lib/settings.svelte';
   import SettingsModal from './SettingsModal.svelte';
-  import { runAutonomousTurn, MODEL_OPTIONS, createModel, DEFAULT_PLANNER } from '../../ai';
+  import { runAutonomousTurn, MODEL_OPTIONS, DEFAULT_PLANNER } from '../../ai';
   import { contextMenuStore, openContextMenu, closeContextMenu as closeContextMenuStore } from './contextMenu.svelte';
   import { cardModalStore, openCardModal, closeCardModal as closeCardModalStore } from './cardModal.svelte';
 
@@ -55,7 +55,7 @@
   const local = $derived(localPlayerIndex(playerConfig));
 
   // Resolve model config from selected model ID
-  const selectedModel = $derived(MODEL_OPTIONS.find(m => m.id === aiModel) ?? MODEL_OPTIONS[0]);
+  const selectedModel = $derived(MODEL_OPTIONS.find(m => m.label === aiModel) ?? MODEL_OPTIONS[0]);
 
   // Plugin manager for warnings/hooks
   const pluginManager = new PluginManager<CardTemplate>();
@@ -566,9 +566,6 @@
 
   async function runAIPhase(phase: AIPhase) {
     if (!gameState || aiThinking || !hasAI) return;
-    
-    const mainApiKey = import.meta.env[selectedModel.apiKeyEnv];
-    if (!mainApiKey) return;
 
     const currentPlayer = phase === 'decision'
       ? (gameState.pendingDecision?.targetPlayer ?? gameState.activePlayer)
@@ -582,33 +579,12 @@
       phase === 'decision' ? { isDecisionResponse: true } : undefined
     );
 
-    // Create main model from user selection
-    const mainModel = createModel(
-      selectedModel.provider,
-      selectedModel.modelId,
-      mainApiKey
-    );
-
-    // Always create planner model (uses default)
-    const plannerApiKey = import.meta.env[DEFAULT_PLANNER.apiKeyEnv];
-    if (!plannerApiKey) {
-      console.error('Anthropic API key required for planner');
-      aiThinking = false;
-      return;
-    }
-    
-    const plannerModel = createModel(
-      DEFAULT_PLANNER.provider,
-      DEFAULT_PLANNER.modelId,
-      plannerApiKey
-    );
-
     try {
       await runAutonomousTurn({
         context: ctx,
         plugin,
-        model: mainModel,
-        plannerModel,
+        model: selectedModel.modelId,
+        plannerModel: DEFAULT_PLANNER.modelId,
         aiMode,
         deckStrategy: decks?.[currentPlayer]?.strategy,
         logging: true,

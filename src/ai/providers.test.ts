@@ -1,56 +1,57 @@
+// Load environment variables from .env file
+import { config } from 'dotenv';
+config();
+
 import { describe, it, expect } from 'vitest';
 import { streamText, tool } from 'ai';
 import { z } from 'zod';
-import { createModel, MODEL_OPTIONS } from './providers';
-    
-const AI_GATEWAY_API_KEY = process.env.VITE_AI_GATEWAY_KEY;
+import { MODEL_OPTIONS, DEFAULT_PLANNER, getModelOptionByLabel } from './providers';
 
-describe('AI Providers Integration Tests', () => {
-  it('MODEL_OPTIONS should include all providers', () => {
-    const providerIds = MODEL_OPTIONS.map(option => option.provider);
-    expect(providerIds).toContain('fireworks');
-    expect(providerIds).toContain('anthropic');
-    expect(providerIds).toContain('gateway');
+describe('Simplified AI Providers', () => {
+  it('Environment variables should be loaded', () => {
+    const apiKey = process.env.VITE_AI_GATEWAY_KEY;
+    console.log('VITE_AI_GATEWAY_KEY loaded:', apiKey ? `${apiKey.slice(0, 10)}...` : 'NOT FOUND');
+    expect(apiKey).toBeDefined(); // Should be defined from .env file
+  });
+  it('MODEL_OPTIONS should have 3 models', () => {
+    expect(MODEL_OPTIONS).toHaveLength(3);
+    expect(MODEL_OPTIONS.map(m => m.label)).toContain('GLM-5');
+    expect(MODEL_OPTIONS.map(m => m.label)).toContain('Kimi K2.5');
+    expect(MODEL_OPTIONS.map(m => m.label)).toContain('Claude Sonnet 4.5');
   });
 
-  it('Should create models for non-gateway providers', () => {
-    // Test that model creation doesn't throw for valid configs
-    expect(() => {
-      const fireworksModel = createModel('fireworks', 'accounts/fireworks/models/kimi-k2', 'test-key');
-      expect(fireworksModel).toBeDefined();
-    }).not.toThrow();
+  it('Should have correct model IDs', () => {
+    const glm5 = MODEL_OPTIONS.find(m => m.label === 'GLM-5');
+    expect(glm5?.modelId).toBe('zai/glm-5');
 
-    expect(() => {
-      const anthropicModel = createModel('anthropic', 'claude-sonnet-4-5-20250929', 'test-key');
-      expect(anthropicModel).toBeDefined();
-    }).not.toThrow();
+    const kimi = MODEL_OPTIONS.find(m => m.label === 'Kimi K2.5');
+    expect(kimi?.modelId).toBe('moonshotai/kimi-k2.5');
+
+    const claude = MODEL_OPTIONS.find(m => m.label === 'Claude Sonnet 4.5');
+    expect(claude?.modelId).toBe('anthropic/claude-sonnet-4-5-20250929');
   });
 
-  it('Gateway createModel should throw helpful error', () => {
-    // Gateway uses model strings directly in SDK 6, should throw error when trying to createModel
-    expect(() => {
-      createModel('gateway', 'zai/glm-5', 'test-key');
-    }).toThrow('AI Gateway in SDK 6: Use model strings directly in streamText(), not createModel()');
+  it('DEFAULT_PLANNER should be GLM-5', () => {
+    expect(DEFAULT_PLANNER.label).toBe('GLM-5');
+    expect(DEFAULT_PLANNER.modelId).toBe('zai/glm-5');
   });
 
-  it('Should have correct environment variables configured', () => {
-    const gatewayOption = MODEL_OPTIONS.find(m => m.provider === 'gateway');
-    expect(gatewayOption).toBeDefined();
-    expect(gatewayOption?.apiKeyEnv).toBe('VITE_AI_GATEWAY_KEY');
+  it('getModelOptionByLabel should find models', () => {
+    const glm5 = getModelOptionByLabel('GLM-5');
+    expect(glm5).toBeDefined();
+    expect(glm5?.modelId).toBe('zai/glm-5');
+
+    const notFound = getModelOptionByLabel('Non-existent Model');
+    expect(notFound).toBeUndefined();
   });
 
-  it('Should have correct model IDs for AI Gateway', () => {
-    const glm5Option = MODEL_OPTIONS.find(m => m.provider === 'gateway' && m.id === 'glm-5');
-    expect(glm5Option).toBeDefined();
-    expect(glm5Option?.modelId).toBe('zai/glm-5');
-
-    const gpt5Option = MODEL_OPTIONS.find(m => m.provider === 'gateway' && m.id === 'gpt-5');
-    expect(gpt5Option).toBeDefined();
-    expect(gpt5Option?.modelId).toBe('openai/gpt-5');
-
-    const claudeOption = MODEL_OPTIONS.find(m => m.provider === 'gateway' && m.id === 'claude-sonnet-4.5');
-    expect(claudeOption).toBeDefined();
-    expect(claudeOption?.modelId).toBe('anthropic/claude-sonnet-4-5-20250929');
+  it('Model IDs should be valid strings for AI SDK', () => {
+    // AI SDK v6+ accepts model strings directly
+    MODEL_OPTIONS.forEach(option => {
+      expect(option.modelId).toBeTruthy();
+      expect(typeof option.modelId).toBe('string');
+      expect(option.modelId).toContain('/'); // Should have provider prefix
+    });
   });
 
   describe('Tool Call Tests', () => {
@@ -132,7 +133,7 @@ describe('AI Providers Integration Tests', () => {
   });
 
   describe('Real API Integration Tests via AI Gateway', () => {
-    const gatewayTestCases = [
+    const testCases = [
       {
         name: 'GLM-5 via AI Gateway',
         modelId: 'zai/glm-5',
@@ -140,27 +141,24 @@ describe('AI Providers Integration Tests', () => {
         userMessage: 'Hello! Please respond with just "GLM-5 working" to confirm connection.',
       },
       {
-        name: 'GPT-5 via AI Gateway', 
-        modelId: 'openai/gpt-5',
+        name: 'Kimi K2.5 via AI Gateway',
+        modelId: 'moonshotai/kimi-k2.5',
         systemPrompt: 'You are a helpful AI assistant.',
-        userMessage: 'Hello! Please respond with just "GPT-5 working" to confirm connection.',
+        userMessage: 'Hello! Please respond with just "Kimi working" to confirm connection.',
       },
       {
-        name: 'Claude via AI Gateway',
+        name: 'Claude Sonnet 4.5 via AI Gateway',
         modelId: 'anthropic/claude-sonnet-4-5-20250929',
-        systemPrompt: 'You are a helpful AI assistant.', 
+        systemPrompt: 'You are a helpful AI assistant.',
         userMessage: 'Hello! Please respond with just "Claude working" to confirm connection.',
       },
     ];
 
-    gatewayTestCases.forEach(({ name, modelId, systemPrompt, userMessage }) => {
+    testCases.forEach(({ name, modelId, systemPrompt, userMessage }) => {
       it(`${name} should respond to API call`, async () => {
-        // Set API key as environment variable for AI Gateway
-      // AI Gateway expects AI_GATEWAY_API_KEY (not VITE_AI_GATEWAY_KEY)
         try {
-          // AI Gateway in SDK 6 uses model strings directly with unified auth
           const result = await streamText({
-            model: modelId, // Just model string, no createModel needed
+            model: modelId,
             system: systemPrompt,
             messages: [{ role: 'user', content: userMessage }],
           });

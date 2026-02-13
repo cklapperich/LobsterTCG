@@ -33,6 +33,25 @@ export default defineConfig(({ mode }) => {
             })
           },
         },
+        '/ai-gateway': {
+          target: 'https://ai-gateway.vercel.sh',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/ai-gateway/, ''),
+          configure: (proxy) => {
+            proxy.on('proxyReq', (proxyReq) => {
+              // Strip browser headers that trigger CORS preflight failures
+              proxyReq.removeHeader('origin')
+              proxyReq.removeHeader('referer')
+              proxyReq.removeHeader('cookie')
+              proxyReq.removeHeader('sec-ch-ua')
+              proxyReq.removeHeader('sec-ch-ua-mobile')
+              proxyReq.removeHeader('sec-ch-ua-platform')
+              proxyReq.removeHeader('sec-fetch-site')
+              proxyReq.removeHeader('sec-fetch-mode')
+              proxyReq.removeHeader('sec-fetch-dest')
+            })
+          },
+        },
       },
     },
   }

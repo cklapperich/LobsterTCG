@@ -1,9 +1,8 @@
 export { runAutonomousTurn, type AIConfig } from './run-turn';
 export {
   MODEL_OPTIONS,
-  createModel,
   DEFAULT_PLANNER,
-  getModelOptionById,
-  type AIProvider,
+  getModelOptionByLabel as getModelOptionById,
+  resolveModel,
   type ModelOption,
 } from './providers';
