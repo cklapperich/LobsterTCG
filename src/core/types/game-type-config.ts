@@ -24,4 +24,6 @@ export interface GameTypeConfig {
   onSetupComplete?: (state: GameState, executor: ActionExecutor) => PlayerIndex | void | Promise<PlayerIndex | void>;
   /** Called to inject test cards into the game state during init. */
   injectTestCards?: (state: GameState, testId: string, playerIndex: PlayerIndex) => void;
+  /** Filter key for loading user decks from Supabase (e.g. 'Pokemon'). */
+  tcgFilter?: string;
 }

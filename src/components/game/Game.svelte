@@ -25,7 +25,7 @@
   import { playSfx, playBgm, stopBgm, toggleMute, audioSettings } from '../../lib/audio.svelte';
   import { settings } from '../../lib/settings.svelte';
   import SettingsModal from './SettingsModal.svelte';
-  import { runAutonomousTurn, MODEL_OPTIONS, DEFAULT_PLANNER } from '../../ai';
+  import { runTurn } from '../../ai';
   import { contextMenuStore, openContextMenu, closeContextMenu as closeContextMenuStore } from './contextMenu.svelte';
   import { cardModalStore, openCardModal, closeCardModal as closeCardModalStore } from './cardModal.svelte';
 
@@ -37,11 +37,12 @@
     playmatImage?: string;
     aiModel?: string;
     aiMode?: 'autonomous' | 'pipeline';
+    plannerModel?: string;
     playerConfig?: PlayerConfig;
     onBackToMenu?: () => void;
   }
 
-  let { gameType, decks, testFlags = {}, playmatImage, aiModel, aiMode = 'autonomous', playerConfig = DEFAULT_CONFIG, onBackToMenu }: Props = $props();
+  let { gameType, decks, testFlags = {}, playmatImage, aiModel, aiMode = 'autonomous', plannerModel, playerConfig = DEFAULT_CONFIG, onBackToMenu }: Props = $props();
 
   // Convenience accessors for player decks
   const player1Deck = $derived(decks?.[0]?.deckList);
@@ -55,7 +56,7 @@
   const local = $derived(localPlayerIndex(playerConfig));
 
   // Resolve model config from selected model ID
-  const selectedModel = $derived(MODEL_OPTIONS.find(m => m.label === aiModel) ?? MODEL_OPTIONS[0]);
+
 
   // Plugin manager for warnings/hooks
   const pluginManager = new PluginManager<CardTemplate>();
@@ -531,7 +532,14 @@
     // may not enumerate all keys (e.g. rules[] on trainer cards).
     const snapshot = $state.snapshot(gameState);
     // Narrative: show AI perspective (opponent of local player)
-    const aiReadable = pluginManager.applyReadableStateModifier(toReadableState(snapshot, opponent(local)));
+    const aiIdx = opponent(local) as 0 | 1;
+    const oppIdx = aiIdx === 0 ? 1 : 0;
+    const debugOmniscient = new Set([
+      `player${aiIdx + 1}_deck`,
+      `player${oppIdx + 1}_hand`,
+    ]);
+    const aiReadable = pluginManager.applyReadableStateModifier(toReadableState(snapshot, aiIdx, debugOmniscient));
+    aiReadable.deckStrategy = decks?.[aiIdx]?.strategy;
     debugNarrative = pluginManager.formatReadableState(aiReadable);
     // JSON: show active player's perspective
     const jsonReadable = pluginManager.applyReadableStateModifier(toReadableState(snapshot, snapshot.activePlayer));
@@ -545,7 +553,14 @@
       getReadableState: (playerIndex) => {
         // Snapshot strips Svelte 5 proxy so Object.entries() enumerates all template fields
         const snapshot = $state.snapshot(gameState!);
-        const modified = pluginManager.applyReadableStateModifier(toReadableState(snapshot, playerIndex as 0 | 1));
+        const aiIdx = playerIndex as 0 | 1;
+        const oppIdx = aiIdx === 0 ? 1 : 0;
+        const omniscientZones = new Set([
+          `player${aiIdx + 1}_deck`,
+          `player${oppIdx + 1}_hand`,
+        ]);
+        const modified = pluginManager.applyReadableStateModifier(toReadableState(snapshot, aiIdx, omniscientZones));
+        modified.deckStrategy = decks?.[aiIdx]?.strategy;
         return pluginManager.formatReadableState(modified);
       },
       createExecutor,
@@ -580,13 +595,12 @@
     );
 
     try {
-      await runAutonomousTurn({
+      await runTurn({
         context: ctx,
         plugin,
-        model: selectedModel.modelId,
-        plannerModel: DEFAULT_PLANNER.modelId,
+        model: aiModel!,
+        plannerModel: plannerModel ?? aiModel!,
         aiMode,
-        deckStrategy: decks?.[currentPlayer]?.strategy,
         logging: true,
       });
     } catch (e) {

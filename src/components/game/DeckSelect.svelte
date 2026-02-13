@@ -8,6 +8,8 @@
   import { DEFAULT_CONFIG, type PlayerConfig } from './player-config';
   import GbcDropdown from './GbcDropdown.svelte';
   import { GAME_TYPES, DEFAULT_GAME_TYPE } from '../../game-types';
+  import { authState, signInWithGoogle, signOut } from '../../lib/auth.svelte';
+  import { loadDecksFromSupabase } from '../../lib/deckSync';
 
   interface DeckOption {
     id: string;
@@ -15,6 +17,7 @@
     deckList: DeckList;
     cardCount: number;
     strategy: string;
+    source: 'supabase' | 'file';
   }
 
   interface PlaymatOption {
@@ -65,17 +68,19 @@
     return { id: filename, name, url };
   });
 
+  let fileDecks = $state<DeckOption[]>([]);
+  let supabaseDecks = $state<DeckOption[]>([]);
+
   onMount(async () => {
-    await loadDecks();
+    await loadFileDecks();
   });
 
-  async function loadDecks() {
+  async function loadFileDecks() {
     if (!gameConfig?.needsDeckSelection) {
       loading = false;
       return;
     }
 
-    // Fetch deck manifest from public directory
     const basePath = `/${gameType}/decks`;
     let deckNames: string[];
     try {
@@ -90,7 +95,6 @@
 
     const options: DeckOption[] = [];
 
-    // Fetch each deck file + optional strategy file in parallel
     await Promise.all(deckNames.map(async (deckName) => {
       try {
         const encoded = encodeURIComponent(deckName);
@@ -117,29 +121,67 @@
           deckList,
           cardCount,
           strategy,
+          source: 'file',
         });
       } catch (e) {
         console.error(`Failed to load deck ${deckName}:`, e);
       }
     }));
 
-    deckOptions = options;
-    if (!player1Deck || !options.find(d => d.id === player1Deck)) {
-      player1Deck = options[0]?.id ?? '';
-    }
-    if (!player2Deck || !options.find(d => d.id === player2Deck)) {
-      player2Deck = options[0]?.id ?? '';
-    }
+    fileDecks = options;
     loading = false;
   }
 
-  // Re-load decks when game type changes
+  async function loadSupabaseDecks() {
+    const user = authState.user;
+    const tcgFilter = gameConfig?.tcgFilter;
+    if (!user || !tcgFilter) {
+      supabaseDecks = [];
+      return;
+    }
+
+    const rows = await loadDecksFromSupabase(user.id, tcgFilter);
+    supabaseDecks = rows.map(row => {
+      const cards = Object.entries(row.cards).map(([templateId, count]) => ({ templateId, count }));
+      const cardCount = cards.reduce((sum, c) => sum + c.count, 0);
+      return {
+        id: `sb-${row.id}`,
+        name: row.name,
+        deckList: { id: row.id, name: row.name, cards },
+        cardCount,
+        strategy: row.strategy,
+        source: 'supabase' as const,
+      };
+    });
+  }
+
+  // Merge supabase decks (top) + file decks (bottom)
   $effect(() => {
-    gameType; // Access to make this effect reactive
+    const merged = [...supabaseDecks, ...fileDecks];
+    deckOptions = merged;
+    if (!player1Deck || !merged.find(d => d.id === player1Deck)) {
+      player1Deck = merged[0]?.id ?? '';
+    }
+    if (!player2Deck || !merged.find(d => d.id === player2Deck)) {
+      player2Deck = merged[0]?.id ?? '';
+    }
+  });
+
+  // Re-load file decks when game type changes
+  $effect(() => {
+    gameType;
     loading = true;
-    deckOptions = [];
+    fileDecks = [];
+    supabaseDecks = [];
     testFlags = {};
-    loadDecks();
+    loadFileDecks();
+    loadSupabaseDecks();
+  });
+
+  // Re-load supabase decks when auth state changes
+  $effect(() => {
+    authState.user;
+    loadSupabaseDecks();
   });
 
   function handleStartGame() {
@@ -206,6 +248,27 @@
       {gameConfig?.name ?? 'LOBSTER TCG'}
     </h1>
 
+    <!-- Auth Section -->
+    <div class="auth-section mb-6 text-center">
+      {#if authState.loading}
+        <span class="text-gbc-light text-[0.5rem]">...</span>
+      {:else if authState.user}
+        <div class="flex items-center justify-center gap-3 text-[0.5rem]">
+          <span class="text-gbc-green">{authState.user.email}</span>
+          <button class="text-gbc-light/60 hover:text-gbc-light underline cursor-pointer bg-transparent border-none font-retro text-[0.5rem]" onclick={() => signOut()}>
+            SIGN OUT
+          </button>
+        </div>
+      {:else}
+        <button
+          class="gbc-btn text-[0.5rem] py-1.5 px-4"
+          onclick={() => signInWithGoogle()}
+        >
+          SIGN IN WITH GOOGLE
+        </button>
+      {/if}
+    </div>
+
     <!-- Game Type Selection -->
     <div class="game-type-select mb-6">
       <div class="player-label text-gbc-green text-[0.6rem] mb-3 flex items-center gap-2">
@@ -232,7 +295,7 @@
               PLAYER 1 DECK
             </div>
             <GbcDropdown
-              options={deckOptions.map(d => ({ value: d.id, label: `${d.name} (${d.cardCount} cards)` }))}
+              options={deckOptions.map(d => ({ value: d.id, label: `${d.source === 'supabase' ? '★ ' : ''}${d.name} (${d.cardCount} cards)` }))}
               bind:value={player1Deck}
             />
           </div>
@@ -244,7 +307,7 @@
               PLAYER 2 DECK
             </div>
             <GbcDropdown
-              options={deckOptions.map(d => ({ value: d.id, label: `${d.name} (${d.cardCount} cards)` }))}
+              options={deckOptions.map(d => ({ value: d.id, label: `${d.source === 'supabase' ? '★ ' : ''}${d.name} (${d.cardCount} cards)` }))}
               bind:value={player2Deck}
             />
           </div>
