@@ -108,9 +108,13 @@
     onCancel();
   }
 
+  let codeCopied = $state(false);
+
   function copyCode() {
     navigator.clipboard.writeText(roomCode).catch(() => {});
     playSfx('cursor');
+    codeCopied = true;
+    setTimeout(() => { codeCopied = false; }, 2000);
   }
 
   const statusLabel = $derived.by(() => {
@@ -140,9 +144,9 @@
       <div class="flex mb-6 gap-2">
         <button
           class="flex-1 gbc-btn text-[0.6rem] py-2 {tab === 'host' ? '' : 'opacity-50'}"
-          onclick={() => { tab = 'host'; copyCode(); }}
+          onclick={() => { tab = 'host'; playSfx('cursor'); }}
         >
-          HOST + COPY
+          HOST
         </button>
         <button
           class="flex-1 gbc-btn text-[0.6rem] py-2 {tab === 'join' ? '' : 'opacity-50'}"
@@ -156,12 +160,12 @@
         <div class="flex flex-col gap-4">
           <div class="player-label text-gbc-green text-[0.55rem] mb-1">ROOM CODE</div>
           <div class="flex items-center gap-3">
-            <div class="code-display flex-1 text-center text-gbc-yellow text-lg tracking-[0.5em] py-3 px-4 border-2 border-gbc-border bg-gbc-cream/10">
+            <button class="code-display flex-1 text-center text-gbc-yellow text-lg tracking-[0.5em] py-3 px-4 border-2 border-gbc-border bg-gbc-cream/10 cursor-pointer font-retro" onclick={copyCode}>
               {roomCode}
-            </div>
+            </button>
           </div>
-          <p class="text-gbc-light/70 text-[0.45rem] text-center">
-            Share this code with your opponent. They enter it in JOIN tab.
+          <p class="text-[0.45rem] text-center {codeCopied ? 'text-gbc-yellow' : 'text-gbc-light/70'}">
+            {codeCopied ? 'Code copied to clipboard!' : 'Click code to copy. Share with opponent — they enter it in JOIN tab.'}
           </p>
           <button
             class="gbc-btn text-[0.6rem] py-3 mt-2"
