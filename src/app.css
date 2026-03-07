@@ -87,9 +87,7 @@
     @apply opacity-70 cursor-not-allowed;
   }
 
-  .zone-label {
-    @apply text-gbc-yellow text-[0.5rem] text-center mb-4 py-1 px-2 bg-gbc-border inline-block relative left-1/2 -translate-x-1/2;
-  }
+  /* zone-label styles are in Zone.svelte (scoped) */
 
   .size-btn {
     @apply font-retro text-base w-8 h-8 p-0 bg-gbc-blue text-gbc-cream border-[0.1875rem] border-gbc-border cursor-pointer transition-all duration-100;

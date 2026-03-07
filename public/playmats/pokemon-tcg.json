@@ -45,7 +45,7 @@
       { "id": "p1_lost_zone", "zoneId": "lost_zone", "position": { "row": 2, "col": 8 }, "label": "Lost Zone", "stackDirection": "none", "group": "p1_graveyard", "groupRow": 0, "groupCol": 0 },
       { "id": "p1_discard", "zoneId": "discard", "position": { "row": 2, "col": 8 }, "label": "Discard", "stackDirection": "none", "showCount": true, "group": "p1_graveyard", "groupRow": 1, "groupCol": 0 },
 
-      { "id": "p1_hand", "zoneId": "hand", "position": { "row": 3, "col": 0, "colSpan": 9 }, "label": "Hand", "stackDirection": "fan" }
+      { "id": "p1_hand", "zoneId": "hand", "position": { "row": 3, "col": 0, "colSpan": 9 }, "stackDirection": "fan" }
     ],
     "groups": [
       { "id": "p1_field", "name": "Player 1 Field", "slotIds": ["p1_deck", "p1_discard", "p1_active", "p1_bench_1", "p1_bench_2", "p1_bench_3", "p1_bench_4", "p1_bench_5", "p1_lost_zone", "p1_prizes_1", "p1_prizes_2", "p1_prizes_3", "p1_prizes_4", "p1_prizes_5", "p1_prizes_6", "p1_hand"] },

@@ -50,16 +50,21 @@
     if (!gridEl) return;
     const parent = gridEl.parentElement;
     if (!parent) return;
-    // Reset zoom to measure natural size
+    // Reset zoom and shrink-wrap height to measure natural content size
     gridEl.style.zoom = '1';
-    const naturalHeight = gridEl.scrollHeight;
-    const naturalWidth = gridEl.scrollWidth;
-    const availableHeight = parent.clientHeight;
-    const availableWidth = parent.clientWidth;
-    if (naturalHeight > 0 && availableHeight > 0) {
-      const zoomH = availableHeight / naturalHeight;
-      const zoomW = availableWidth / naturalWidth;
-      zoomFactor = Math.min(zoomH, zoomW);
+    gridEl.style.height = 'fit-content';
+    gridEl.style.width = 'fit-content';
+    void gridEl.offsetHeight; // force reflow
+    const naturalRect = gridEl.getBoundingClientRect();
+    const parentRect = parent.getBoundingClientRect();
+    // Restore auto sizing
+    gridEl.style.height = '';
+    gridEl.style.width = '';
+    if (naturalRect.height > 0 && parentRect.height > 0) {
+      const zoomH = parentRect.height / naturalRect.height;
+      const zoomW = parentRect.width / naturalRect.width;
+      // Tiny nudge to eliminate sub-pixel rounding slivers
+      zoomFactor = Math.min(zoomH, zoomW) * 1.002;
     }
     gridEl.style.zoom = `${zoomFactor}`;
   }
@@ -316,7 +321,6 @@
     display: grid;
     column-gap: 0;
     row-gap: 0;
-    padding: 0.5rem;
   }
 
   .grid-slot {
@@ -416,7 +420,6 @@
     .playmat-grid {
       column-gap: 0;
       row-gap: 0;
-      padding: 0.25rem;
     }
   }
 </style>

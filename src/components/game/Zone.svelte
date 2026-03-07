@@ -137,7 +137,7 @@
   ondrop={handleDrop}
   class:browsable={!!onBrowse && displayCards.length > 0}
 >
-  {#if slot.label}
+  {#if slot.label && (displayCards.length === 0 || slot.showCount)}
     <div class="zone-label">{label}{slot.showCount && zone.cards.length > 0 ? ` (${zone.cards.length})` : ''}</div>
   {/if}
   <div class="zone-content" class:fixed-size={fixedSize}>
@@ -167,11 +167,12 @@
   @reference "../../app.css";
 
   .zone {
-    @apply bg-gbc-dark-green border-4 border-gbc-border px-2 pb-2 pt-0 rounded flex flex-col items-center;
+    @apply bg-gbc-dark-green border-4 border-gbc-border px-2 py-2 rounded flex flex-col items-center;
     box-shadow:
       inset 0.125rem 0.125rem 0 rgba(255,255,255,0.1),
       inset -0.125rem -0.125rem 0 rgba(0,0,0,0.2);
     transition: border-color 0.15s, box-shadow 0.15s;
+    position: relative;
   }
 
   .zone.browsable {
@@ -187,10 +188,16 @@
   }
 
   .zone-label {
-    @apply text-gbc-yellow text-[0.8rem] text-center mb-1 py-0.5 px-1 bg-gbc-border;
+    @apply text-gbc-yellow text-[0.7rem] text-center py-0.5 px-1.5 bg-gbc-border rounded-sm;
     cursor: context-menu;
-    position: relative;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
     z-index: 100;
+    opacity: 0.85;
+    pointer-events: auto;
+    white-space: nowrap;
   }
 
   .zone-content {
