@@ -29,28 +29,20 @@
     same with the hand, need a perma-reveal for the hand
 
     6 space saving idea: dont show evoultion cards peeking through from beneath a stack
-    this requires a hook for pokemon specific stack logic?? ugh!
+    this requires a hook for pokemon specific stack logic.
 
     7 add a pokemon plugin hook for stadium auto-discard in stadium zone
 
-
-    8 VERY difficult to place cards under the deck right now as a human!!
-
     9 Playing stadiums doesnt read the stadium text out loud into the chatlog - needed?
-
-    14. Really big Pop-up with pretty text, a sound effect, and the card text description whenever oponnent declares an attack
-
-    17. add a little buzzing noise for normally-illegal stuff, unless it comes from staging
-
-    18. re-add the staging cards in staging area reminder to prompt and to the pre-hooks in pokemon.ts
 
     19. Executor needs to use parallel tool calls
 
-    20. remove autonomous agent?
-
     22. Ai doesnt have access to hand knowledge
-    1. add a cheating mode so it can see your hand?
-    2. or somehow make AI aware of whats in oponnents hand after a search like a timer ball
+    a. add a cheating mode so it can see your hand?
+   b. or somehow make AI aware of whats in oponnents hand after a search like a timer ball
 
 
     23. Auto-deck-strategy-generator. could probably just use a search engine, partially.
+
+    24. SFX should be data-driven by action type at a single point. createExecutor's sfxMap is the right idea — it just
+    only exists for AI calls. If tryAction itself used that map, you'd never forget to add SFX again.

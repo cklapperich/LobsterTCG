@@ -1,25 +1,26 @@
-import { createGateway } from 'ai';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 
-// AI Gateway for Anthropic models (proxied through Vite to avoid CORS)
-const gateway = createGateway({
-  baseURL: '/ai-gateway/v3/ai',
-  apiKey: import.meta.env.VITE_AI_GATEWAY_KEY,
-});
+const STORAGE_KEY = 'lobster-tcg-settings';
 
-// OpenRouter for GLM-5, Kimi K2.5, etc.
-const openrouter = createOpenRouter({
-  apiKey: import.meta.env.VITE_OPENROUTER_API_KEY,
-});
+function getOpenRouterKey(): string {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed.openRouterApiKey) return parsed.openRouterApiKey;
+    }
+  } catch {
+    // ignore
+  }
+  return import.meta.env.VITE_OPENROUTER_API_KEY ?? '';
+}
 
 /**
- * Resolve a model ID into a LanguageModel.
- * Anthropic models route through AI Gateway; others through OpenRouter.
+ * Resolve a model ID into a LanguageModel via OpenRouter.
+ * Reads the API key from localStorage at call time, falling back to env var.
  */
 export function resolveModel(modelId: string) {
-  if (modelId.startsWith('anthropic/')) {
-    return gateway(modelId as any);
-  }
+  const openrouter = createOpenRouter({ apiKey: getOpenRouterKey() });
   return openrouter(modelId, {
     extraBody: { provider: { sort: 'throughput' } },
   });

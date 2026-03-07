@@ -35,6 +35,10 @@
   function handleSplashDurationChange(e: Event) {
     settings.splashDuration = (e.target as HTMLInputElement).valueAsNumber;
   }
+
+  function handleOpenRouterKeyChange(e: Event) {
+    settings.openRouterApiKey = (e.target as HTMLInputElement).value;
+  }
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -42,18 +46,38 @@
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div class="settings-panel gbc-panel" onclick={(e) => e.stopPropagation()} onkeydown={() => {}} role="dialog" tabindex="-1">
     <!-- Header -->
-    <div class="flex items-center justify-between py-1 px-2 bg-gbc-border">
-      <span class="text-gbc-yellow text-[0.55rem] font-retro tracking-wide">SETTINGS</span>
-      <button class="gbc-btn text-[0.45rem] py-0.5 px-2" onclick={onClose}>X</button>
+    <div class="flex items-center justify-between py-2 px-4 bg-gbc-border">
+      <span class="text-gbc-yellow text-sm font-retro tracking-wide">SETTINGS</span>
+      <button class="gbc-btn text-xs py-1 px-3" onclick={onClose}>X</button>
     </div>
 
     <!-- Body -->
-    <div class="p-3 flex flex-col gap-4">
+    <div class="p-5 flex flex-col gap-5">
+      <!-- API Key -->
+      <div class="flex flex-col gap-1.5">
+        <div class="text-gbc-yellow text-sm font-retro">OPENROUTER API KEY</div>
+        <div class="text-gbc-light/60 text-xs font-retro leading-relaxed">
+          Required for AI opponents. Get a key at <span class="text-gbc-green">openrouter.ai</span>.
+        </div>
+        <input
+          type="password"
+          value={settings.openRouterApiKey}
+          oninput={handleOpenRouterKeyChange}
+          placeholder="sk-or-..."
+          class="gbc-input"
+        />
+        {#if settings.openRouterApiKey}
+          <span class="text-gbc-green text-xs font-retro mt-0.5">✓ KEY SET</span>
+        {/if}
+      </div>
+
+      <hr class="border-gbc-border" />
+
       <!-- SFX Volume -->
-      <div class="flex flex-col gap-1">
+      <div class="flex flex-col gap-1.5">
         <div class="flex items-center justify-between">
-          <span class="text-gbc-green text-[0.5rem] font-retro">SFX VOLUME</span>
-          <span class="text-gbc-yellow text-[0.5rem] font-retro">{Math.round(settings.sfxVolume * 100)}%</span>
+          <span class="text-gbc-green text-sm font-retro">SFX VOLUME</span>
+          <span class="text-gbc-yellow text-sm font-retro">{Math.round(settings.sfxVolume * 100)}%</span>
         </div>
         <input
           type="range"
@@ -67,10 +91,10 @@
       </div>
 
       <!-- BGM Volume -->
-      <div class="flex flex-col gap-1">
+      <div class="flex flex-col gap-1.5">
         <div class="flex items-center justify-between">
-          <span class="text-gbc-green text-[0.5rem] font-retro">BGM VOLUME</span>
-          <span class="text-gbc-yellow text-[0.5rem] font-retro">{Math.round(settings.bgmVolume * 100)}%</span>
+          <span class="text-gbc-green text-sm font-retro">BGM VOLUME</span>
+          <span class="text-gbc-yellow text-sm font-retro">{Math.round(settings.bgmVolume * 100)}%</span>
         </div>
         <input
           type="range"
@@ -83,38 +107,38 @@
       </div>
 
       <!-- Search to Hand -->
-      <label class="flex items-center gap-2 cursor-pointer">
+      <label class="flex items-center gap-3 cursor-pointer">
         <input
           type="checkbox"
           checked={settings.searchToHand}
           onchange={handleToggle}
           class="gbc-check"
         />
-        <div class="flex flex-col">
-          <span class="text-gbc-green text-[0.5rem] font-retro">SEARCH TO HAND</span>
-          <span class="text-gbc-light/60 text-[0.4rem] font-retro">Send searched cards to hand instead of staging</span>
+        <div class="flex flex-col gap-0.5">
+          <span class="text-gbc-green text-sm font-retro">SEARCH TO HAND</span>
+          <span class="text-gbc-light/60 text-xs font-retro">Send searched cards to hand instead of staging</span>
         </div>
       </label>
 
       <!-- Double-click deck to draw -->
-      <label class="flex items-center gap-2 cursor-pointer">
+      <label class="flex items-center gap-3 cursor-pointer">
         <input
           type="checkbox"
           checked={settings.dblClickDeckToDraw}
           onchange={handleDblClickDeckToggle}
           class="gbc-check"
         />
-        <div class="flex flex-col">
-          <span class="text-gbc-green text-[0.5rem] font-retro">DOUBLE-CLICK DECK TO DRAW</span>
-          <span class="text-gbc-light/60 text-[0.4rem] font-retro">Double-clicking your deck draws a card instead of flipping it</span>
+        <div class="flex flex-col gap-0.5">
+          <span class="text-gbc-green text-sm font-retro">DOUBLE-CLICK DECK TO DRAW</span>
+          <span class="text-gbc-light/60 text-xs font-retro">Double-clicking your deck draws a card instead of flipping it</span>
         </div>
       </label>
 
       <!-- Splash duration -->
-      <div class="flex flex-col gap-1">
+      <div class="flex flex-col gap-1.5">
         <div class="flex items-center justify-between">
-          <span class="text-gbc-green text-[0.5rem] font-retro">SPLASH DURATION</span>
-          <span class="text-gbc-yellow text-[0.5rem] font-retro">{settings.splashDuration}ms</span>
+          <span class="text-gbc-green text-sm font-retro">SPLASH DURATION</span>
+          <span class="text-gbc-yellow text-sm font-retro">{settings.splashDuration}ms</span>
         </div>
         <input
           type="range"
@@ -126,11 +150,12 @@
           class="gbc-slider"
         />
       </div>
+
     </div>
 
     <!-- Footer -->
-    <div class="p-3 pt-0 flex justify-center">
-      <button class="gbc-btn text-[0.55rem] py-1.5 px-6" onclick={onClose}>DONE</button>
+    <div class="p-5 pt-0 flex justify-center">
+      <button class="gbc-btn text-sm py-2 px-8" onclick={onClose}>DONE</button>
     </div>
   </div>
 </div>
@@ -144,33 +169,33 @@
   }
 
   .settings-panel {
-    @apply w-80;
+    @apply w-[28rem];
   }
 
   .gbc-slider {
-    @apply w-full h-3 appearance-none cursor-pointer rounded-none;
+    @apply w-full h-4 appearance-none cursor-pointer rounded-none;
     background: var(--color-gbc-border);
   }
 
   .gbc-slider::-webkit-slider-thumb {
-    @apply appearance-none w-4 h-4 cursor-pointer;
+    @apply appearance-none w-5 h-5 cursor-pointer;
     background: var(--color-gbc-green);
     border: 2px solid var(--color-gbc-border);
   }
 
   .gbc-slider::-moz-range-thumb {
-    @apply w-4 h-4 cursor-pointer rounded-none border-none;
+    @apply w-5 h-5 cursor-pointer rounded-none border-none;
     background: var(--color-gbc-green);
     border: 2px solid var(--color-gbc-border);
   }
 
   .gbc-slider::-moz-range-track {
     background: var(--color-gbc-border);
-    height: 0.75rem;
+    height: 1rem;
   }
 
   .gbc-check {
-    @apply appearance-none w-4 h-4 shrink-0 cursor-pointer;
+    @apply appearance-none w-5 h-5 shrink-0 cursor-pointer;
     border: 2px solid var(--color-gbc-border);
     background: var(--color-gbc-cream);
   }
@@ -178,5 +203,20 @@
   .gbc-check:checked {
     background: var(--color-gbc-green);
     box-shadow: inset 0.125rem 0.125rem 0 rgba(0, 0, 0, 0.2);
+  }
+
+  .gbc-input {
+    @apply w-full text-xs font-retro px-3 py-2 rounded-none outline-none;
+    background: var(--color-gbc-cream);
+    border: 2px solid var(--color-gbc-border);
+    color: var(--color-gbc-dark);
+  }
+
+  .gbc-input:focus {
+    border-color: var(--color-gbc-green);
+  }
+
+  .gbc-input::placeholder {
+    color: var(--color-gbc-border);
   }
 </style>

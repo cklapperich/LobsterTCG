@@ -6,6 +6,7 @@ interface Settings {
   searchToHand: boolean;
   dblClickDeckToDraw: boolean;
   splashDuration: number;
+  openRouterApiKey: string;
 }
 
 const DEFAULTS: Settings = {
@@ -14,6 +15,7 @@ const DEFAULTS: Settings = {
   searchToHand: false,
   dblClickDeckToDraw: false,
   splashDuration: 1500,
+  openRouterApiKey: '',
 };
 
 function loadSettings(): Settings {

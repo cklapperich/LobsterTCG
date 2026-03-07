@@ -524,8 +524,11 @@
     const activePlayer = gameState.activePlayer;
 
     if (settings.dblClickDeckToDraw && zone.key === `player${local + 1}_deck`) {
-      tryAction(draw(local, 1));
-      addLog(`Drew a card`);
+      const blocked = tryAction(draw(local, 1));
+      if (!blocked) {
+        playSfx('cardDrop');
+        addLog(`Drew a card`);
+      }
       return;
     }
 
