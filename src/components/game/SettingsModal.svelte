@@ -26,6 +26,11 @@
     settings.searchToHand = !settings.searchToHand;
     playSfx('cursor');
   }
+
+  function handleDblClickDeckToggle() {
+    settings.dblClickDeckToDraw = !settings.dblClickDeckToDraw;
+    playSfx('cursor');
+  }
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -84,6 +89,20 @@
         <div class="flex flex-col">
           <span class="text-gbc-green text-[0.5rem] font-retro">SEARCH TO HAND</span>
           <span class="text-gbc-light/60 text-[0.4rem] font-retro">Send searched cards to hand instead of staging</span>
+        </div>
+      </label>
+
+      <!-- Double-click deck to draw -->
+      <label class="flex items-center gap-2 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={settings.dblClickDeckToDraw}
+          onchange={handleDblClickDeckToggle}
+          class="gbc-check"
+        />
+        <div class="flex flex-col">
+          <span class="text-gbc-green text-[0.5rem] font-retro">DOUBLE-CLICK DECK TO DRAW</span>
+          <span class="text-gbc-light/60 text-[0.4rem] font-retro">Double-clicking your deck draws a card instead of flipping it</span>
         </div>
       </label>
     </div>

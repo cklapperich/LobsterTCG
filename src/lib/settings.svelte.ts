@@ -4,12 +4,14 @@ interface Settings {
   sfxVolume: number;
   bgmVolume: number;
   searchToHand: boolean;
+  dblClickDeckToDraw: boolean;
 }
 
 const DEFAULTS: Settings = {
   sfxVolume: 0.5,
   bgmVolume: 0.5,
   searchToHand: false,
+  dblClickDeckToDraw: false,
 };
 
 function loadSettings(): Settings {

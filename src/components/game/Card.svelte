@@ -21,6 +21,7 @@
     applyDisplayRotation?: boolean;
     // For playing cards without images - render functions
     renderFace?: (template: CardTemplate) => { rank?: string; suit?: string; color?: string };
+    viewingPlayer?: 0 | 1;
     onPreview?: (card: CardInstance<CardTemplate>) => void;
     onToggleVisibility?: (cardInstanceId: string) => void;
     onCardDrop?: (droppedCardId: string, targetCardId: string, targetIndex: number) => void;
@@ -36,6 +37,7 @@
     cardBack,
     counterDefinitions = [],
     applyDisplayRotation = false,
+    viewingPlayer = 0,
     renderFace,
     onPreview,
     onToggleVisibility,
@@ -52,7 +54,7 @@
   let isDragOver = $state(false);
   let isCounterDragOver = $state(false);
 
-  const isFaceUp = $derived(card.visibility[0]);
+  const isFaceUp = $derived(card.visibility[viewingPlayer]);
   const template = $derived(card.template);
 
   // Get render data if renderFace provided, otherwise use template.imageUrl
@@ -210,7 +212,7 @@
   ondragend={handleDragEnd}
   ondragover={(e) => { handleDragOver(e); handleCounterDragOver(e); }}
   ondragleave={() => { handleDragLeave(); handleCounterDragLeave(); }}
-  ondrop={(e) => { handleDrop(e); handleCounterDrop(e); }}
+  ondrop={(e) => { if (counterDragStore.current) { handleCounterDrop(e); } else { handleDrop(e); } }}
   onclick={handleClick}
   ondblclick={handleDoubleClick}
 >

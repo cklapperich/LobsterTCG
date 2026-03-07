@@ -37,9 +37,10 @@
       plannerModel?: string;
       playerConfig: PlayerConfig;
     }) => void;
+    onPlayOnline?: (opts: { deck: DeckSelection; gameType: string; playmatImage: string }) => void;
   }
 
-  let { onStartGame }: Props = $props();
+  let { onStartGame, onPlayOnline }: Props = $props();
 
   let gameType = $state<string>(DEFAULT_GAME_TYPE);
   let loading = $state(true);
@@ -229,6 +230,23 @@
   const canStart = $derived(
     gameConfig && (!gameConfig.needsDeckSelection || (player1Deck && player2Deck))
   );
+
+  const canPlayOnline = $derived(
+    onPlayOnline && gameConfig?.needsDeckSelection && !!player1Deck
+  );
+
+  function handlePlayOnline() {
+    if (!gameConfig) return;
+    const deck1 = deckOptions.find((d) => d.id === player1Deck);
+    if (!deck1) return;
+    playSfx('confirm');
+    const selectedPlaymat = playmatOptions.find(p => p.id === playmatImage);
+    onPlayOnline?.({
+      deck: { deckList: deck1.deckList, strategy: deck1.strategy },
+      gameType,
+      playmatImage: selectedPlaymat?.url ?? '',
+    });
+  }
 </script>
 
 <div class="deck-select-container font-retro bg-gbc-bg min-h-screen w-screen flex flex-col items-center justify-center p-4 box-border relative">
@@ -382,7 +400,7 @@
         </div>
       {/if}
 
-      <div class="flex justify-center">
+      <div class="flex justify-center gap-4 flex-wrap">
         <button
           class="gbc-btn text-sm py-3 px-8 start-btn"
           onclick={handleStartGame}
@@ -390,6 +408,14 @@
         >
           START GAME
         </button>
+        {#if canPlayOnline}
+          <button
+            class="gbc-btn text-sm py-3 px-8 online-btn"
+            onclick={handlePlayOnline}
+          >
+            PLAY ONLINE
+          </button>
+        {/if}
       </div>
     {/if}
   </div>
@@ -451,6 +477,11 @@
 
   .start-btn:hover:not(:disabled) {
     animation: none;
+  }
+
+  .online-btn {
+    @apply tracking-wider;
+    background-color: var(--color-gbc-blue);
   }
 
   @keyframes pulse-glow {

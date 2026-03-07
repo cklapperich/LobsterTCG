@@ -261,6 +261,24 @@ function shuffleArray<T>(array: T[]): void {
   }
 }
 
+// Mulberry32 seeded RNG — deterministic Fisher-Yates for P2P sync
+function mulberry32(seed: number): () => number {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6D2B79F5) >>> 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function seededShuffle<T>(array: T[], rng: () => number): void {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+}
+
 // ============================================================================
 // Counter Position Locking
 // ============================================================================
@@ -473,7 +491,11 @@ function executeShuffle<T extends CardTemplate>(
     card.visibility = vis;
   }
 
-  shuffleArray(zone.cards);
+  if (action.seed !== undefined) {
+    seededShuffle(zone.cards, mulberry32(action.seed));
+  } else {
+    shuffleArray(zone.cards);
+  }
   consolidateCountersToTop(zone);
 }
 

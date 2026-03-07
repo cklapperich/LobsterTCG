@@ -9,6 +9,7 @@
     slot: PlaymatSlot;
     cardBack?: string;
     counterDefinitions?: CounterDefinition[];
+    viewingPlayer?: 0 | 1;
     renderFace?: (template: CardTemplate) => { rank?: string; suit?: string; color?: string };
     onDrop?: (cardInstanceId: string, toZoneId: string, position?: number) => void;
     onPreview?: (card: CardInstance<CardTemplate>) => void;
@@ -23,6 +24,7 @@
     slot,
     cardBack,
     counterDefinitions = [],
+    viewingPlayer = 0,
     renderFace,
     onDrop,
     onPreview,
@@ -128,6 +130,7 @@
 <div
   class="zone"
   class:drag-over={isDragOver}
+  class:top-drop-pad={slot.topDropPad}
   role="region"
   aria-label={label}
   bind:this={zoneEl}
@@ -151,6 +154,7 @@
         zoneKey={zone.key}
         {cardBack}
         {counterDefinitions}
+        {viewingPlayer}
         {renderFace}
         {onPreview}
         {onToggleVisibility}
@@ -177,6 +181,10 @@
 
   .zone.browsable {
     @apply cursor-pointer;
+  }
+
+  .zone.top-drop-pad {
+    padding-top: 1.5rem;
   }
 
   .zone.drag-over {

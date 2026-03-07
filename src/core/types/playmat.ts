@@ -25,6 +25,7 @@ export interface PlaymatSlot {
   align?: 'start' | 'end' | 'center'; // Vertical alignment within grid cell (overrides row default)
   showCount?: boolean; // Show card count in zone label, e.g. "Deck (47)"
   renderMode?: 'normal' | 'button'; // Button mode renders compact clickable button instead of full zone
+  topDropPad?: boolean; // Adds extra padding above cards so there's a drop target area at the top of the zone
 }
 
 // Group related slots together (e.g., all foundations)

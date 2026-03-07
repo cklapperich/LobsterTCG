@@ -42,6 +42,7 @@ export interface PlaceOnZoneAction extends BaseAction {
 export interface ShuffleAction extends BaseAction {
   type: typeof ACTION_TYPES.SHUFFLE;
   zoneId: string;    // Zone key (e.g., "player1_deck")
+  seed?: number;     // Optional RNG seed for deterministic shuffle (P2P games)
 }
 
 export interface SearchZoneAction extends BaseAction {

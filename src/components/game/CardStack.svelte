@@ -10,6 +10,7 @@
     zoneKey: string;
     cardBack?: string;
     counterDefinitions?: CounterDefinition[];
+    viewingPlayer?: 0 | 1;
     renderFace?: (template: CardTemplate) => { rank?: string; suit?: string; color?: string };
     onPreview?: (card: CardInstance<CardTemplate>) => void;
     onToggleVisibility?: (cardInstanceId: string) => void;
@@ -25,6 +26,7 @@
     zoneKey,
     cardBack,
     counterDefinitions = [],
+    viewingPlayer = 0,
     renderFace,
     onPreview,
     onToggleVisibility,
@@ -212,6 +214,7 @@
           isDropTarget={true}
           {cardBack}
           {counterDefinitions}
+          {viewingPlayer}
           {renderFace}
           {onPreview}
           {onToggleVisibility}
@@ -251,6 +254,7 @@
           isDropTarget={true}
           {cardBack}
           {counterDefinitions}
+          {viewingPlayer}
           {renderFace}
           {applyDisplayRotation}
           {onPreview}
@@ -272,6 +276,7 @@
           isDropTarget={true}
           {cardBack}
           {counterDefinitions}
+          {viewingPlayer}
           {renderFace}
           {applyDisplayRotation}
           {onPreview}
@@ -303,6 +308,7 @@
           isDropTarget={true}
           {cardBack}
           {counterDefinitions}
+          {viewingPlayer}
           {renderFace}
           {applyDisplayRotation}
           {onPreview}

@@ -12,6 +12,7 @@ const SFX_PATHS = {
   coinTails: '/sfx/coin_toss_tails.mp3',
   turnStart: '/sfx/unused_05.mp3',
   decisionRequested: '/sfx/question_mark.mp3',
+  error: '/sfx/denied.mp3',
 } as const;
 
 type SfxKey = keyof typeof SFX_PATHS;
@@ -27,7 +28,7 @@ const BATTLE_THEMES = [
 ];
 
 // BGM plays quieter than SFX at the same slider position
-const BGM_GAIN = 0.7;
+const BGM_GAIN = 0.1;
 
 // Audio element cache for preloading
 const audioCache = new Map<SfxKey, HTMLAudioElement>();
@@ -139,4 +140,5 @@ if (typeof window !== 'undefined') {
   preload('coinTails');
   preload('turnStart');
   preload('decisionRequested');
+  preload('error');
 }

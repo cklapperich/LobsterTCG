@@ -7,6 +7,7 @@
   interface Props {
     playmat: Playmat;
     gameState: GameState<CardTemplate>;
+    localPlayer?: 0 | 1;
     cardBack?: string;
     counterDefinitions?: CounterDefinition[];
     renderFace?: (template: CardTemplate) => { rank?: string; suit?: string; color?: string };
@@ -22,6 +23,7 @@
   let {
     playmat,
     gameState,
+    localPlayer = 0,
     cardBack,
     counterDefinitions = [],
     renderFace,
@@ -149,19 +151,25 @@
     return { start: min + 1, end: max + 2 };
   });
 
+  // When viewing as player 1 (P2), swap which player's zones appear in each slot
+  // so the local player's zones always render at the bottom of the board.
+  function perspectiveIndex(rawIndex: 0 | 1): 0 | 1 {
+    return localPlayer === 1 ? ((1 - rawIndex) as 0 | 1) : rawIndex;
+  }
+
   // Get zone by slot - shared zones use bare key, per-player zones use player{N}_ prefix
   function getZone(slot: { id: string; zoneId: string }) {
     const sharedZone = gameState.zones[slot.zoneId];
     if (sharedZone) return sharedZone;
 
-    const playerIndex = slotToPlayer[slot.id] ?? 0;
+    const playerIndex = perspectiveIndex(slotToPlayer[slot.id] ?? 0);
     const zoneKey = `player${playerIndex + 1}_${slot.zoneId}`;
     return gameState.zones[zoneKey];
   }
 
   function getZoneKey(slot: { id: string; zoneId: string }): string {
     if (gameState.zones[slot.zoneId]) return slot.zoneId;
-    const playerIndex = slotToPlayer[slot.id] ?? 0;
+    const playerIndex = perspectiveIndex(slotToPlayer[slot.id] ?? 0);
     return `player${playerIndex + 1}_${slot.zoneId}`;
   }
 </script>
@@ -239,6 +247,7 @@
             {slot}
             {cardBack}
             {counterDefinitions}
+            viewingPlayer={localPlayer}
             {renderFace}
             {onDrop}
             {onPreview}

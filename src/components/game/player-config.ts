@@ -21,6 +21,10 @@ export function isAI(cfg: PlayerConfig, i: PlayerIndex): boolean {
   return getRole(cfg, i) === 'ai';
 }
 
+export function isRemote(cfg: PlayerConfig, i: PlayerIndex): boolean {
+  return getRole(cfg, i) === 'remote';
+}
+
 export function localPlayerIndex(cfg: PlayerConfig): PlayerIndex {
   if (cfg.player0 === 'local') return 0;
   if (cfg.player1 === 'local') return 1;
