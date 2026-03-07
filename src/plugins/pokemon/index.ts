@@ -266,6 +266,7 @@ function getActionPanels(state: GameState<PokemonCardTemplate>, player: PlayerIn
       id: atk.name,
       label: atk.name,
       tooltip: atk.effect,
+      zoneKey: activeKey,
     };
   });
 
@@ -290,6 +291,7 @@ function getActionPanels(state: GameState<PokemonCardTemplate>, player: PlayerIn
         label: ability.name,
         sublabel: tmpl.name,
         tooltip: ability.effect,
+        zoneKey,
       });
     }
   }
@@ -313,6 +315,7 @@ function getActionPanels(state: GameState<PokemonCardTemplate>, player: PlayerIn
         id: 'view-stadium',
         label: stadiumTemplate?.name ?? 'Stadium Card',
         tooltip: 'Click to view stadium card details',
+        zoneKey: ZONE_IDS.STADIUM,
       }],
     });
   }

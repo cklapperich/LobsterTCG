@@ -1,7 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { ZoneConfig } from '../../core';
+  import type { ActionPanelButton } from '../../core/types/action-panel';
   import { ORIENTATIONS } from '../../core';
+  import { playSfx } from '../../lib/audio.svelte';
 
   interface Props {
     x: number;
@@ -9,6 +11,8 @@
     zoneName: string;
     cardCount: number;
     zoneConfig: ZoneConfig;
+    actionButtons?: (ActionPanelButton & { panelId: string })[];
+    onActionButtonClick?: (panelId: string, buttonId: string) => void;
     onShuffle: () => void;
     onPeekTop: (count: number) => void;
     onClearCounters?: () => void;
@@ -26,6 +30,8 @@
     zoneName,
     cardCount,
     zoneConfig,
+    actionButtons = [],
+    onActionButtonClick,
     onShuffle,
     onPeekTop,
     onClearCounters,
@@ -59,6 +65,12 @@
     onClose();
   }
 
+  function handleActionButton(panelId: string, buttonId: string) {
+    playSfx('confirm');
+    onActionButtonClick?.(panelId, buttonId);
+    onClose();
+  }
+
   onMount(() => {
     document.addEventListener('click', handleClickOutside);
     return () => {
@@ -75,6 +87,23 @@
   oncontextmenu={(e) => e.preventDefault()}
 >
   <div class="menu-header">{zoneName}</div>
+
+  {#if actionButtons.length > 0}
+    {#each actionButtons as btn (btn.id)}
+      <button
+        class="menu-item action-item"
+        disabled={btn.disabled}
+        title={btn.tooltip}
+        onclick={() => handleActionButton(btn.panelId, btn.id)}
+      >
+        <span>{btn.label}</span>
+        {#if btn.sublabel}
+          <span class="action-sublabel">{btn.sublabel}</span>
+        {/if}
+      </button>
+    {/each}
+    <div class="menu-divider"></div>
+  {/if}
 
   {#if cardCount > 0}
     <div class="peek-row">
@@ -138,7 +167,7 @@
     >
       <div class="menu-item has-submenu" class:open={activeSubmenu === 'rotate'}>
         <span>Rotate...</span>
-        <span class="arrow">▶</span>
+        <span class="arrow">&#9654;</span>
       </div>
 
       {#if activeSubmenu === 'rotate'}
@@ -174,6 +203,18 @@
     @apply hover:bg-gbc-border hover:text-gbc-yellow;
     @apply disabled:opacity-50 disabled:cursor-not-allowed;
     transition: background 0.1s, color 0.1s;
+  }
+
+  .menu-item.action-item {
+    @apply flex justify-between items-center gap-2;
+  }
+
+  .action-sublabel {
+    @apply text-[0.6rem] text-gbc-yellow;
+  }
+
+  .menu-divider {
+    @apply border-t border-gbc-border/50 my-1;
   }
 
   .menu-item.has-submenu {

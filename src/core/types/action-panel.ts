@@ -4,6 +4,7 @@ export interface ActionPanelButton {
   sublabel?: string;
   disabled?: boolean;
   tooltip?: string;
+  zoneKey?: string;
 }
 
 export interface ActionPanel {

@@ -10,7 +10,7 @@
   import CounterTray from './CounterTray.svelte';
   import CounterDragOverlay from './CounterDragOverlay.svelte';
   import CoinFlip from './CoinFlip.svelte';
-  import ActionPanelView from './ActionPanelView.svelte';
+  import type { ActionPanelButton } from '../../core/types/action-panel';
   import { dragStore, startPileDrag, updateDragPosition, endDrag, executeDrop, executeStackDrop } from './dragState.svelte';
   import { DEFAULT_CONFIG, isLocal, isAI, localPlayerIndex, opponent, playerFromZoneKey, isLocalZone, type PlayerConfig, type PlayerController } from './player-config';
   import { fromAIPerspective } from '../../plugins/pokemon/zone-perspective';
@@ -132,10 +132,20 @@
     gameState && plugin.getActionPanels ? plugin.getActionPanels(gameState, local) : []
   );
 
-  // Grid panels (attacks + abilities + stadium) vs sidebar panels
-  const GRID_PANEL_IDS = new Set(['stadium']);
-  const gridPanels = $derived(actionPanels.filter(p => GRID_PANEL_IDS.has(p.id)));
-  const sidebarPanels = $derived(actionPanels.filter(p => !GRID_PANEL_IDS.has(p.id)));
+  // Derive action buttons for context menu: filter by zoneKey
+  const contextMenuActionButtons = $derived.by(() => {
+    if (!contextMenu) return [];
+    const zoneKey = contextMenu.zoneKey;
+    const buttons: (ActionPanelButton & { panelId: string })[] = [];
+    for (const panel of actionPanels) {
+      for (const btn of panel.buttons) {
+        if (btn.zoneKey === zoneKey) {
+          buttons.push({ ...btn, panelId: panel.id });
+        }
+      }
+    }
+    return buttons;
+  });
 
   function handleActionPanelClick(panelId: string, buttonId: string) {
     if (!gameState || !plugin.onActionPanelClick || !canLocalAct) return;
@@ -158,7 +168,6 @@
 
   // Game log entries - derived from state.log (canonical source for AI agents)
   const logEntries = $derived(gameState?.log ?? []);
-  let logContainer = $state<HTMLDivElement | null>(null);
   let logInput = $state('');
 
   // Staging confirmation modal state
@@ -169,13 +178,6 @@
   let showRequestModal = $state(false);
   let requestInput = $state('');
   let requestInputEl = $state<HTMLInputElement | null>(null);
-
-  // Auto-scroll log to bottom when new entries are added
-  $effect(() => {
-    if (logEntries.length > 0 && logContainer) {
-      logContainer.scrollTop = logContainer.scrollHeight;
-    }
-  });
 
   // Announce turn start: SFX + log entry on any turn transition.
   // Dedup key prevents re-firing for the same turn.
@@ -884,7 +886,7 @@
   }
 </script>
 
-<div class="game-container font-retro bg-gbc-bg min-h-screen w-screen box-border relative overflow-auto">
+<div class="game-container font-retro bg-gbc-bg h-screen w-screen box-border relative overflow-hidden">
   <div class="scanlines"></div>
 
   <div class="game-content">
@@ -1026,20 +1028,8 @@
           />
         {/if}
 
-        {#if sidebarPanels.length > 0}
-          <ActionPanelView
-            panels={sidebarPanels}
-            onButtonClick={handleActionPanelClick}
-          />
-        {/if}
-
         <div class="gbc-panel log-panel">
           <button class="log-header-btn" onclick={() => { showFullLog = true; playSfx('cursor'); }}>LOG</button>
-          <div class="log-content" bind:this={logContainer}>
-            {#each logEntries as entry}
-              <div class="log-entry text-[0.7rem]" class:text-gbc-yellow={entry.startsWith('Warning:')} class:text-gbc-light={!entry.startsWith('Warning:')}>{entry}</div>
-            {/each}
-          </div>
           <form class="log-input-bar" onsubmit={(e) => {
             e.preventDefault();
             if (!logInput.trim() || !gameState) return;
@@ -1065,8 +1055,6 @@
           {counterDefinitions}
           {playmatImage}
           {renderFace}
-          actionPanels={gridPanels}
-          onActionPanelClick={handleActionPanelClick}
           onDrop={handleDrop}
           onPreview={handlePreview}
           onToggleVisibility={handleToggleVisibility}
@@ -1087,6 +1075,8 @@
       zoneName={contextMenu.zoneName}
       cardCount={contextMenu.cardCount}
       zoneConfig={contextMenu.zoneConfig}
+      actionButtons={contextMenuActionButtons}
+      onActionButtonClick={handleActionPanelClick}
       onShuffle={handleShuffle}
       onPeekTop={handlePeekTop}
       onClearCounters={handleClearCounters}
@@ -1295,7 +1285,7 @@
   }
 
   .game-content {
-    @apply w-fit mx-auto;
+    @apply w-full h-full;
   }
 
   .game-layout {
@@ -1303,13 +1293,13 @@
     grid-template-columns: 20rem 1fr;
     grid-template-rows: minmax(0, 1fr);
     gap: 0.5rem;
-    height: calc(100vh - 2rem);
+    height: 100%;
     @apply max-lg:flex max-lg:flex-col max-lg:items-center max-lg:h-auto;
   }
 
   .playmat-area {
-    @apply overflow-auto;
     height: 100%;
+    overflow: hidden;
   }
 
   .sidebar {
@@ -1349,7 +1339,7 @@
   }
 
   .log-panel {
-    @apply max-lg:w-auto flex flex-col flex-1 min-h-0;
+    @apply max-lg:w-auto flex flex-col;
   }
 
   .log-header-btn {
@@ -1359,16 +1349,6 @@
 
   .log-header-btn:hover {
     @apply bg-gbc-green text-gbc-dark-green;
-  }
-
-  .log-content {
-    @apply overflow-y-auto overflow-x-hidden px-2 flex-1;
-    scrollbar-width: thin;
-    scrollbar-color: var(--color-gbc-green) var(--color-gbc-border);
-  }
-
-  .log-entry {
-    @apply py-0.5 border-b border-gbc-border/30;
   }
 
   .log-input-bar {

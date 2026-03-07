@@ -1,16 +1,14 @@
 <script lang="ts">
-  import type { Playmat, CardInstance, GameState, CardTemplate, CounterDefinition, ZoneConfig, ActionPanel, PlaymatSlot } from '../../core';
+  import { onMount } from 'svelte';
+  import type { Playmat, CardInstance, GameState, CardTemplate, CounterDefinition, ZoneConfig, PlaymatSlot } from '../../core';
   import { VISIBILITY } from '../../core';
   import Zone from './Zone.svelte';
-  import ActionPanelView from './ActionPanelView.svelte';
 
   interface Props {
     playmat: Playmat;
     gameState: GameState<CardTemplate>;
     cardBack?: string;
     counterDefinitions?: CounterDefinition[];
-    actionPanels?: ActionPanel[];
-    onActionPanelClick?: (panelId: string, buttonId: string) => void;
     renderFace?: (template: CardTemplate) => { rank?: string; suit?: string; color?: string };
     onDrop?: (cardInstanceId: string, toZoneKey: string, position?: number) => void;
     onPreview?: (card: CardInstance<CardTemplate>) => void;
@@ -26,8 +24,6 @@
     gameState,
     cardBack,
     counterDefinitions = [],
-    actionPanels = [],
-    onActionPanelClick,
     renderFace,
     onDrop,
     onPreview,
@@ -45,6 +41,35 @@
   export async function shuffleZone(zoneKey: string): Promise<void> {
     await zoneRefs[zoneKey]?.shuffle();
   }
+
+  // Auto-scale to fill available vertical space using CSS zoom
+  let gridEl: HTMLDivElement | undefined = $state();
+  let zoomFactor: number = $state(1);
+
+  function recalcZoom() {
+    if (!gridEl) return;
+    const parent = gridEl.parentElement;
+    if (!parent) return;
+    // Reset zoom to measure natural size
+    gridEl.style.zoom = '1';
+    const naturalHeight = gridEl.scrollHeight;
+    const naturalWidth = gridEl.scrollWidth;
+    const availableHeight = parent.clientHeight;
+    const availableWidth = parent.clientWidth;
+    if (naturalHeight > 0 && availableHeight > 0) {
+      const zoomH = availableHeight / naturalHeight;
+      const zoomW = availableWidth / naturalWidth;
+      zoomFactor = Math.min(zoomH, zoomW);
+    }
+    gridEl.style.zoom = `${zoomFactor}`;
+  }
+
+  onMount(() => {
+    requestAnimationFrame(() => recalcZoom());
+    const ro = new ResizeObserver(() => recalcZoom());
+    if (gridEl?.parentElement) ro.observe(gridEl.parentElement);
+    return () => ro.disconnect();
+  });
 
   const layout = $derived(playmat.layout);
 
@@ -128,14 +153,22 @@
     const zoneKey = `player${playerIndex + 1}_${slot.zoneId}`;
     return gameState.zones[zoneKey];
   }
+
+  function getZoneKey(slot: { id: string; zoneId: string }): string {
+    if (gameState.zones[slot.zoneId]) return slot.zoneId;
+    const playerIndex = slotToPlayer[slot.id] ?? 0;
+    return `player${playerIndex + 1}_${slot.zoneId}`;
+  }
 </script>
 
 <div
+  bind:this={gridEl}
   class="playmat-grid"
   class:has-playmat-image={!!playmatImage}
   style="
     grid-template-columns: {gridTemplateColumns};
     grid-template-rows: {gridTemplateRows};
+    zoom: {zoomFactor};
   "
 >
   <!-- Playmat background overlay — covers only field rows, not hands -->
@@ -163,37 +196,54 @@
       {@const isPublic = zone.config.defaultVisibility[0] && zone.config.defaultVisibility[1]}
       {@const isMaxOne = zone.config.maxCards === 1}
       {@const isBrowsable = onBrowse && isPublic && !isMaxOne && (slot.stackDirection === 'none' || !slot.stackDirection)}
-      <div
-        class="grid-slot"
-        class:hand-zone={isHandZone}
-        class:staging-slot={isStagingZone}
-        class:has-cards={isStagingZone && zone.cards.length > 0}
-        class:stack-up={slot.stackDirection === 'up'}
-        class:active-zone={isActiveZone}
-        class:mid-zone={isMidZone}
-        class:p1-field={isP1Field}
-        style="
-          grid-column: {slot.position.col + 1} / span {slot.position.colSpan ?? 1};
-          grid-row: {slot.position.row + 1} / span {slot.position.rowSpan ?? 1};
-          --zone-scale: {slot.scale ?? 1};
-          {slot.align ? `align-self: ${slot.align};` : ''}
-        "
-      >
-        <Zone
-          bind:this={zoneRefs[zone.key]}
-          {zone}
-          {slot}
-          {cardBack}
-          {counterDefinitions}
-          {renderFace}
-          {onDrop}
-          {onPreview}
-          {onToggleVisibility}
-          {onZoneContextMenu}
-          {onCounterDrop}
-          onBrowse={isBrowsable ? onBrowse : undefined}
-        />
-      </div>
+      {#if slot.renderMode === 'button'}
+        <div
+          class="grid-slot"
+          style="
+            grid-column: {slot.position.col + 1} / span {slot.position.colSpan ?? 1};
+            grid-row: {slot.position.row + 1} / span {slot.position.rowSpan ?? 1};
+          "
+        >
+          <button
+            class="zone-button"
+            onclick={() => onBrowse?.(getZoneKey(slot), slot.label ?? slot.zoneId)}
+          >
+            {slot.label ?? slot.zoneId} ({zone.cards.length})
+          </button>
+        </div>
+      {:else}
+        <div
+          class="grid-slot"
+          class:hand-zone={isHandZone}
+          class:staging-slot={isStagingZone}
+          class:has-cards={isStagingZone && zone.cards.length > 0}
+          class:stack-up={slot.stackDirection === 'up'}
+          class:active-zone={isActiveZone}
+          class:mid-zone={isMidZone}
+          class:p1-field={isP1Field}
+          style="
+            grid-column: {slot.position.col + 1} / span {slot.position.colSpan ?? 1};
+            grid-row: {slot.position.row + 1} / span {slot.position.rowSpan ?? 1};
+            --zone-scale: {slot.scale ?? 1};
+            {slot.align ? `align-self: ${slot.align};` : ''}
+          "
+        >
+          <Zone
+            bind:this={zoneRefs[zone.key]}
+            {zone}
+            {slot}
+            {cardBack}
+            {counterDefinitions}
+            {renderFace}
+            {onDrop}
+            {onPreview}
+            {onToggleVisibility}
+            {onZoneContextMenu}
+            {onCounterDrop}
+            onBrowse={isBrowsable ? onBrowse : undefined}
+          />
+        </div>
+      {/if}
     {/if}
   {/each}
 
@@ -201,9 +251,11 @@
   {#each processedSlots.grouped as group (group.key)}
     {@const isP1Group = group.slots.some(s => slotToPlayer[s.id] === 0)}
     {@const hasExplicitPlacement = group.slots.some(s => s.groupRow !== undefined || s.groupCol !== undefined)}
+    {@const allButtonMode = group.slots.every(s => s.renderMode === 'button')}
     <div
       class="grid-slot zone-group"
       class:p1-field={isP1Group}
+      class:button-group={allButtonMode}
       style="
         grid-column: {group.col + 1} / span {group.colSpan};
         grid-row: {group.row + 1};
@@ -217,42 +269,43 @@
           {@const isPublic = zone.config.defaultVisibility[0] && zone.config.defaultVisibility[1]}
           {@const isBrowsable = onBrowse && isPublic && (slot.stackDirection === 'none' || !slot.stackDirection)}
           {@const hasPlacement = slot.groupRow !== undefined || slot.groupCol !== undefined}
-          <div
-            class="zone-group-item"
-            style="{hasPlacement ? `grid-row: ${(slot.groupRow ?? 0) + 1}; grid-column: ${(slot.groupCol ?? 0) + 1};` : ''}"
-          >
-            <Zone
-              bind:this={zoneRefs[zone.key]}
-              {zone}
-              {slot}
-              {cardBack}
-              {counterDefinitions}
-              {renderFace}
-              {onDrop}
-              {onPreview}
-              {onToggleVisibility}
-              {onZoneContextMenu}
-              {onCounterDrop}
-              onBrowse={isBrowsable ? onBrowse : undefined}
-            />
-          </div>
+          {#if slot.renderMode === 'button'}
+            <div
+              class="zone-group-item"
+              style="{hasPlacement ? `grid-row: ${(slot.groupRow ?? 0) + 1}; grid-column: ${(slot.groupCol ?? 0) + 1};` : ''}"
+            >
+              <button
+                class="zone-button"
+                onclick={() => onBrowse?.(getZoneKey(slot), slot.label ?? slot.zoneId)}
+              >
+                {slot.label ?? slot.zoneId} ({zone.cards.length})
+              </button>
+            </div>
+          {:else}
+            <div
+              class="zone-group-item"
+              style="{hasPlacement ? `grid-row: ${(slot.groupRow ?? 0) + 1}; grid-column: ${(slot.groupCol ?? 0) + 1};` : ''}"
+            >
+              <Zone
+                bind:this={zoneRefs[zone.key]}
+                {zone}
+                {slot}
+                {cardBack}
+                {counterDefinitions}
+                {renderFace}
+                {onDrop}
+                {onPreview}
+                {onToggleVisibility}
+                {onZoneContextMenu}
+                {onCounterDrop}
+                onBrowse={isBrowsable ? onBrowse : undefined}
+              />
+            </div>
+          {/if}
         {/if}
       {/each}
     </div>
   {/each}
-
-  <!-- Action panels (attacks + abilities) — aligned with the mid row -->
-  {#if onActionPanelClick && actionPanels.length > 0}
-    <div
-      class="grid-slot actions-slot mid-zone"
-      style="grid-column: 1; grid-row: 3;"
-    >
-      <ActionPanelView
-        panels={actionPanels}
-        onButtonClick={onActionPanelClick}
-      />
-    </div>
-  {/if}
 
 </div>
 
@@ -270,6 +323,7 @@
     @apply flex justify-center items-start;
     position: relative;
     z-index: 1;
+    min-width: 0;
   }
 
   .grid-slot.stack-up {
@@ -312,15 +366,23 @@
     align-self: start;
     align-items: center;
     justify-items: center;
+    overflow: hidden;
+    min-width: 0;
   }
 
-  .actions-slot {
-    @apply self-center;
-    overflow: visible;
+  .zone-group.button-group {
+    gap: 0.25rem;
+    align-items: start;
+    justify-items: stretch;
   }
 
-  .actions-slot :global(.action-panel) {
-    @apply w-full;
+  .zone-button {
+    @apply text-[0.65rem] py-1.5 px-2 w-full;
+    @apply bg-gbc-dark-green border border-gbc-border rounded-sm;
+    @apply text-gbc-cream font-retro cursor-pointer;
+    @apply hover:bg-gbc-border hover:text-gbc-yellow;
+    transition: background 0.1s, color 0.1s;
+    white-space: nowrap;
   }
 
   .staging-slot.has-cards :global(.zone) {

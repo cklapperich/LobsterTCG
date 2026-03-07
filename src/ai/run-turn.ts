@@ -99,9 +99,8 @@ async function runAgent(config: AgentConfig): Promise<AgentResult> {
     const history: ModelMessage[] = [];
 
     span.update({
-      model,
       input: { systemPrompt: systemPrompt },
-      metadata: { toolCount, toolNames },
+      metadata: { model, toolCount, toolNames },
     });
 
     if (logging) {
