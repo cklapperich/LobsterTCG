@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { Playmat, CardInstance, CardTemplate, GameState, CounterDefinition, DeckSelection, ZoneConfig, Action, ActionExecutor } from '../../core';
-  import { executeAction, shuffle, moveCard, VISIBILITY, flipCard, endTurn, loadDeck, getCardName, findCardInZones, toReadableState, PluginManager, setOrientation, createDecision, resolveDecision, revealHand, mulligan as mulliganAction, PHASES, ACTION_TYPES, gameLog, systemLog, draw, coinFlip } from '../../core';
+  import { executeAction, shuffle, moveCard, VISIBILITY, flipCard, endTurn, loadDeck, getCardName, findCardInZones, toReadableState, PluginManager, setOrientation, createDecision, resolveDecision, revealHand, mulligan as mulliganAction, PHASES, ACTION_TYPES, gameLog, systemLog, draw, coinFlip, addCounter, removeCounter, setCounter, declareAction } from '../../core';
+  import { POKEMON_DECLARATION_TYPES, MARKER_IDS } from '../../plugins/pokemon/constants';
   import { GAME_TYPES } from '../../game-types';
   import PlaymatGrid from './PlaymatGrid.svelte';
   import ZoneContextMenu from './ZoneContextMenu.svelte';
@@ -17,9 +18,7 @@
   import { fromAIPerspective } from '../../plugins/pokemon/zone-perspective';
   import {
     counterDragStore,
-    executeCounterDrop,
-    executeCounterReturn,
-    clearZoneCounters,
+    endCounterDrag,
   } from './counterDragState.svelte';
   import { describeAction, type CounterNameResolver } from './describe-action';
   import { createToolContext, type ToolContextDeps } from './create-tool-context';
@@ -142,9 +141,12 @@
   );
 
   function handleMarkerClick(markerId: string) {
-    if (!gameState || !plugin.onMarkerClick) return;
-    plugin.onMarkerClick(gameState, local, markerId);
-    gameState = { ...gameState };
+    if (!gameState) return;
+    if (markerId.endsWith(`_${MARKER_IDS.GX}`)) {
+      tryAction(declareAction(local, POKEMON_DECLARATION_TYPES.GX_MARKER, 'GX Marker'));
+    } else if (markerId.endsWith(`_${MARKER_IDS.VSTAR}`)) {
+      tryAction(declareAction(local, POKEMON_DECLARATION_TYPES.VSTAR_MARKER, 'VSTAR Marker'));
+    }
   }
 
   // Action panels from plugin (for local player)
@@ -290,7 +292,7 @@
       const reason = `Action blocked: ${preResult.reason ?? 'Unknown'}`;
       gameLog(gameState, reason);
       gameState = { ...gameState };
-      playSfx('error');
+      if (!executingRemoteAction) playSfx('error');
       return reason;
     }
     if (preResult.outcome === 'replace') {
@@ -303,7 +305,7 @@
     const blocked = executeAction(gameState, action);
     if (blocked) {
       gameState = { ...gameState };
-      playSfx('error');
+      if (!executingRemoteAction) playSfx('error');
       return blocked;
     }
 
@@ -335,8 +337,8 @@
   async function handleManualCoinFlip() {
     if (!gameState) return;
     const isHeads = Math.random() < 0.5;
-    await coinFlipRef?.flip(isHeads);
     tryAction(coinFlip(local, 1, [isHeads]));
+    await coinFlipRef?.flip(isHeads);
   }
 
   function createExecutor(): ActionExecutor {
@@ -875,33 +877,47 @@
   // Counter handlers
   function handleCounterDrop(counterId: string, cardInstanceId: string) {
     if (!gameState || !canLocalAct) return;
-    const updatedState = executeCounterDrop(counterId, cardInstanceId, gameState);
-    if (updatedState) {
-      gameState = updatedState;
-      const cardName = getCardName(gameState, cardInstanceId);
-      const counter = getCounterById(counterId);
-      addLog(`Added ${counter?.name ?? counterId} to ${cardName}`);
+    const drag = counterDragStore.current;
+    if (!drag) return;
+    const sourceCardId = drag.source !== 'tray' ? drag.source : null;
+    endCounterDrag();
+
+    const cardName = getCardName(gameState, cardInstanceId);
+    const counter = getCounterById(counterId);
+    if (sourceCardId) {
+      tryAction(removeCounter(local, sourceCardId, counterId, 1));
     }
+    tryAction(addCounter(local, cardInstanceId, counterId, 1));
+    addLog(`Added ${counter?.name ?? counterId} to ${cardName}`);
+    playSfx('cursor');
   }
 
   function handleCounterReturn() {
     if (!gameState || !canLocalAct) return;
-    const counterId = counterDragStore.current?.counterId;
-    const sourceCardId = counterDragStore.current?.source;
-    const updatedState = executeCounterReturn(gameState);
-    if (updatedState && sourceCardId && sourceCardId !== 'tray') {
-      gameState = updatedState;
-      const cardName = getCardName(gameState, sourceCardId);
-      const counter = getCounterById(counterId ?? '');
-      addLog(`Removed ${counter?.name ?? counterId} from ${cardName}`);
-    }
+    const drag = counterDragStore.current;
+    if (!drag || drag.source === 'tray') { endCounterDrag(); return; }
+    const { counterId, source: sourceCardId } = drag;
+    endCounterDrag();
+
+    const cardName = getCardName(gameState, sourceCardId);
+    const counter = getCounterById(counterId);
+    tryAction(removeCounter(local, sourceCardId, counterId, 1));
+    addLog(`Removed ${counter?.name ?? counterId} from ${cardName}`);
+    playSfx('cancel');
   }
 
   function handleClearCounters() {
     if (!gameState || !contextMenu || !canLocalAct) return;
     const zoneKey = contextMenu.zoneKey;
     const zoneName = contextMenu.zoneName;
-    gameState = clearZoneCounters(zoneKey, gameState);
+    const zone = gameState.zones[zoneKey];
+    if (zone) {
+      for (const card of zone.cards) {
+        for (const counterType of Object.keys(card.counters)) {
+          tryAction(setCounter(local, card.instanceId, counterType, 0));
+        }
+      }
+    }
     addLog(`Cleared all counters from ${zoneName}`);
     playSfx('confirm');
   }

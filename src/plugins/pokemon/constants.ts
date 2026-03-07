@@ -96,6 +96,8 @@ export const POKEMON_DECLARATION_TYPES = {
   ABILITY: 'ability',
   RETREAT: 'retreat',
   STADIUM: 'stadium',
+  GX_MARKER: 'gx_marker',
+  VSTAR_MARKER: 'vstar_marker',
 } as const;
 
 // GX / VSTAR marker IDs

@@ -194,6 +194,16 @@ function autoFlipMarkerOnDeclare(state: PokemonState, action: Action): PostHookR
     }
   }
 
+  // Manual marker flip via UI (dispatched by handleMarkerClick)
+  if (da.declarationType === POKEMON_DECLARATION_TYPES.GX_MARKER && !ps.gxUsed[da.player]) {
+    ps.gxUsed[da.player] = true;
+    gameLog(mutableState, `Player ${da.player + 1} flipped GX marker`);
+  }
+  if (da.declarationType === POKEMON_DECLARATION_TYPES.VSTAR_MARKER && !ps.vstarUsed[da.player]) {
+    ps.vstarUsed[da.player] = true;
+    gameLog(mutableState, `Player ${da.player + 1} flipped VSTAR marker`);
+  }
+
   return {};
 }
 

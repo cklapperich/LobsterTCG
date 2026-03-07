@@ -428,17 +428,6 @@ function getMarkers(state: GameState<PokemonCardTemplate>, playerIndex: PlayerIn
   ];
 }
 
-function onMarkerClick(state: GameState<PokemonCardTemplate>, playerIndex: PlayerIndex, markerId: string): void {
-  const ps = getPluginState(state);
-  if (markerId.endsWith(`_${MARKER_IDS.GX}`) && !ps.gxUsed[playerIndex]) {
-    ps.gxUsed[playerIndex] = true;
-    gameLog(state, `Player ${playerIndex + 1} flipped GX marker`);
-  }
-  if (markerId.endsWith(`_${MARKER_IDS.VSTAR}`) && !ps.vstarUsed[playerIndex]) {
-    ps.vstarUsed[playerIndex] = true;
-    gameLog(state, `Player ${playerIndex + 1} flipped VSTAR marker`);
-  }
-}
 
 /**
  * Return composite cards for preview: LEGEND (2 halves) or V-UNION (4 pieces).
@@ -477,7 +466,6 @@ export const plugin: GamePlugin<PokemonCardTemplate> = {
   getActionPanels,
   onActionPanelClick,
   getMarkers,
-  onMarkerClick,
   getCompositePreview,
 };
 
