@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import type { Snippet } from 'svelte';
   import type { Playmat, CardInstance, GameState, CardTemplate, CounterDefinition, ZoneConfig, PlaymatSlot } from '../../core';
   import { VISIBILITY } from '../../core';
   import Zone from './Zone.svelte';
@@ -18,6 +19,7 @@
     onCounterDrop?: (counterId: string, cardInstanceId: string) => void;
     onBrowse?: (zoneKey: string, zoneName: string) => void;
     playmatImage?: string;
+    children?: Snippet;
   }
 
   let {
@@ -34,6 +36,7 @@
     onCounterDrop,
     onBrowse,
     playmatImage,
+    children,
   }: Props = $props();
 
   // Track Zone refs by zoneKey for shuffle access
@@ -321,6 +324,7 @@
     </div>
   {/each}
 
+  {@render children?.()}
 </div>
 
 <style>
@@ -330,6 +334,8 @@
     display: grid;
     column-gap: 0;
     row-gap: 0;
+    position: relative;
+    width: fit-content;
   }
 
   .grid-slot {

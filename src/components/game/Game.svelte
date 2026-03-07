@@ -10,6 +10,7 @@
   import CounterTray from './CounterTray.svelte';
   import CounterDragOverlay from './CounterDragOverlay.svelte';
   import CoinFlip from './CoinFlip.svelte';
+  import SplashAnnouncement from './SplashAnnouncement.svelte';
   import type { ActionPanelButton } from '../../core/types/action-panel';
   import { dragStore, startPileDrag, updateDragPosition, endDrag, executeDrop, executeStackDrop } from './dragState.svelte';
   import { DEFAULT_CONFIG, isLocal, isAI, localPlayerIndex, opponent, playerFromZoneKey, isLocalZone, type PlayerConfig, type PlayerController } from './player-config';
@@ -79,6 +80,20 @@
   // P2P: flag set while executing an action received from the remote peer
   // to prevent re-broadcasting it back to them.
   let executingRemoteAction = false;
+
+  // Splash announcement
+  let splashText = $state<string | null>(null);
+  let splashTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function showSplash(text: string) {
+    const dur = settings.splashDuration;
+    if (splashTimer) clearTimeout(splashTimer);
+    splashText = null;
+    setTimeout(() => {
+      splashText = text;
+      splashTimer = setTimeout(() => { splashText = null; }, dur);
+    }, 0);
+  }
 
   // Player controllers — polymorphic turn dispatch
   function buildControllers(): [PlayerController, PlayerController] {
@@ -213,6 +228,10 @@
       ? `--- Turn ${gameState.turnNumber}: ${player}'s Turn ---`
       : `--- ${player}'s Turn (Setup) ---`;
     systemLog(gameState, turnLabel);
+    const splashLabel = gameState.phase === PHASES.PLAYING
+      ? `TURN ${gameState.turnNumber}\n${player.toUpperCase()}`
+      : `SETUP\n${player.toUpperCase()}`;
+    showSplash(splashLabel);
   }
 
   // Auto-open browse modal when a reveal decision targets the human player
@@ -290,6 +309,14 @@
 
     // Run post-hooks on the live state (they may mutate it)
     pluginManager.runPostHooks(gameState, action, gameState);
+
+    // Splash announcements for notable actions
+    if (action.type === ACTION_TYPES.DECLARE_ACTION) {
+      showSplash(action.name.toUpperCase());
+    } else if (action.type === ACTION_TYPES.MOVE_CARD && action.toZone === 'stadium') {
+      const stadiumCard = gameState.zones['stadium']?.cards.find(c => c.instanceId === action.cardInstanceId);
+      if (stadiumCard) showSplash(stadiumCard.template.name.toUpperCase());
+    }
 
     gameState = { ...gameState };
 
@@ -1167,7 +1194,9 @@
           onZoneContextMenu={handleZoneContextMenu}
           onCounterDrop={handleCounterDrop}
           onBrowse={handleBrowseZone}
-        />
+        >
+          <SplashAnnouncement text={splashText} duration={settings.splashDuration} />
+        </PlaymatGrid>
       </div>
     </div>
   {/if}
@@ -1404,6 +1433,7 @@
   }
 
   .playmat-area {
+    position: relative;
     height: 100%;
     overflow: hidden;
   }

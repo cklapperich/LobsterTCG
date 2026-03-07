@@ -31,6 +31,10 @@
     settings.dblClickDeckToDraw = !settings.dblClickDeckToDraw;
     playSfx('cursor');
   }
+
+  function handleSplashDurationChange(e: Event) {
+    settings.splashDuration = (e.target as HTMLInputElement).valueAsNumber;
+  }
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -105,6 +109,23 @@
           <span class="text-gbc-light/60 text-[0.4rem] font-retro">Double-clicking your deck draws a card instead of flipping it</span>
         </div>
       </label>
+
+      <!-- Splash duration -->
+      <div class="flex flex-col gap-1">
+        <div class="flex items-center justify-between">
+          <span class="text-gbc-green text-[0.5rem] font-retro">SPLASH DURATION</span>
+          <span class="text-gbc-yellow text-[0.5rem] font-retro">{settings.splashDuration}ms</span>
+        </div>
+        <input
+          type="range"
+          min="500"
+          max="4000"
+          step="100"
+          value={settings.splashDuration}
+          oninput={handleSplashDurationChange}
+          class="gbc-slider"
+        />
+      </div>
     </div>
 
     <!-- Footer -->

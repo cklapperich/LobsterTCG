@@ -5,6 +5,7 @@ interface Settings {
   bgmVolume: number;
   searchToHand: boolean;
   dblClickDeckToDraw: boolean;
+  splashDuration: number;
 }
 
 const DEFAULTS: Settings = {
@@ -12,6 +13,7 @@ const DEFAULTS: Settings = {
   bgmVolume: 0.5,
   searchToHand: false,
   dblClickDeckToDraw: false,
+  splashDuration: 1500,
 };
 
 function loadSettings(): Settings {
