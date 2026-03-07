@@ -45,9 +45,12 @@
   // Designed for Pokemon V-UNION (4 pieces) and LEGEND (2 halves).
   // Known coupling — acceptable tradeoff vs custom rendering hooks.
 
-  // V-UNION: 4+ same-name cards → 2x2 grid, shrunk to fit
+  // V-UNION / LEGEND layouts only make sense on active/bench field zones.
+  const isFieldZone = $derived(zoneKey.endsWith('_active') || /_bench_\d+$/.test(zoneKey));
+
+  // V-UNION: exactly 4 same-name cards on a field zone → 2x2 grid, shrunk to fit
   const vunionGroup = $derived.by(() => {
-    if (!applyDisplayRotation || cards.length < 4) return null;
+    if (!applyDisplayRotation || !isFieldZone || cards.length < 4) return null;
     const nameGroups = new Map<string, typeof cards>();
     for (const card of cards) {
       const name = card.template.name;
@@ -56,14 +59,14 @@
       else nameGroups.set(name, [card]);
     }
     for (const [, group] of nameGroups) {
-      if (group.length >= 4) return group.slice(0, 4);
+      if (group.length === 4) return group;
     }
     return null;
   });
 
-  // LEGEND: exactly 2 same-name landscape cards → 2x1 vertical stack, full-size, overflows
+  // LEGEND: exactly 2 same-name landscape cards on a field zone → 2x1 vertical stack, full-size, overflows
   const legendGroup = $derived.by(() => {
-    if (!applyDisplayRotation || cards.length < 2 || vunionGroup) return null;
+    if (!applyDisplayRotation || !isFieldZone || cards.length < 2 || vunionGroup) return null;
     const nameGroups = new Map<string, typeof cards>();
     for (const card of cards) {
       if (!card.template.displayRotation) continue; // only landscape cards
@@ -73,7 +76,7 @@
       else nameGroups.set(name, [card]);
     }
     for (const [, group] of nameGroups) {
-      if (group.length >= 2) return group.slice(0, 2);
+      if (group.length === 2) return group;
     }
     return null;
   });
