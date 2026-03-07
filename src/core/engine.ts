@@ -564,18 +564,23 @@ function executeSetCounter<T extends CardTemplate>(
 }
 
 function executeCoinFlip<T extends CardTemplate>(
-  _state: GameState<T>,
+  state: GameState<T>,
   action: CoinFlipAction
 ): boolean[] {
-  if (action.results) {
-    return action.results;
+  if (!action.results) {
+    const results: boolean[] = [];
+    for (let i = 0; i < action.count; i++) {
+      results.push(Math.random() < COIN_FLIP_THRESHOLD);
+    }
+    action.results = results;
   }
 
-  const results: boolean[] = [];
-  for (let i = 0; i < action.count; i++) {
-    results.push(Math.random() < COIN_FLIP_THRESHOLD);
+  if (action.setActivePlayer !== undefined) {
+    state.activePlayer = action.setActivePlayer;
+    state.currentTurn.activePlayer = action.setActivePlayer;
   }
-  return results;
+
+  return action.results;
 }
 
 function executeDiceRoll<T extends CardTemplate>(

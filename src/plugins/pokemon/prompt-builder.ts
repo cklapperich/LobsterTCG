@@ -48,7 +48,7 @@ export function buildPrompt(...keys: string[]): string {
   }).join('\n\n');
 }
 
-export type AgentMode = 'setup' | 'startOfTurn' | 'main' | 'decision' | 'planner' | 'executor';
+export type AgentMode = 'setup' | 'startOfTurn' | 'main' | 'endOfTurn' | 'decision' | 'planner' | 'executor';
 
 interface ModeConfig {
   sections: string[];
@@ -120,6 +120,17 @@ const MODE_CONFIGS: Record<AgentMode, ModeConfig> = {
       ...HIDDEN_DEFAULT_TOOLS,
     ],
     addCustomTools: true,
+  },
+
+  endOfTurn: {
+    sections: ['INTRO', 'ROLE_ENDOFTURN', 'TURN_STRUCTURE_ENDOFTURN'],
+    coreToolFilter: 'include',
+    coreTools: [],
+    addCustomTools: false,
+    extras: (ctx) => ({
+      set_status: createSetStatusTool(ctx),
+      end_phase: createEndPhaseTool('Signal that end-of-turn cleanup is complete.'),
+    }),
   },
 
   decision: {

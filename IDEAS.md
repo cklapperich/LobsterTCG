@@ -46,3 +46,13 @@
 
     24. SFX should be data-driven by action type at a single point. createExecutor's sfxMap is the right idea — it just
     only exists for AI calls. If tryAction itself used that map, you'd never forget to add SFX again.
+
+    25. Add a 'concede' and 'declare victory' tool to the planner
+
+26. remove all pokemon assets
+a. importable cardback
+b. importable playmats
+c. sound effects?? leave for now?
+d. image import like how twinleaf does it, we dont store links to the images
+
+27. 'sign in with google' broken: button redirects you back to simpledex not to where you came from

@@ -93,6 +93,7 @@ export interface CoinFlipAction extends BaseAction {
   type: typeof ACTION_TYPES.COIN_FLIP;
   count: number;
   results?: boolean[];
+  setActivePlayer?: PlayerIndex;  // If set, engine applies this as the new activePlayer after the flip
 }
 
 export interface DiceRollAction extends BaseAction {

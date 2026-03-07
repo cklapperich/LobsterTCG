@@ -161,9 +161,10 @@ export function setCounter(
 export function coinFlip(
   player: PlayerIndex,
   count: number = 1,
-  results?: boolean[]
+  results?: boolean[],
+  setActivePlayer?: PlayerIndex
 ): CoinFlipAction {
-  return { type: ACTION_TYPES.COIN_FLIP, player, count, results };
+  return { type: ACTION_TYPES.COIN_FLIP, player, count, results, setActivePlayer };
 }
 
 export function diceRoll(

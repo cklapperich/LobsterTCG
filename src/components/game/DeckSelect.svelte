@@ -9,7 +9,8 @@
   import GbcDropdown from './GbcDropdown.svelte';
   import { GAME_TYPES, DEFAULT_GAME_TYPE } from '../../game-types';
   import { authState, signInWithGoogle, signOut } from '../../lib/auth.svelte';
-  import { loadDecksFromSupabase } from '../../lib/deckSync';
+  import { loadDecksFromSupabase, saveDeckStrategy } from '../../lib/deckSync';
+  import { generateDeckStrategy } from '../../lib/strategyGenerator';
   import { settings } from '../../lib/settings.svelte';
 
   interface DeckOption {
@@ -54,8 +55,14 @@
   let aiMode = $state<string>('pipeline');
   let plannerModel = $state<string>(DEFAULT_PLANNER.modelId);
   let showSettings = $state(false);
+  let strategyText = $state('');
+  let strategyDeckId = $state('');
+  let generatingStrategy = $state(false);
+  let savingStrategy = $state(false);
+  let strategyError = $state('');
 
   const gameConfig = $derived(GAME_TYPES[gameType]);
+  const selectedP2Deck = $derived(deckOptions.find(d => d.id === player2Deck));
 
   const gameTypeOptions = Object.values(GAME_TYPES).map(g => ({
     value: g.id,
@@ -185,6 +192,45 @@
     authState.user;
     loadSupabaseDecks();
   });
+
+  $effect(() => {
+    if (selectedP2Deck && selectedP2Deck.id !== strategyDeckId) {
+      strategyText = selectedP2Deck.strategy ?? '';
+      strategyDeckId = selectedP2Deck.id;
+      strategyError = '';
+    }
+  });
+
+  async function handleGenerateStrategy() {
+    if (!selectedP2Deck || generatingStrategy) return;
+    generatingStrategy = true;
+    strategyError = '';
+    try {
+      const text = await generateDeckStrategy(selectedP2Deck.deckList);
+      strategyText = text;
+      selectedP2Deck.strategy = text;
+    } catch (e: any) {
+      strategyError = e.message ?? 'Failed to generate strategy';
+    } finally {
+      generatingStrategy = false;
+    }
+  }
+
+  async function handleSaveStrategy() {
+    if (!selectedP2Deck || savingStrategy) return;
+    const rawId = selectedP2Deck.deckList.id;
+    savingStrategy = true;
+    strategyError = '';
+    try {
+      const ok = await saveDeckStrategy(rawId, strategyText);
+      if (!ok) strategyError = 'Failed to save strategy';
+      else selectedP2Deck.strategy = strategyText;
+    } catch (e: any) {
+      strategyError = e.message ?? 'Failed to save strategy';
+    } finally {
+      savingStrategy = false;
+    }
+  }
 
   function handleStartGame() {
     if (!gameConfig) return;
@@ -331,6 +377,42 @@
               options={deckOptions.map(d => ({ value: d.id, label: `${d.source === 'supabase' ? '★ ' : ''}${d.name} (${d.cardCount} cards)` }))}
               bind:value={player2Deck}
             />
+          </div>
+
+          <!-- AI Deck Strategy -->
+          <div class="strategy-section">
+            <div class="player-label text-gbc-green text-[0.6rem] mb-3 flex items-center gap-2">
+              <span class="player-badge bg-gbc-yellow text-gbc-border px-2 py-1">STRAT</span>
+              AI DECK STRATEGY
+            </div>
+            <textarea
+              class="strategy-textarea w-full bg-gbc-cream/10 text-gbc-light text-[0.5rem] font-retro border-2 border-gbc-border p-2 resize-y leading-relaxed"
+              rows="6"
+              placeholder="No strategy yet. Generate one or type your own."
+              bind:value={strategyText}
+              oninput={() => { if (selectedP2Deck) selectedP2Deck.strategy = strategyText; }}
+            ></textarea>
+            <div class="flex gap-2 mt-2">
+              <button
+                class="gbc-btn text-[0.45rem] py-1.5 px-3"
+                onclick={handleGenerateStrategy}
+                disabled={!hasApiKey || generatingStrategy}
+              >
+                {generatingStrategy ? 'GENERATING...' : 'GENERATE WITH OPUS'}
+              </button>
+              {#if selectedP2Deck?.source === 'supabase'}
+                <button
+                  class="gbc-btn text-[0.45rem] py-1.5 px-3"
+                  onclick={handleSaveStrategy}
+                  disabled={savingStrategy}
+                >
+                  {savingStrategy ? 'SAVING...' : 'SAVE STRATEGY'}
+                </button>
+              {/if}
+            </div>
+            {#if strategyError}
+              <div class="text-gbc-red text-[0.45rem] mt-1">{strategyError}</div>
+            {/if}
           </div>
         </div>
       {/if}
@@ -486,6 +568,16 @@
   .gbc-checkbox input[type="checkbox"]:checked {
     @apply bg-gbc-green;
     box-shadow: inset 0.125rem 0.125rem 0 rgba(0, 0, 0, 0.2);
+  }
+
+  .strategy-textarea {
+    @apply outline-none;
+    min-height: 4rem;
+    max-height: 12rem;
+  }
+
+  .strategy-textarea:focus {
+    border-color: var(--color-gbc-green);
   }
 
   .settings-btn {

@@ -312,6 +312,22 @@ export function modifyReadableState(
 }
 
 // ── Hook Registration ────────────────────────────────────────────
+/** Post-hook: when setup transitions to playing, flip all field Pokemon face-up on both peers. */
+function flipFieldFaceUpOnSetupComplete(state: PokemonState, action: Action): PostHookResult {
+  if (action.type !== ACTION_TYPES.END_TURN) return {};
+  if (state.phase !== PHASES.PLAYING || state.turnNumber !== 1) return {};
+
+  for (const [zoneKey, zone] of Object.entries(state.zones)) {
+    if (isFieldZone(zoneKey)) {
+      for (const card of zone.cards) {
+        card.visibility = VISIBILITY.PUBLIC;
+      }
+    }
+  }
+  systemLog(state, 'All Pokemon flipped face-up!');
+  return {};
+}
+
 // Zero pre-hooks — every rule has card effect exceptions.
 // AI legality handled by prompts/narrative state.
 
@@ -338,6 +354,9 @@ export const pokemonHooksPlugin: Plugin<PokemonCardTemplate> = {
     [ACTION_TYPES.DECLARE_ACTION]: [
       { hook: autoFlipMarkerOnDeclare, priority: 50 },
       { hook: logDeclareEffectText, priority: 100 },
+    ],
+    [ACTION_TYPES.END_TURN]: [
+      { hook: flipFieldFaceUpOnSetupComplete, priority: 100 },
     ],
   },
   // No pre-hooks — all rules enforcement handled by AI via prompts

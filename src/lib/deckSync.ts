@@ -7,6 +7,18 @@ export interface SupabaseDeck {
   strategy: string;
 }
 
+export async function saveDeckStrategy(deckId: string, strategy: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('decks')
+    .update({ strategy })
+    .eq('id', deckId);
+  if (error) {
+    console.error('Failed to save deck strategy:', error);
+    return false;
+  }
+  return true;
+}
+
 export async function loadDecksFromSupabase(userId: string, tcg: string): Promise<SupabaseDeck[]> {
   const { data, error } = await supabase
     .from('decks')

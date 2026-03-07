@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { Playmat, CardInstance, CardTemplate, GameState, CounterDefinition, DeckSelection, ZoneConfig, Action, ActionExecutor } from '../../core';
-  import { executeAction, shuffle, moveCard, VISIBILITY, flipCard, endTurn, loadDeck, getCardName, findCardInZones, toReadableState, PluginManager, setOrientation, createDecision, resolveDecision, revealHand, mulligan as mulliganAction, PHASES, ACTION_TYPES, gameLog, systemLog, draw } from '../../core';
+  import { executeAction, shuffle, moveCard, VISIBILITY, flipCard, endTurn, loadDeck, getCardName, findCardInZones, toReadableState, PluginManager, setOrientation, createDecision, resolveDecision, revealHand, mulligan as mulliganAction, PHASES, ACTION_TYPES, gameLog, systemLog, draw, coinFlip } from '../../core';
   import { GAME_TYPES } from '../../game-types';
   import PlaymatGrid from './PlaymatGrid.svelte';
   import ZoneContextMenu from './ZoneContextMenu.svelte';
@@ -332,6 +332,13 @@
     addLog(`Coin flip: ${result === 'heads' ? 'HEADS' : 'TAILS'}`);
   }
 
+  async function handleManualCoinFlip() {
+    if (!gameState) return;
+    const isHeads = Math.random() < 0.5;
+    await coinFlipRef?.flip(isHeads);
+    tryAction(coinFlip(local, 1, [isHeads]));
+  }
+
   function createExecutor(): ActionExecutor {
     const sfxMap: Record<string, string> = {
       [ACTION_TYPES.DRAW]: 'cardDrop',
@@ -420,8 +427,11 @@
   /** Subscribe to incoming P2P messages: execute remote actions, apply state sync. */
   function subscribeToP2P() {
     if (!p2pChannel) return;
-    p2pUnsubscribe = p2pChannel.onMessage((msg) => {
+    p2pUnsubscribe = p2pChannel.onMessage(async (msg) => {
       if (msg.type === 'action') {
+        if (msg.action.type === ACTION_TYPES.COIN_FLIP) {
+          await coinFlipRef?.flip(msg.action.results?.[0]);
+        }
         executingRemoteAction = true;
         tryAction(msg.action);
         executingRemoteAction = false;
@@ -794,14 +804,9 @@
   /** Handle setup→playing transition: onSetupComplete (coin flip), then dispatch to winner. */
   async function handlePostSetupTransition(): Promise<boolean> {
     if (!gameState || gameState.phase !== PHASES.PLAYING || gameState.turnNumber !== 1) return false;
-    // onSetupComplete may return a PlayerIndex to override who goes first.
-    // We apply it here (not inside the callback) because addLog causes
-    // gameState reassignment, making the callback's `state` ref stale.
-    const firstPlayer = await gameConfig.onSetupComplete?.(gameState, createExecutor());
-    if (firstPlayer !== undefined) {
-      gameState.activePlayer = firstPlayer;
-      gameState.currentTurn.activePlayer = firstPlayer;
-    }
+    // onSetupComplete animates the coin flip and dispatches a COIN_FLIP action with
+    // setActivePlayer — the engine applies activePlayer on both peers via P2P broadcast.
+    await gameConfig.onSetupComplete?.(gameState, createExecutor());
     aiThinking = false;
     gameState = { ...gameState };
     controllers[gameState.activePlayer].takeTurn();
@@ -1131,7 +1136,7 @@
           {/if}
           <button
             class="gbc-btn sidebar-btn"
-            onclick={() => coinFlipRef?.flip()}
+            onclick={handleManualCoinFlip}
             disabled={coinFlipRef?.isFlipping()}
           >
             COIN

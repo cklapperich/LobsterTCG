@@ -30,7 +30,7 @@ export function resolveModel(modelId: string) {
 export const MODEL_OPTIONS: ModelOption[] = [
   { label: 'GLM-5', modelId: 'z-ai/glm-5', costPerMTok: [1.00, 3.20] },
   { label: 'Kimi K2.5', modelId: 'moonshotai/kimi-k2.5', costPerMTok: [0.60, 3.00] },
-  { label: 'Claude Sonnet 4.5', modelId: 'anthropic/claude-sonnet-4-5-20250929', costPerMTok: [3.00, 15.00] },
+  { label: 'Claude Sonnet 4.6', modelId: 'anthropic/claude-sonnet-4-6', costPerMTok: [3.00, 15.00] },
 ];
 
 export interface ModelOption {

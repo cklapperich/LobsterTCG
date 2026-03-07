@@ -11,6 +11,7 @@ import {
   concede as concedeAction,
   executeAction,
   declareAction,
+  coinFlip as coinFlipAction,
   gameLog,
   systemLog,
 
@@ -481,17 +482,15 @@ export const plugin: GamePlugin<PokemonCardTemplate> = {
 };
 
 /**
- * Post-setup: flip field cards face-up, coin flip to determine first player.
+ * Post-setup: coin flip to determine first player.
+ * Field cards are flipped face-up by the END_TURN post-hook (runs on both P2P peers).
+ * First player is set via the COIN_FLIP action's setActivePlayer (broadcast to both peers).
  */
-export async function onSetupComplete(state: GameState<CardTemplate>, executor: ActionExecutor): Promise<PlayerIndex> {
-  flipFieldCardsFaceUp(state);
-
-  // Coin flip to determine who goes first (return winner, don't mutate —
-  // addLog causes gameState reassignment which makes `state` ref stale)
+export async function onSetupComplete(_state: GameState<CardTemplate>, executor: ActionExecutor): Promise<void> {
   const isHeads = await executor.flipCoin();
   const firstPlayer: PlayerIndex = isHeads ? 0 : 1;
   executor.addLog(`Coin flip: ${isHeads ? 'HEADS' : 'TAILS'} — Player ${firstPlayer + 1} goes first!`);
-  return firstPlayer;
+  executor.tryAction(coinFlipAction(0, 1, [isHeads], firstPlayer));
 }
 
 // Re-exports
