@@ -11,7 +11,6 @@ import {
   isBasicPokemon,
   isStage1,
   isStage2,
-  isTool,
   isFieldZone,
   isGXAttack,
   isGXAttackByName,
@@ -112,7 +111,7 @@ function reorderFieldZone(state: PokemonState, action: Action): PostHookResult {
   function sortWeight(card: { template: PokemonCardTemplate }): number {
     const t = getTemplate(card.template.id);
     if (!t) return 2;
-    if (isTool(t)) return 0;
+    if (t.supertype === SUPERTYPES.TRAINER) return 0;
     if (isEnergy(t)) return 1;
     if (isBasicPokemon(t)) return 2;
     if (isStage1(t)) return 3;

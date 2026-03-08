@@ -55,4 +55,8 @@ b. importable playmats
 c. sound effects?? leave for now?
 d. image import like how twinleaf does it, we dont store links to the images
 
-27. 'sign in with google' broken: button redirects you back to simpledex not to where you came from
+27. Neo-era Tool trainer cards dont flow to bottom of stack!
+
+28. Get the AI to use Lass properly? lol
+
+29. auto-inject AI warnings/reminders if damage >= HP via narrative.ts
