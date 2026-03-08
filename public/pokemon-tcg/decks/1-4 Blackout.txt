@@ -1,7 +1,7 @@
 * 1 Hitmonchan Base Set 7
 * 2 Farfetch'd Base Set 27
-* 2 Wartortle Base Set 63
-* 4 Squirtle Base Set 29
+* 2 Wartortle Base Set 42
+* 4 Squirtle Base Set 63
 * 3 Staryu Base Set 65
 * 3 Onix Base Set 56
 * 3 Sandshrew Base Set 62
@@ -15,4 +15,4 @@
 * 4 Energy Removal Base Set 92
 
 * 12 Fighting Energy Base Set 97
-* 16 Waterhic Energy Base Set 102
+* 16 Water Energy Base Set 102

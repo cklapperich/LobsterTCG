@@ -12,4 +12,7 @@ export interface ActionExecutor {
   shuffleZone(playerIndex: PlayerIndex, zoneKey: string): Promise<void>;
   /** Add a log message and trigger reactivity. */
   addLog(message: string): void;
+  /** After coin flip, let the winner choose to go first or second.
+   *  Returns the PlayerIndex that should go first. */
+  chooseFirstOrSecond(winner: PlayerIndex, results: boolean[]): Promise<PlayerIndex>;
 }

@@ -476,8 +476,10 @@ export const plugin: GamePlugin<PokemonCardTemplate> = {
  */
 export async function onSetupComplete(_state: GameState<CardTemplate>, executor: ActionExecutor): Promise<void> {
   const isHeads = await executor.flipCoin();
-  const firstPlayer: PlayerIndex = isHeads ? 0 : 1;
-  executor.addLog(`Coin flip: ${isHeads ? 'HEADS' : 'TAILS'} — Player ${firstPlayer + 1} goes first!`);
+  const winner: PlayerIndex = isHeads ? 0 : 1;
+  executor.addLog(`Coin flip: ${isHeads ? 'HEADS' : 'TAILS'} — Player ${winner + 1} wins the flip!`);
+  const firstPlayer = await executor.chooseFirstOrSecond(winner, [isHeads]);
+  executor.addLog(`Player ${firstPlayer + 1} goes first!`);
   executor.tryAction(coinFlipAction(0, 1, [isHeads], firstPlayer));
 }
 

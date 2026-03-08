@@ -5,7 +5,7 @@
 * 3 Cyndaquil Neo Destiny 61
 * 3 Slugma Neo Destiny 82
 * 1 Unown T Neo Destiny 88
-* 3 Dark Quilva Neo Destiny 39
+* 3 Dark Quilava Neo Destiny 39
 * 1 Dark Haunter Neo Destiny 36
 * 2 Vulpix Neo Destiny 91
 * 1 Cyndaquil Neo Genesis 57
@@ -13,7 +13,7 @@
 * 1 Unown E Neo Discovery 67
 * 1 Magcargo Neo Revelation 33
 * 1 Unown S Neo Destiny 87
-* 1 Mail from Bill Neo Destiny 102
+* 1 Mail from Bill Neo Destiny 105
 * 2 Super Rod Neo Genesis 103
 * 2 Energy Stadium Neo Destiny 99
 * 2 Berry Neo Genesis 99

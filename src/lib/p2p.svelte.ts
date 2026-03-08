@@ -17,7 +17,9 @@ export interface P2PState {
 export type P2PMessage =
   | { type: 'state_sync'; state: GameState<CardTemplate> }
   | { type: 'action'; action: Action }
-  | { type: 'deck'; deck: DeckList };
+  | { type: 'deck'; deck: DeckList }
+  | { type: 'request_choice'; winner: 0 | 1 }
+  | { type: 'choice_response'; firstPlayer: 0 | 1 };
 
 type MessageHandler = (msg: P2PMessage) => void;
 

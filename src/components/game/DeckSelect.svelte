@@ -358,8 +358,8 @@
           <!-- Player 1 Deck Selection -->
           <div class="player-select">
             <div class="player-label text-gbc-green text-[0.6rem] mb-3 flex items-center gap-2">
-              <span class="player-badge bg-gbc-red text-gbc-cream px-2 py-1">P1</span>
-              PLAYER 1 DECK
+              <span class="player-badge bg-gbc-red text-gbc-cream px-2 py-1">YOU</span>
+              YOUR DECK
             </div>
             <GbcDropdown
               options={deckOptions.map(d => ({ value: d.id, label: `${d.source === 'supabase' ? '★ ' : ''}${d.name} (${d.cardCount} cards)` }))}
@@ -370,8 +370,8 @@
           <!-- Player 2 Deck Selection -->
           <div class="player-select">
             <div class="player-label text-gbc-green text-[0.6rem] mb-3 flex items-center gap-2">
-              <span class="player-badge bg-gbc-blue text-gbc-cream px-2 py-1">P2</span>
-              PLAYER 2 DECK
+              <span class="player-badge bg-gbc-blue text-gbc-cream px-2 py-1">AI</span>
+              AI DECK
             </div>
             <GbcDropdown
               options={deckOptions.map(d => ({ value: d.id, label: `${d.source === 'supabase' ? '★ ' : ''}${d.name} (${d.cardCount} cards)` }))}

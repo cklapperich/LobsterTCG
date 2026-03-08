@@ -55,8 +55,18 @@ b. importable playmats
 c. sound effects?? leave for now?
 d. image import like how twinleaf does it, we dont store links to the images
 
-27. Neo-era Tool trainer cards dont flow to bottom of stack!
-
 28. Get the AI to use Lass properly? lol
 
-29. auto-inject AI warnings/reminders if damage >= HP via narrative.ts
+29. auto-inject AI warnings/reminders if damage >= HP via narrative.
+
+30. cant choose 1st/2nd based on the coin flip currently
+
+31. p1/p2 deck confusing, should be "choe your deck" and "AI deck"
+
+32. keep the staging card visible/zoomed in while playing it?
+
+33. low-res card artwork renders really small when zoomed in, zoom size should be consistent
+
+34. persistent ideas
+
+35. move pile doesnt broadcast

@@ -50,7 +50,7 @@
 
   // V-UNION: exactly 4 same-name cards on a field zone → 2x2 grid, shrunk to fit
   const vunionGroup = $derived.by(() => {
-    if (!applyDisplayRotation || !isFieldZone || cards.length < 4) return null;
+    if (!applyDisplayRotation || !isFieldZone || cards.length !== 4) return null;
     const nameGroups = new Map<string, typeof cards>();
     for (const card of cards) {
       const name = card.template.name;

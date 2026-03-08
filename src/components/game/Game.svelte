@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { Playmat, CardInstance, CardTemplate, GameState, CounterDefinition, DeckSelection, ZoneConfig, Action, ActionExecutor } from '../../core';
-  import { executeAction, shuffle, moveCard, VISIBILITY, flipCard, endTurn, loadDeck, getCardName, findCardInZones, toReadableState, PluginManager, setOrientation, createDecision, resolveDecision, revealHand, mulligan as mulliganAction, PHASES, ACTION_TYPES, gameLog, systemLog, draw, coinFlip, addCounter, removeCounter, setCounter, declareAction } from '../../core';
+  import { executeAction, shuffle, moveCard, moveCardStack, VISIBILITY, flipCard, endTurn, loadDeck, getCardName, findCardInZones, toReadableState, PluginManager, setOrientation, createDecision, resolveDecision, revealHand, mulligan as mulliganAction, PHASES, ACTION_TYPES, gameLog, systemLog, draw, coinFlip, addCounter, removeCounter, setCounter, declareAction } from '../../core';
   import { POKEMON_DECLARATION_TYPES, MARKER_IDS } from '../../plugins/pokemon/constants';
   import { GAME_TYPES } from '../../game-types';
   import PlaymatGrid from './PlaymatGrid.svelte';
@@ -205,6 +205,12 @@
   let showStagingConfirm = $state(false);
   let stagingConfirmCallback = $state<(() => void) | null>(null);
 
+  // Coin flip choice modal state
+  let flipWinner = $state<0 | 1 | null>(null);
+  let choiceResolve = $state<((p: 0 | 1) => void) | null>(null);
+  // Resolve for P2P case where remote player won the flip and we await their choice response
+  let p2pChoiceResolve: ((p: 0 | 1) => void) | null = null;
+
   // Request modal state
   let showRequestModal = $state(false);
   let requestInput = $state('');
@@ -389,6 +395,21 @@
         gameState = { ...gameState };
       },
       addLog: (message: string) => addLog(message),
+      chooseFirstOrSecond: async (winner: 0 | 1, _results: boolean[]): Promise<0 | 1> => {
+        const role = playerConfig[`player${winner}` as 'player0' | 'player1'];
+        if (role === 'ai') {
+          // AI always goes first
+          return winner;
+        } else if (role === 'local') {
+          // Show choice UI, wait for human click
+          flipWinner = winner;
+          return new Promise<0 | 1>((resolve) => { choiceResolve = resolve; });
+        } else {
+          // Remote player won — send request, await their response
+          p2pChannel?.sendMessage({ type: 'request_choice', winner });
+          return new Promise<0 | 1>((resolve) => { p2pChoiceResolve = resolve; });
+        }
+      },
     };
   }
 
@@ -437,6 +458,17 @@
         executingRemoteAction = true;
         tryAction(msg.action);
         executingRemoteAction = false;
+      } else if (msg.type === 'request_choice') {
+        // Remote peer won the flip and asks us (local) to choose
+        flipWinner = msg.winner;
+        choiceResolve = (fp: 0 | 1) => {
+          p2pChannel?.sendMessage({ type: 'choice_response', firstPlayer: fp });
+          choiceResolve = null;
+          flipWinner = null;
+        };
+      } else if (msg.type === 'choice_response') {
+        p2pChoiceResolve?.(msg.firstPlayer);
+        p2pChoiceResolve = null;
       }
       // state_sync handled separately during mount; ignore here
     });
@@ -1024,11 +1056,21 @@
       const zoneEl = el?.closest('[data-zone-key]') as HTMLElement | null;
       if (zoneEl && gameState) {
         const toZoneKey = zoneEl.dataset.zoneKey!;
+        const fromZoneKey = dragStore.current?.fromZoneKey;
+        const pileCardIds = dragStore.current?.pileCardIds ? [...dragStore.current.pileCardIds] : undefined;
         const updatedState = executeStackDrop(toZoneKey, gameState, undefined, pluginManager);
         if (updatedState) {
           gameState = updatedState;
           const toZoneName = gameState.zones[toZoneKey]?.config.name ?? toZoneKey;
           addLog(`Moved ${cards.length} cards from ${zoneName} to ${toZoneName}`);
+
+          // P2P: broadcast the pile move so the remote peer stays in sync
+          if (p2pChannel?.state.status === 'connected' && !executingRemoteAction && fromZoneKey && pileCardIds) {
+            p2pChannel.sendMessage({
+              type: 'action',
+              action: moveCardStack(playerFromZoneKey(toZoneKey), pileCardIds, fromZoneKey, toZoneKey),
+            });
+          }
         }
       }
       endDrag();
@@ -1328,6 +1370,35 @@
     onResult={handleCoinResult}
   />
 
+  <!-- Coin Flip Choice Modal -->
+  {#if choiceResolve !== null}
+    <div class="debug-overlay" role="dialog" aria-modal="true">
+      <div class="request-modal gbc-panel" onclick={(e) => e.stopPropagation()} onkeydown={() => {}} role="dialog" tabindex="-1">
+        <div class="text-gbc-yellow text-[0.5rem] text-center py-1 px-2 bg-gbc-border">COIN FLIP WINNER</div>
+        <div class="px-3 py-3 flex flex-col gap-2 items-center">
+          <span class="text-gbc-light text-[0.45rem] text-center">Player {(flipWinner ?? 0) + 1} won the flip!</span>
+          <span class="text-gbc-yellow text-[0.45rem] text-center">Choose your position:</span>
+          <div class="flex gap-2 mt-1">
+            <button class="gbc-btn text-[0.45rem] py-1.5 px-4" onclick={() => {
+              const fp = flipWinner!;
+              const resolve = choiceResolve;
+              choiceResolve = null;
+              flipWinner = null;
+              resolve?.(fp);
+            }}>GO FIRST</button>
+            <button class="gbc-btn text-[0.45rem] py-1.5 px-4" onclick={() => {
+              const fp: 0 | 1 = flipWinner === 0 ? 1 : 0;
+              const resolve = choiceResolve;
+              choiceResolve = null;
+              flipWinner = null;
+              resolve?.(fp);
+            }}>GO SECOND</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  {/if}
+
   <!-- Staging Confirmation Modal -->
   {#if showStagingConfirm}
     {@const stagingCards = gameState?.zones['staging']?.cards ?? []}
@@ -1538,11 +1609,14 @@
 
   .preview-overlay-card {
     pointer-events: none;
+    height: 85vh;
+    aspect-ratio: 5 / 7;
+    max-width: 90vw;
   }
 
   .preview-overlay-card img {
-    max-height: 85vh;
-    max-width: 90vw;
+    width: 100%;
+    height: 100%;
     object-fit: contain;
     @apply rounded-xl;
   }
@@ -1558,7 +1632,8 @@
   }
 
   .preview-composite-legend img {
-    max-height: 40vh;
+    height: 40vh;
+    aspect-ratio: 5 / 7;
     max-width: 90vw;
     object-fit: contain;
     @apply rounded-xl;
@@ -1575,8 +1650,8 @@
   }
 
   .preview-composite-vunion img {
-    max-height: 40vh;
-    max-width: 44vw;
+    height: 40vh;
+    width: 44vw;
     object-fit: contain;
     @apply rounded-xl;
   }

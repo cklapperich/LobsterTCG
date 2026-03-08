@@ -1,8 +1,9 @@
 import type { CardTemplate } from '../../core';
 import type { DeckList } from '../../core/engine';
 import cardsData from './cards-western.json';
-import setCodes from './set-codes.json';
 import cardbackImg from './cardback.png';
+import type { WesternCard } from './pokemon-shared/types';
+import { parsePTCGO } from './pokemon-shared/ptcgoParser';
 
 /**
  * Attack data from the card database.
@@ -35,75 +36,25 @@ export interface PokemonCardTemplate extends CardTemplate {
   evolveFrom?: string;
   attacks?: PokemonAttack[];
   abilities?: PokemonAbility[];
-  weaknesses?: Array<{ type: string; value: string }>;
-  resistances?: Array<{ type: string; value: string }>;
+  weaknesses?: Array<{ type: string; value?: string }>;
+  resistances?: Array<{ type: string; value?: string }>;
   retreatCost?: string[];
   rules?: string[];
 }
 
-/**
- * Card image metadata from western card database.
- */
-interface CardImage {
-  url: string;
-}
 
-/**
- * Western card data structure from cards-western.json.
- */
-interface WesternCard {
-  id: string;
-  names: Record<string, string>;
-  set: string;
-  number: string;
-  ptcgoCode?: string;
-  setId?: string;
-  seriesId?: string;
-  images?: CardImage[];
-  supertype?: string;
-  subtypes?: string[];
-  types?: string[];
-  hp?: number;
-  evolveFrom?: string;
-  attacks?: PokemonAttack[];
-  abilities?: PokemonAbility[];
-  weaknesses?: Array<{ type: string; value: string }>;
-  resistances?: Array<{ type: string; value: string }>;
-  retreatCost?: string[];
-  rules?: string[];
-}
-
-// Lazy-loaded western card maps
+// Lazy-loaded western card map
 let westernCardMap: Map<string, WesternCard> | null = null;
-let cardsBySetNumber: Map<string, WesternCard> | null = null;
-let cardsByPtcgoNumber: Map<string, WesternCard> | null = null;
 
 /**
- * Ensure western card maps are loaded (lazy initialization).
+ * Ensure western card map is loaded (lazy initialization).
  */
 function ensureWesternCardsLoaded(): void {
   if (westernCardMap) return;
-
   westernCardMap = new Map();
-  cardsBySetNumber = new Map();
-  cardsByPtcgoNumber = new Map();
-
   for (const card of cardsData as WesternCard[]) {
     westernCardMap.set(card.id, card);
-
-    // Build lookup key: "setName|number" (normalized)
-    const setName = card.set.toLowerCase();
-    const number = card.number.toLowerCase();
-    const key = `${setName}|${number}`;
-    cardsBySetNumber.set(key, card);
-
-    // Build lookup by ptcgoCode|number for PTCGO format support
-    if (card.ptcgoCode) {
-      const ptcgoKey = `${card.ptcgoCode.toLowerCase()}|${number}`;
-      cardsByPtcgoNumber.set(ptcgoKey, card);
-    }
   }
-
 }
 
 /**
@@ -135,24 +86,6 @@ function getWesternCardImageUrl(card: WesternCard): string {
     return toHighRes(url);
   }
   return url;
-}
-
-/**
- * Look up a card by set name and number.
- */
-function findCardBySetNumber(setName: string, number: string): WesternCard | undefined {
-  ensureWesternCardsLoaded();
-  const key = `${setName.toLowerCase()}|${number.toLowerCase()}`;
-  return cardsBySetNumber!.get(key);
-}
-
-/**
- * Look up a card by PTCGO code and number.
- */
-function findCardByPtcgoNumber(ptcgoCode: string, number: string): WesternCard | undefined {
-  ensureWesternCardsLoaded();
-  const key = `${ptcgoCode.toLowerCase()}|${number.toLowerCase()}`;
-  return cardsByPtcgoNumber!.get(key);
 }
 
 /**
@@ -303,81 +236,13 @@ export interface PTCGOParseResult {
  */
 export function parsePTCGODeck(ptcgoText: string, deckName?: string): PTCGOParseResult {
   ensureWesternCardsLoaded();
-
-  const warnings: string[] = [];
-  const cards: Array<{ templateId: string; count: number }> = [];
-  const cardCounts = new Map<string, number>();
-
-  const lines = ptcgoText.split('\n');
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed || !trimmed.startsWith('*')) continue;
-
-    // Parse: * {qty} {cardName} {setName} {number}
-    // Card name can have multiple words, set name can have multiple words
-    // Number is always at the end
-    const match = trimmed.match(/^\*\s+(\d+)\s+(.+)\s+(\S+)$/);
-    if (!match) {
-      warnings.push(`Could not parse line: ${trimmed}`);
-      continue;
-    }
-
-    const [, qtyStr, rest, numberStr] = match;
-    const qty = parseInt(qtyStr, 10);
-
-    // Split rest into card name and set name
-    // The set name is everything after the card name, but we need to find the boundary
-    // Strategy: try progressively shorter card names until we find a matching set
-    const restParts = rest.trim().split(/\s+/);
-
-    let card: WesternCard | undefined;
-
-    // Try different splits: first word is card name, rest is set, then first two words, etc.
-    for (let i = restParts.length - 1; i >= 1; i--) {
-      const potentialSetParts = restParts.slice(i);
-      const potentialSetName = potentialSetParts.join(' ');
-
-      // Try direct lookup with set name
-      card = findCardBySetNumber(potentialSetName, numberStr);
-      if (card) break;
-
-      // Try direct lookup with PTCGO code (e.g., "TEU", "SK", "SUM")
-      card = findCardByPtcgoNumber(potentialSetName, numberStr);
-      if (card) break;
-
-      // Try looking up set code from set-codes.json
-      const setCode = (setCodes.setToCode as Record<string, string>)[potentialSetName];
-      if (setCode) {
-        const fullSetName = (setCodes.codeToSet as Record<string, string>)[setCode];
-        if (fullSetName) {
-          card = findCardBySetNumber(fullSetName, numberStr);
-          if (card) break;
-        }
-      }
-    }
-
-    if (!card) {
-      warnings.push(`Card not found: ${rest} ${numberStr}`);
-      continue;
-    }
-
-    // Accumulate counts for same card
-    const existingCount = cardCounts.get(card.id) || 0;
-    cardCounts.set(card.id, existingCount + qty);
-  }
-
-  // Convert to card array
-  for (const [templateId, count] of cardCounts) {
-    cards.push({ templateId, count });
-  }
-
+  const output = parsePTCGO(ptcgoText, westernCardMap!.values());
   return {
     deckList: {
       id: `ptcgo-${Date.now()}`,
       name: deckName || 'Imported Deck',
-      cards,
+      cards: output.entries.map(e => ({ templateId: e.cardId, count: e.quantity })),
     },
-    warnings,
+    warnings: output.errors.map(e => e.message),
   };
 }
