@@ -18,7 +18,6 @@
     onClearCounters?: () => void;
     onSetOrientation?: (degrees: string) => void;
     onRevealToOpponent?: () => void;
-    onRevealBothHands?: () => void;
     onMovePile?: () => void;
     onSearch?: () => void;
     onClose: () => void;
@@ -37,7 +36,6 @@
     onClearCounters,
     onSetOrientation,
     onRevealToOpponent,
-    onRevealBothHands,
     onMovePile,
     onSearch,
     onClose,
@@ -153,11 +151,6 @@
     </button>
   {/if}
 
-  {#if onRevealBothHands && cardCount > 0}
-    <button class="menu-item" onclick={() => handleAction(onRevealBothHands)} disabled={cardCount < 1}>
-      Reveal Both Hands
-    </button>
-  {/if}
 
   <!-- Rotate submenu wrapper -->
   {#if onSetOrientation && cardCount > 0}

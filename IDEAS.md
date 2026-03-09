@@ -19,54 +19,47 @@
     when execution agent fails, must go back to the main agent with the error message from the exception or the chatlog. 
     Errors from tools calls must be 'bubbled' up.
 
-    # JIRA TICKETS
+# JIRA TICKETS
 
-    2 'narrative' combat logs?
+1.  'narrative' combat logs?
 
-    3 double-click should be hook-able: for pokemon its appropriate to flip and for yugioh, for MTG You'd need to tap
+2.  double-click should be hook-able: for pokemon its appropriate to flip and for yugioh, for MTG You'd need to tap
 
-    4 need a way to flip a stack upside down. 'reveal' vs 'reveal to oponnent'
+3. need a way to flip a stack upside down. 'reveal' vs 'reveal to oponnent'
     same with the hand, need a perma-reveal for the hand
 
-    6 space saving idea: dont show evoultion cards peeking through from beneath a stack
+4. space saving idea: dont show evoultion cards peeking through from beneath a stack
     this requires a hook for pokemon specific stack logic.
 
-    7 add a pokemon plugin hook for stadium auto-discard in stadium zone
+5. add a pokemon plugin hook for stadium auto-discard in stadium zone
 
-    9 Playing stadiums doesnt read the stadium text out loud into the chatlog - needed?
+6. Playing stadiums doesnt read the stadium text out loud into the chatlog - needed?
 
-    19. Executor needs to use parallel tool calls
+7. Executor needs to use parallel tool calls
 
-    22. Ai doesnt have access to hand knowledge
+8. Ai doesnt have access to hand knowledge
     a. add a cheating mode so it can see your hand?
    b. or somehow make AI aware of whats in oponnents hand after a search like a timer ball
 
-
-    23. Auto-deck-strategy-generator. could probably just use a search engine, partially.
-
-    24. SFX should be data-driven by action type at a single point. createExecutor's sfxMap is the right idea — it just
+9. SFX should be data-driven by action type at a single point. createExecutor's sfxMap is the right idea — it just
     only exists for AI calls. If tryAction itself used that map, you'd never forget to add SFX again.
 
-    25. Add a 'concede' and 'declare victory' tool to the planner
+10. Add a 'concede' and 'declare victory' tool to the planner
 
-26. remove all pokemon assets
+11. remove all pokemon assets
 a. importable cardback
 b. importable playmats
 c. sound effects?? leave for now?
 d. image import like how twinleaf does it, we dont store links to the images
 
-28. Get the AI to use Lass properly? lol
+12. Get the AI to use Lass properly? lol
 
-29. auto-inject AI warnings/reminders if damage >= HP via narrative.
+13. auto-inject AI warnings/reminders if damage >= HP via narrative.
 
-30. cant choose 1st/2nd based on the coin flip currently
+14. keep the staging card visible/zoomed in while playing it?
 
-31. p1/p2 deck confusing, should be "choe your deck" and "AI deck"
+15. low-res card artwork renders really small when zoomed in, zoom size should be consistent
 
-32. keep the staging card visible/zoomed in while playing it?
+16. GB2-style deckbuilder implementation for signed in users
 
-33. low-res card artwork renders really small when zoomed in, zoom size should be consistent
-
-34. persistent ideas
-
-35. move pile doesnt broadcast
+17. better/easier ai debugging

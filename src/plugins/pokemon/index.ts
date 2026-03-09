@@ -38,6 +38,7 @@ import {
   POKEMON_DECLARATION_TYPES,
   AI_COUNTER_TYPES,
   MARKER_IDS,
+  SUPERTYPES,
 } from './constants';
 
 // Import counter images
@@ -262,7 +263,7 @@ function getActionPanels(state: GameState<PokemonCardTemplate>, player: PlayerIn
   const activeCard = activeZone?.cards.at(-1);
   const template = activeCard ? getCardTemplate(activeCard.template.id) : undefined;
 
-  const attackButtons = (template?.attacks ?? []).map(atk => {
+  const attackButtons: ActionPanel['buttons'] = (template?.attacks ?? []).map(atk => {
     return {
       id: atk.name,
       label: atk.name,
@@ -270,6 +271,26 @@ function getActionPanels(state: GameState<PokemonCardTemplate>, player: PlayerIn
       zoneKey: activeKey,
     };
   });
+
+  // Add trainer cards from all field zones as declarable actions
+  for (const zoneKey of getFieldZoneKeys(player)) {
+    const zone = state.zones[zoneKey];
+    if (!zone) continue;
+    for (const card of zone.cards) {
+      const tmpl = getCardTemplate(card.template.id);
+      if (!tmpl || tmpl.supertype !== SUPERTYPES.TRAINER) continue;
+      const rulesText = (tmpl as PokemonCardTemplate).rules?.join(' ') ?? '';
+      const topCard = zone.cards.at(-1);
+      const pokemonName = zoneKey !== activeKey ? (topCard?.template?.name ?? undefined) : undefined;
+      attackButtons.push({
+        id: `trainer::${zoneKey}::${tmpl.name}`,
+        label: tmpl.name,
+        sublabel: pokemonName,
+        tooltip: rulesText || tmpl.name,
+        zoneKey,
+      });
+    }
+  }
 
   panels.push({
     id: 'attacks',
@@ -326,6 +347,20 @@ function getActionPanels(state: GameState<PokemonCardTemplate>, player: PlayerIn
 
 function onActionPanelClick(state: GameState<PokemonCardTemplate>, player: PlayerIndex, panelId: string, buttonId: string): Action | undefined {
   if (panelId === 'attacks') {
+    if (buttonId.startsWith('trainer::')) {
+      const [, zoneKey, ...rest] = buttonId.split('::');
+      const cardName = rest.join('::');
+      const zone = state.zones[zoneKey];
+      const pokemonCard = zone?.cards.at(-1);
+      const pokemonName = pokemonCard?.template?.name ?? 'Pokemon';
+      return declareAction(
+        player,
+        POKEMON_DECLARATION_TYPES.ATTACK,
+        cardName,
+        { cardName, zoneKey, trainerEffect: true },
+        `${pokemonName} activated ${cardName}!`
+      );
+    }
     const activeKey = `player${player + 1}_${ZONE_IDS.ACTIVE}`;
     const topCard = state.zones[activeKey]?.cards.at(-1);
     const activeName = topCard?.template?.name ?? 'Active Pokemon';
@@ -466,6 +501,13 @@ export const plugin: GamePlugin<PokemonCardTemplate> = {
   getActionPanels,
   onActionPanelClick,
   getMarkers,
+  onMarkerClick(state, playerIndex, markerId) {
+    if (markerId.endsWith(`_${MARKER_IDS.GX}`)) {
+      return declareAction(playerIndex, POKEMON_DECLARATION_TYPES.GX_MARKER, 'GX Marker');
+    } else if (markerId.endsWith(`_${MARKER_IDS.VSTAR}`)) {
+      return declareAction(playerIndex, POKEMON_DECLARATION_TYPES.VSTAR_MARKER, 'VSTAR Marker');
+    }
+  },
   getCompositePreview,
 };
 

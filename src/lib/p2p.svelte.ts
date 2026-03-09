@@ -18,6 +18,7 @@ export type P2PMessage =
   | { type: 'state_sync'; state: GameState<CardTemplate> }
   | { type: 'action'; action: Action }
   | { type: 'deck'; deck: DeckList }
+  | { type: 'coin_flip_broadcast'; isHeads: boolean }
   | { type: 'request_choice'; winner: 0 | 1 }
   | { type: 'choice_response'; firstPlayer: 0 | 1 };
 

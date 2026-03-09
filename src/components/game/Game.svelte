@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { Playmat, CardInstance, CardTemplate, GameState, CounterDefinition, DeckSelection, ZoneConfig, Action, ActionExecutor } from '../../core';
-  import { executeAction, shuffle, moveCard, moveCardStack, VISIBILITY, flipCard, endTurn, loadDeck, getCardName, findCardInZones, toReadableState, PluginManager, setOrientation, createDecision, resolveDecision, revealHand, mulligan as mulliganAction, PHASES, ACTION_TYPES, gameLog, systemLog, draw, coinFlip, addCounter, removeCounter, setCounter, declareAction } from '../../core';
-  import { POKEMON_DECLARATION_TYPES, MARKER_IDS } from '../../plugins/pokemon/constants';
+  import { executeAction, moveCard, moveCardStack, VISIBILITY, flipCard, endTurn, loadDeck, getCardName, findCardInZones,
+    toReadableState, PluginManager, setOrientation, createDecision, resolveDecision, revealHand, mulligan as mulliganAction,
+    PHASES, ACTION_TYPES, gameLog, systemLog, draw, coinFlip, addCounter, removeCounter, setCounter, fromPlayerPerspective } from '../../core';
   import { GAME_TYPES } from '../../game-types';
   import PlaymatGrid from './PlaymatGrid.svelte';
   import ZoneContextMenu from './ZoneContextMenu.svelte';
@@ -15,7 +16,6 @@
   import type { ActionPanelButton } from '../../core/types/action-panel';
   import { dragStore, startPileDrag, updateDragPosition, endDrag, executeDrop, executeStackDrop } from './dragState.svelte';
   import { DEFAULT_CONFIG, isLocal, isAI, localPlayerIndex, opponent, playerFromZoneKey, isLocalZone, type PlayerConfig, type PlayerController } from './player-config';
-  import { fromAIPerspective } from '../../plugins/pokemon/zone-perspective';
   import {
     counterDragStore,
     endCounterDrag,
@@ -25,7 +25,13 @@
   import { playSfx, playBgm, stopBgm, toggleMute, audioSettings } from '../../lib/audio.svelte';
   import { settings } from '../../lib/settings.svelte';
   import type { P2PChannel } from '../../lib/p2p.svelte';
+  import { P2PAdapter } from './p2p-adapter';
   import SettingsModal from './SettingsModal.svelte';
+  import CardPreviewOverlay from './CardPreviewOverlay.svelte';
+  import CoinFlipChoiceModal from './CoinFlipChoiceModal.svelte';
+  import StagingConfirmModal from './StagingConfirmModal.svelte';
+  import RequestActionModal from './RequestActionModal.svelte';
+  import DebugModal from './DebugModal.svelte';
   import { runTurn } from '../../ai';
   import { contextMenuStore, openContextMenu, closeContextMenu as closeContextMenuStore } from './contextMenu.svelte';
   import { cardModalStore, openCardModal, closeCardModal as closeCardModalStore } from './cardModal.svelte';
@@ -76,9 +82,9 @@
   let error = $state<string | null>(null);
   let aiThinking = $state(false);
   let pendingDecisionResolve: (() => void) | null = $state(null);
-  // P2P: flag set while executing an action received from the remote peer
-  // to prevent re-broadcasting it back to them.
-  let executingRemoteAction = false;
+  // P2P adapter — wraps P2PChannel with all sync logic. No-ops when no channel.
+  // Declared early but initialized after tryAction is defined (see below).
+  let p2p: P2PAdapter;
 
   // Splash announcement
   let splashText = $state<string | null>(null);
@@ -142,11 +148,8 @@
 
   function handleMarkerClick(markerId: string) {
     if (!gameState) return;
-    if (markerId.endsWith(`_${MARKER_IDS.GX}`)) {
-      tryAction(declareAction(local, POKEMON_DECLARATION_TYPES.GX_MARKER, 'GX Marker'));
-    } else if (markerId.endsWith(`_${MARKER_IDS.VSTAR}`)) {
-      tryAction(declareAction(local, POKEMON_DECLARATION_TYPES.VSTAR_MARKER, 'VSTAR Marker'));
-    }
+    const action = plugin.onMarkerClick?.(gameState, local, markerId);
+    if (action) tryAction(action);
   }
 
   // Action panels from plugin (for local player)
@@ -208,13 +211,9 @@
   // Coin flip choice modal state
   let flipWinner = $state<0 | 1 | null>(null);
   let choiceResolve = $state<((p: 0 | 1) => void) | null>(null);
-  // Resolve for P2P case where remote player won the flip and we await their choice response
-  let p2pChoiceResolve: ((p: 0 | 1) => void) | null = null;
 
   // Request modal state
   let showRequestModal = $state(false);
-  let requestInput = $state('');
-  let requestInputEl = $state<HTMLInputElement | null>(null);
 
   // Announce turn start: SFX + log entry on any turn transition.
   // Dedup key prevents re-firing for the same turn.
@@ -286,11 +285,8 @@
   function tryAction(action: Action): string | null {
     if (!gameState) return 'No game state';
 
-    // P2P: inject a deterministic seed into shuffle actions so both peers
-    // produce identical card orders when executing the same action.
-    if (p2pChannel && !executingRemoteAction && action.type === ACTION_TYPES.SHUFFLE && action.seed === undefined) {
-      action = { ...action, seed: (Math.random() * 0xFFFFFFFF) >>> 0 };
-    }
+    // P2P: inject a deterministic seed into shuffle actions
+    action = p2p.prepareAction(action);
 
     const snapshot = $state.snapshot(gameState) as GameState<CardTemplate>;
     const preResult = pluginManager.runPreHooks(snapshot, action);
@@ -298,7 +294,7 @@
       const reason = `Action blocked: ${preResult.reason ?? 'Unknown'}`;
       gameLog(gameState, reason);
       gameState = { ...gameState };
-      if (!executingRemoteAction) playSfx('error');
+      if (!p2p.isRemoteAction) playSfx('error');
       return reason;
     }
     if (preResult.outcome === 'replace') {
@@ -311,7 +307,7 @@
     const blocked = executeAction(gameState, action);
     if (blocked) {
       gameState = { ...gameState };
-      if (!executingRemoteAction) playSfx('error');
+      if (!p2p.isRemoteAction) playSfx('error');
       return blocked;
     }
 
@@ -329,9 +325,7 @@
     gameState = { ...gameState };
 
     // P2P: broadcast local actions to the remote peer
-    if (p2pChannel?.state.status === 'connected' && !executingRemoteAction) {
-      p2pChannel.sendMessage({ type: 'action', action });
-    }
+    p2p.broadcastAction(action);
 
     return null;
   }
@@ -376,6 +370,8 @@
       },
       flipCoin: async () => {
         const isHeads = Math.random() < 0.5;
+        // In P2P, broadcast the result so the peer plays the animation at the same time.
+        p2p.broadcastCoinFlip(isHeads);
         if (coinFlipRef) await coinFlipRef.flip(isHeads);
         return isHeads;
       },
@@ -385,13 +381,9 @@
         playSfx('shuffle');
         if (playmatGridRef) await playmatGridRef.shuffleZone(zoneKey);
         // P2P: use a seeded shuffle so both peers get the same card order
-        const shuffleAct = p2pChannel?.state.status === 'connected'
-          ? { ...shuffle(playerIndex, zoneKey), seed: (Math.random() * 0xFFFFFFFF) >>> 0 }
-          : shuffle(playerIndex, zoneKey);
+        const shuffleAct = p2p.createSeededShuffle(playerIndex, zoneKey);
         executeAction(gameState, shuffleAct);
-        if (p2pChannel?.state.status === 'connected' && !executingRemoteAction) {
-          p2pChannel.sendMessage({ type: 'action', action: shuffleAct });
-        }
+        p2p.broadcastAction(shuffleAct);
         gameState = { ...gameState };
       },
       addLog: (message: string) => addLog(message),
@@ -406,8 +398,7 @@
           return new Promise<0 | 1>((resolve) => { choiceResolve = resolve; });
         } else {
           // Remote player won — send request, await their response
-          p2pChannel?.sendMessage({ type: 'request_choice', winner });
-          return new Promise<0 | 1>((resolve) => { p2pChoiceResolve = resolve; });
+          return p2p.requestRemoteChoice(winner);
         }
       },
     };
@@ -445,79 +436,54 @@
     state.log = ['Game started — Setup Phase'];
   }
 
-  let p2pUnsubscribe: (() => void) | null = null;
+  // Initialize P2P adapter — needs tryAction which is defined above
+  p2p = new P2PAdapter(p2pChannel, {
+    tryAction,
+    getCoinFlipRef: () => coinFlipRef ?? null,
+    setGameState: (s) => { gameState = s; loading = false; },
+    showChoiceUI: (winner, onChoice) => {
+      flipWinner = winner;
+      choiceResolve = (fp: 0 | 1) => {
+        onChoice(fp);
+        choiceResolve = null;
+        flipWinner = null;
+      };
+    },
+  });
 
-  /** Subscribe to incoming P2P messages: execute remote actions, apply state sync. */
-  function subscribeToP2P() {
-    if (!p2pChannel) return;
-    p2pUnsubscribe = p2pChannel.onMessage(async (msg) => {
-      if (msg.type === 'action') {
-        if (msg.action.type === ACTION_TYPES.COIN_FLIP) {
-          await coinFlipRef?.flip(msg.action.results?.[0]);
-        }
-        executingRemoteAction = true;
-        tryAction(msg.action);
-        executingRemoteAction = false;
-      } else if (msg.type === 'request_choice') {
-        // Remote peer won the flip and asks us (local) to choose
-        flipWinner = msg.winner;
-        choiceResolve = (fp: 0 | 1) => {
-          p2pChannel?.sendMessage({ type: 'choice_response', firstPlayer: fp });
-          choiceResolve = null;
-          flipWinner = null;
-        };
-      } else if (msg.type === 'choice_response') {
-        p2pChoiceResolve?.(msg.firstPlayer);
-        p2pChoiceResolve = null;
-      }
-      // state_sync handled separately during mount; ignore here
-    });
-  }
+  onMount(() => {
+    (async () => {
+      try {
+        playmat = await plugin.getPlaymat();
 
-  onMount(async () => {
-    try {
-      playmat = await plugin.getPlaymat();
+        if (p2p.role === 'guest') {
+          // Guest: skip local init — wait for the host's state_sync
+          const state = await p2p.waitForStateSync();
+          gameState = state;
+          loading = false;
+          p2p.subscribe();
+        } else {
+          // Host or local game: normal init
+          gameState = await plugin.startGame();
+          initializeGameState(gameState);
+          gameState = { ...gameState };
+          loading = false;
 
-      if (p2pChannel?.state.role === 'guest') {
-        // Guest: skip local init — wait for the host's state_sync
-        p2pUnsubscribe = p2pChannel.onMessage((msg) => {
-          if (msg.type === 'state_sync') {
-            // Replace the handler with the normal action-only handler
-            p2pUnsubscribe?.();
-            gameState = msg.state as GameState<CardTemplate>;
-            loading = false;
-            subscribeToP2P();
-          } else if (msg.type === 'action') {
-            // Actions may arrive before state_sync (shouldn't happen, but be safe)
-            executingRemoteAction = true;
-            if (gameState) tryAction(msg.action);
-            executingRemoteAction = false;
+          if (p2p.isConnected) {
+            // Host: send the full initial state to the guest
+            p2p.sendStateSync($state.snapshot(gameState) as GameState<CardTemplate>);
+            p2p.subscribe();
+          } else if (hasAI) {
+            playBgm();
           }
-        });
-      } else {
-        // Host or local game: normal init
-        gameState = await plugin.startGame();
-        initializeGameState(gameState);
-        gameState = { ...gameState };
-        loading = false;
-
-        if (p2pChannel?.state.status === 'connected') {
-          // Host: send the full initial state to the guest
-          p2pChannel.sendMessage({
-            type: 'state_sync',
-            state: $state.snapshot(gameState) as GameState<CardTemplate>,
-          });
-          subscribeToP2P();
-        } else if (hasAI) {
-          playBgm();
         }
+      } catch (e) {
+        error = e instanceof Error ? e.message : 'Failed to load game';
+        loading = false;
       }
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'Failed to load game';
-      loading = false;
-    }
+    })();
 
-    return () => { p2pUnsubscribe?.(); };
+    return () => { p2p.destroy(); };
   });
 
   function handleDrop(cardInstanceId: string, toZoneKey: string, position?: number) {
@@ -534,11 +500,8 @@
       gameState = updatedState;
 
       // P2P: broadcast the card move so the remote peer stays in sync
-      if (p2pChannel?.state.status === 'connected' && !executingRemoteAction && fromZoneKey) {
-        p2pChannel.sendMessage({
-          type: 'action',
-          action: moveCard(playerFromZoneKey(toZoneKey), cardInstanceId, fromZoneKey, toZoneKey, position),
-        });
+      if (fromZoneKey) {
+        p2p.broadcastAction(moveCard(playerFromZoneKey(toZoneKey), cardInstanceId, fromZoneKey, toZoneKey, position));
       }
 
       if (fromZoneKey !== toZoneKey) {
@@ -703,7 +666,6 @@
   let showDebugModal = $state(false);
   let debugJson = $state('');
   let debugNarrative = $state('');
-  let debugTab = $state<'narrative' | 'json'>('narrative');
 
   function handleDebug() {
     if (!gameState) return;
@@ -748,7 +710,7 @@
       isLocal: (idx) => isLocal(playerConfig, idx as 0 | 1),
       formatCardForSearch: plugin.formatCardForSearch,
       counterTypes: plugin.getAICounterTypes?.(),
-      translateZoneKey: (key, aiIdx) => fromAIPerspective(key, aiIdx as 0 | 1),
+      translateZoneKey: (key, aiIdx) => fromPlayerPerspective(key, aiIdx as 0 | 1),
       describeAction: (state, action) => describeAction(state, action, counterNameResolver),
       onPreviewCard: (card) => { previewCards = [card]; },
       createCheckpoint: () => JSON.parse(JSON.stringify($state.snapshot(gameState!))),
@@ -884,26 +846,19 @@
   function handleRequestAction() {
     if (!gameState || aiThinking || gameState.pendingDecision) return;
     showRequestModal = true;
-    requestInput = '';
-    // Focus input after modal renders
-    setTimeout(() => requestInputEl?.focus(), 50);
   }
 
-  function handleRequestSubmit() {
+  function handleRequestSubmit(value: string) {
     if (!gameState) return;
     showRequestModal = false;
     const opp = opponent(local);
-    tryAction(createDecision(local, opp, requestInput.trim() || undefined));
+    tryAction(createDecision(local, opp, value || undefined));
     playSfx('confirm');
-    requestInput = '';
-
-    // Dispatch to the target player's controller for the decision
     controllers[opp].handleDecision();
   }
 
   function handleRequestCancel() {
     showRequestModal = false;
-    requestInput = '';
   }
 
   // Counter handlers
@@ -985,46 +940,6 @@
     }
   }
 
-  function handleRevealBothHands() {
-    if (!gameState || !contextMenu || gameState.pendingDecision || !canLocalAct) return;
-    const zoneKey = contextMenu.zoneKey;
-    const opp = opponent(local);
-
-    // Collect card names from both hands BEFORE the reveal action (for logging)
-    const playerZone = gameState.zones[zoneKey];
-    const playerCardNames = playerZone?.cards.map(c => c.template.name).join(', ') ?? '';
-    const suffix = zoneKey.replace(/^player[12]_/, '');
-    const opponentZoneKey = `player${opp + 1}_${suffix}`;
-    const opponentZone = gameState.zones[opponentZoneKey];
-    const opponentCardNames = opponentZone?.cards.map(c => c.template.name).join(', ') ?? '';
-
-    // Pull card effect text from staging zone (the card being resolved)
-    const stagingKey = 'staging';
-    const stagingCard = gameState.zones[stagingKey]?.cards.at(-1);
-    const template = stagingCard && gameConfig.getTemplate ? gameConfig.getTemplate(stagingCard.template.id) : undefined;
-    const rules = (template as any)?.rules?.join(' ') ?? '';
-    // Include BOTH hands' card names in the decision message so AI sees them
-    const handInfo = `\nPlayer ${local + 1} hand: ${playerCardNames}\nYour hand (Player ${opp + 1}): ${opponentCardNames}`;
-    const actionMsg = rules
-      ? `Both hands revealed. Card effect (${template!.name}): ${rules}${handInfo} — Execute this effect on YOUR hand (move cards, shuffle deck, etc.), then call resolve_decision.`
-      : `Both hands revealed.${handInfo} — Execute the card effect on your hand, then call resolve_decision.`;
-
-    tryAction(revealHand(local, zoneKey, true, actionMsg));
-    playSfx('confirm');
-
-    // Show the opponent's hand to the human (cards are PUBLIC after mutual reveal)
-    const opponentZoneNow = gameState.zones[opponentZoneKey];
-    if (opponentZoneNow && opponentZoneNow.cards.length > 0) {
-      const zoneName = opponentZoneNow.config.name ?? opponentZoneKey;
-      openCardModal({ cards: [...opponentZoneNow.cards], zoneKey: opponentZoneKey, zoneName, allowReorder: false, shuffleOnConfirm: false });
-    }
-
-    // Dispatch to the decision target's controller
-    if (gameState.pendingDecision) {
-      controllers[gameState.pendingDecision.targetPlayer].handleDecision();
-    }
-  }
-
   function handleMovePile() {
     if (!gameState || !contextMenu || !canLocalAct) return;
     const zoneKey = contextMenu.zoneKey;
@@ -1065,11 +980,8 @@
           addLog(`Moved ${cards.length} cards from ${zoneName} to ${toZoneName}`);
 
           // P2P: broadcast the pile move so the remote peer stays in sync
-          if (p2pChannel?.state.status === 'connected' && !executingRemoteAction && fromZoneKey && pileCardIds) {
-            p2pChannel.sendMessage({
-              type: 'action',
-              action: moveCardStack(playerFromZoneKey(toZoneKey), pileCardIds, fromZoneKey, toZoneKey),
-            });
+          if (fromZoneKey && pileCardIds) {
+            p2p.broadcastAction(moveCardStack(playerFromZoneKey(toZoneKey), pileCardIds, fromZoneKey, toZoneKey));
           }
         }
       }
@@ -1283,7 +1195,6 @@
       onClearCounters={handleClearCounters}
       onSetOrientation={handleSetOrientation}
       onRevealToOpponent={isLocalZone(playerConfig, contextMenu.zoneKey) && !gameState?.pendingDecision ? handleRevealToOpponent : undefined}
-      onRevealBothHands={isLocalZone(playerConfig, contextMenu.zoneKey) && contextMenu.zoneKey.includes('hand') && !gameState?.pendingDecision ? handleRevealBothHands : undefined}
       onMovePile={handleMovePile}
       onSearch={isLocalZone(playerConfig, contextMenu.zoneKey) && !(contextMenu.zoneConfig.defaultVisibility[0] && contextMenu.zoneConfig.defaultVisibility[1]) && !gameState?.pendingDecision ? handleSearchZone : undefined}
       onClose={handleCloseContextMenu}
@@ -1329,38 +1240,8 @@
     {/if}
   {/if}
 
-  <!-- Fullscreen Card Preview (single, LEGEND 2-card column, V-UNION 2x2 grid) -->
-  {#if previewCards.length > 0}
-    <div class="preview-overlay" onclick={() => previewCards = []} onkeydown={(e) => e.key === 'Escape' && (previewCards = [])} role="button" tabindex="-1">
-      {#if previewCards.length === 1}
-        {@const card = previewCards[0]}
-        {#if card.template.imageUrl}
-          <div class="preview-overlay-card" style="transform: rotate({card.template.displayRotation ?? 0}deg)">
-            <img src={card.template.imageUrl} alt={card.template.name} />
-          </div>
-        {/if}
-      {:else if previewCards.length === 2}
-        <!-- LEGEND: two halves stacked vertically -->
-        <div class="preview-composite-legend">
-          {#each previewCards as card}
-            {#if card.template.imageUrl}
-              <img src={card.template.imageUrl} alt={card.template.name}
-                   style="transform: rotate({card.template.displayRotation ?? 0}deg)" />
-            {/if}
-          {/each}
-        </div>
-      {:else}
-        <!-- V-UNION: 2x2 grid -->
-        <div class="preview-composite-vunion">
-          {#each previewCards.slice(0, 4) as card}
-            {#if card.template.imageUrl}
-              <img src={card.template.imageUrl} alt={card.template.name} />
-            {/if}
-          {/each}
-        </div>
-      {/if}
-    </div>
-  {/if}
+  <!-- Fullscreen Card Preview -->
+  <CardPreviewOverlay cards={previewCards} onClose={() => previewCards = []} />
 
   <!-- Coin Flip Modal -->
   <CoinFlip
@@ -1372,75 +1253,29 @@
 
   <!-- Coin Flip Choice Modal -->
   {#if choiceResolve !== null}
-    <div class="debug-overlay" role="dialog" aria-modal="true">
-      <div class="request-modal gbc-panel" onclick={(e) => e.stopPropagation()} onkeydown={() => {}} role="dialog" tabindex="-1">
-        <div class="text-gbc-yellow text-[0.5rem] text-center py-1 px-2 bg-gbc-border">COIN FLIP WINNER</div>
-        <div class="px-3 py-3 flex flex-col gap-2 items-center">
-          <span class="text-gbc-light text-[0.45rem] text-center">Player {(flipWinner ?? 0) + 1} won the flip!</span>
-          <span class="text-gbc-yellow text-[0.45rem] text-center">Choose your position:</span>
-          <div class="flex gap-2 mt-1">
-            <button class="gbc-btn text-[0.45rem] py-1.5 px-4" onclick={() => {
-              const fp = flipWinner!;
-              const resolve = choiceResolve;
-              choiceResolve = null;
-              flipWinner = null;
-              resolve?.(fp);
-            }}>GO FIRST</button>
-            <button class="gbc-btn text-[0.45rem] py-1.5 px-4" onclick={() => {
-              const fp: 0 | 1 = flipWinner === 0 ? 1 : 0;
-              const resolve = choiceResolve;
-              choiceResolve = null;
-              flipWinner = null;
-              resolve?.(fp);
-            }}>GO SECOND</button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <CoinFlipChoiceModal
+      flipWinner={flipWinner!}
+      onChoose={(fp) => {
+        const resolve = choiceResolve;
+        choiceResolve = null;
+        flipWinner = null;
+        resolve?.(fp);
+      }}
+    />
   {/if}
 
   <!-- Staging Confirmation Modal -->
   {#if showStagingConfirm}
-    {@const stagingCards = gameState?.zones['staging']?.cards ?? []}
-    <div class="debug-overlay" onclick={() => { showStagingConfirm = false; stagingConfirmCallback = null; }} onkeydown={(e) => { if (e.key === 'Escape') { showStagingConfirm = false; stagingConfirmCallback = null; }}} role="button" tabindex="-1">
-      <div class="request-modal gbc-panel" onclick={(e) => e.stopPropagation()} onkeydown={() => {}} role="dialog" tabindex="-1">
-        <div class="text-gbc-yellow text-[0.5rem] text-center py-1 px-2 bg-gbc-border">CARDS IN STAGING</div>
-        <div class="px-3 py-3 flex flex-col gap-2">
-          <span class="text-gbc-light text-[0.45rem]">
-            Staging still has cards: {stagingCards.map(c => c.template.name).join(', ')}
-          </span>
-          <span class="text-gbc-yellow text-[0.45rem]">End turn anyway?</span>
-          <div class="flex justify-end gap-2 mt-1">
-            <button class="gbc-btn text-[0.45rem] py-1.5 px-4" onclick={() => { showStagingConfirm = false; stagingConfirmCallback = null; playSfx('cancel'); }}>CANCEL</button>
-            <button class="gbc-btn text-[0.45rem] py-1.5 px-4" onclick={() => stagingConfirmCallback?.()}>END TURN</button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <StagingConfirmModal
+      cards={gameState?.zones['staging']?.cards ?? []}
+      onConfirm={() => stagingConfirmCallback?.()}
+      onCancel={() => { showStagingConfirm = false; stagingConfirmCallback = null; playSfx('cancel'); }}
+    />
   {/if}
 
   <!-- Request Action Modal -->
   {#if showRequestModal}
-    <div class="debug-overlay" onclick={handleRequestCancel} onkeydown={(e) => e.key === 'Escape' && handleRequestCancel()} role="button" tabindex="-1">
-      <div class="request-modal gbc-panel" onclick={(e) => e.stopPropagation()} onkeydown={() => {}} role="dialog" tabindex="-1">
-        <div class="text-gbc-yellow text-[0.5rem] text-center py-1 px-2 bg-gbc-border">REQUEST ACTION</div>
-        <form class="px-3 py-3 flex flex-col gap-2" onsubmit={(e) => { e.preventDefault(); handleRequestSubmit(); }}>
-          <label for="request-action-input" class="text-gbc-light text-[0.45rem]">Describe what the opponent should do (optional):</label>
-          <input
-            id="request-action-input"
-            type="text"
-            class="request-input"
-            placeholder="e.g. Discard a card..."
-            bind:value={requestInput}
-            bind:this={requestInputEl}
-          />
-          <div class="flex justify-end gap-2 mt-1">
-            <button type="button" class="gbc-btn text-[0.45rem] py-1.5 px-4" onclick={handleRequestCancel}>CANCEL</button>
-            <button type="submit" class="gbc-btn text-[0.45rem] py-1.5 px-4">SEND</button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <RequestActionModal onSubmit={handleRequestSubmit} onCancel={handleRequestCancel} />
   {/if}
 
   <!-- Full Log Modal -->
@@ -1462,26 +1297,7 @@
 
   <!-- Debug Modal -->
   {#if showDebugModal}
-    <div class="debug-overlay" onclick={() => showDebugModal = false} onkeydown={(e) => e.key === 'Escape' && (showDebugModal = false)} role="button" tabindex="-1">
-      <div class="debug-modal gbc-panel" onclick={(e) => e.stopPropagation()} onkeydown={() => {}} role="dialog" tabindex="-1">
-        <div class="flex items-center justify-between mb-2 py-1 px-2 bg-gbc-border">
-          <div class="flex items-center gap-2">
-            <button
-              class="gbc-btn text-[0.45rem] py-0.5 px-2"
-              class:active={debugTab === 'narrative'}
-              onclick={() => debugTab = 'narrative'}
-            >NARRATIVE</button>
-            <button
-              class="gbc-btn text-[0.45rem] py-0.5 px-2"
-              class:active={debugTab === 'json'}
-              onclick={() => debugTab = 'json'}
-            >JSON</button>
-          </div>
-          <button class="gbc-btn text-[0.45rem] py-0.5 px-2" onclick={() => showDebugModal = false}>CLOSE</button>
-        </div>
-        <pre class="debug-json">{debugTab === 'narrative' ? debugNarrative : debugJson}</pre>
-      </div>
-    </div>
+    <DebugModal narrative={debugNarrative} json={debugJson} onClose={() => showDebugModal = false} />
   {/if}
 
   <!-- Settings Modal -->
@@ -1602,60 +1418,6 @@
     @apply border-gbc-green;
   }
 
-  .preview-overlay {
-    @apply fixed inset-0 z-[150] flex items-center justify-center cursor-pointer;
-    background: rgba(0, 0, 0, 0.75);
-  }
-
-  .preview-overlay-card {
-    pointer-events: none;
-    height: 85vh;
-    aspect-ratio: 5 / 7;
-    max-width: 90vw;
-  }
-
-  .preview-overlay-card img {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    @apply rounded-xl;
-  }
-
-  /* LEGEND: two portrait halves stacked vertically, each rotated 90° to landscape.
-   * CSS rotation doesn't affect layout, so rotated images have dead vertical space.
-   * Negative margin collapses that space so the two halves visually touch.
-   * Dead space per image ≈ H * (1 - W/H) / 2 = H * 1/7 for a 5:7 card. */
-  .preview-composite-legend {
-    @apply flex flex-col items-center;
-    gap: 0;
-    pointer-events: none;
-  }
-
-  .preview-composite-legend img {
-    height: 40vh;
-    aspect-ratio: 5 / 7;
-    max-width: 90vw;
-    object-fit: contain;
-    @apply rounded-xl;
-    margin-block: -5.5vh;
-  }
-
-  /* V-UNION: 2x2 grid */
-  .preview-composite-vunion {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: 1fr 1fr;
-    gap: 0.25rem;
-    pointer-events: none;
-  }
-
-  .preview-composite-vunion img {
-    height: 40vh;
-    width: 44vw;
-    object-fit: contain;
-    @apply rounded-xl;
-  }
-
   .debug-overlay {
     @apply fixed inset-0 z-[200] flex items-center justify-center;
     background: rgba(0, 0, 0, 0.7);
@@ -1671,24 +1433,4 @@
     scrollbar-color: var(--color-gbc-green) var(--color-gbc-border);
   }
 
-  .request-modal {
-    @apply w-80;
-  }
-
-  .request-input {
-    @apply w-full bg-gbc-dark-green text-gbc-light text-[0.45rem] px-2 py-1.5 border border-gbc-border rounded-sm font-retro;
-    @apply outline-none;
-  }
-
-  .request-input::placeholder {
-    @apply text-gbc-green/50;
-  }
-
-  .request-input:focus {
-    @apply border-gbc-green;
-  }
-
-  :global(.gbc-btn.active) {
-    @apply bg-gbc-green text-gbc-dark-green;
-  }
 </style>

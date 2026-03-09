@@ -2,7 +2,7 @@ import type { ReadableGameState, ReadableZone, ReadableCard, ReadableTurn } from
 import { ACTION_TYPES } from '../../core/types/constants';
 import { isFieldZone } from './helpers';
 import { SUPERTYPES, COUNTER_IDS, NARRATIVE, FIRST_EVOLUTION_TURN, FIRST_SUPPORTER_TURN } from './constants';
-import { toAIPerspective } from './zone-perspective';
+import { toPlayerPerspective } from '../../core/zone-perspective';
 import type { PlayerIndex } from '../../core/types';
 import type { PokemonPluginState } from './plugin-state';
 
@@ -92,6 +92,14 @@ export function formatNarrativeState(readable: ReadableGameState): string {
   lines.push('--- OPPONENT BOARD ---');
   lines.push('');
   lines.push(...formatBoard(readable, oppPrefix, 'Opponent'));
+
+  // KO alerts — Pokemon whose damage counters meet or exceed base HP
+  const koLines = formatKOAlerts(readable, aiIdx);
+  if (koLines.length > 0) {
+    lines.push('');
+    lines.push('--- KO ALERTS ---');
+    lines.push(...koLines);
+  }
 
   // Combat notes (weakness/resistance matchup between actives)
   const combatLines = formatCombatNotes(readable, aiIdx);
@@ -529,6 +537,49 @@ function formatAction(a: Record<string, unknown>): string {
   }
 }
 
+// ── KO alerts ────────────────────────────────────────────────────
+
+/**
+ * Warn about any Pokemon whose damage counters meet or exceed their base HP.
+ * Base HP is from the card template — attached tools (Cape of Toughness, Buff Padding, etc.)
+ * or active stadiums may raise the effective HP, so the alert notes to verify before acting.
+ */
+function formatKOAlerts(readable: ReadableGameState, aiIdx: PlayerIndex): string[] {
+  const lines: string[] = [];
+  const fieldZoneIds = ['active', 'bench_1', 'bench_2', 'bench_3', 'bench_4', 'bench_5'];
+  const players = [
+    { prefix: `player${aiIdx + 1}`, owner: 'YOUR' },
+    { prefix: `player${aiIdx === 0 ? 2 : 1}`, owner: "OPPONENT'S" },
+  ];
+
+  for (const { prefix, owner } of players) {
+    for (const zoneId of fieldZoneIds) {
+      const zone = readable.zones[`${prefix}_${zoneId}`];
+      if (!zone || zone.cards.length === 0) continue;
+
+      const pokemon = zone.cards[zone.cards.length - 1];
+      const hp = pokemon.hp as number | undefined;
+      const totalDamage = pokemon.totalDamage as number | undefined;
+      if (!hp || totalDamage === undefined || totalDamage === 0) continue;
+
+      const label = zoneId === 'active' ? 'Active' : zoneId.replace('_', ' ');
+
+      // Check for attached HP-boosting tools so we can mention them
+      const attached = zone.cards.slice(0, -1);
+      const tools = attached.filter(c => c.supertype === SUPERTYPES.TRAINER);
+      const toolNote = tools.length > 0
+        ? ` (has tool: ${tools.map(t => t.name).join(', ')} — verify if it grants extra HP)`
+        : '';
+
+      if (totalDamage >= hp) {
+        lines.push(`[KO] ${owner} ${label}: ${pokemon.name} has ${totalDamage} damage vs ${hp} base HP — should be KO'd${toolNote}. Check for HP-boosting tools/stadium before acting.`);
+      }
+    }
+  }
+
+  return lines;
+}
+
 // ── Combat notes (weakness/resistance between actives) ──────────
 
 function formatCombatNotes(readable: ReadableGameState, aiIdx: PlayerIndex = 1): string[] {
@@ -613,7 +664,7 @@ function formatZoneList(zones: Record<string, ReadableZone>, aiIdx: PlayerIndex)
   const sharedKeys: string[] = [];
 
   for (const zoneKey of Object.keys(zones)) {
-    const perspective = toAIPerspective(zoneKey, aiIdx);
+    const perspective = toPlayerPerspective(zoneKey, aiIdx);
     if (perspective.startsWith('your_')) {
       yourKeys.push(perspective);
     } else if (perspective.startsWith('opponent_')) {

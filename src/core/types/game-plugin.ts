@@ -79,8 +79,8 @@ export interface GamePlugin<T extends CardTemplate = CardTemplate> {
   /** Return marker states for the counter tray UI. */
   getMarkers?(state: GameState<T>, playerIndex: PlayerIndex): MarkerState[];
 
-  /** Handle a marker click (manual flip). */
-  onMarkerClick?(state: GameState<T>, playerIndex: PlayerIndex, markerId: string): void;
+  /** Handle a marker click (manual flip). Returns an Action to dispatch, or void. */
+  onMarkerClick?(state: GameState<T>, playerIndex: PlayerIndex, markerId: string): Action | void;
 
   /** Return multiple cards for composite preview (LEGEND 2-card, V-UNION 4-card). */
   getCompositePreview?(card: CardInstance<T>, state: GameState<T>): CardInstance<T>[] | undefined;

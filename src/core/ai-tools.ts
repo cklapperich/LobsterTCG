@@ -372,17 +372,16 @@ export function createDefaultTools(ctx: ToolContext): ToolSet {
         });
       }),
 
-    reveal: createTool('Reveal cards to your opponent or both players.',
+    reveal: createTool('Reveal cards to your opponent.',
       z.object({
         cardNames: z.array(z.string()).describe('Names of cards to reveal'),
         zone: z.string().describe('Zone key the cards are in'),
-        to: z.enum(['opponent', 'both']).optional().describe('Who to reveal to (default "both")'),
       }),
-      async ({ cardNames, zone, to }) => {
+      async ({ cardNames, zone }) => {
         const zoneKey = tz(ctx, zone);
         return ctx.execute((state) => {
           const cardIds = cardNames.map((name: string) => resolveCard(state, name, zoneKey));
-          return reveal(p, cardIds, to ?? 'both');
+          return reveal(p, cardIds, 'opponent');
         });
       }),
 
@@ -398,13 +397,12 @@ export function createDefaultTools(ctx: ToolContext): ToolSet {
       z.object({ reason: z.string().optional().describe('Reason for declaring victory') }),
       async ({ reason }) => ctx.execute(declareVictory(p, reason))),
 
-    reveal_hand: createTool('Reveal all cards in a zone to the opponent. Logs card names and creates a decision for acknowledgment. If mutual is true, reveals both your zone and the opponent\'s equivalent zone simultaneously.',
+    reveal_hand: createTool('Reveal all cards in a zone to the opponent. Logs card names and creates a decision for acknowledgment.',
       z.object({
         zone: z.string().describe('Zone key to reveal (e.g. "your_hand")'),
-        mutual: z.boolean().optional().describe('If true, reveals both your zone and the opponent\'s equivalent zone'),
         message: z.string().optional().describe('Custom decision message describing what the opponent should do'),
       }),
-      async ({ zone, mutual, message }) => ctx.execute(revealHand(p, tz(ctx, zone), mutual, message))),
+      async ({ zone, message }) => ctx.execute(revealHand(p, tz(ctx, zone), false, message))),
 
     create_decision: createTool('Request the opponent to make a decision (mini-turn). The opponent gets control to take actions, then resolves the decision back to you.',
       z.object({ message: z.string().optional().describe('Optional message describing what the opponent needs to do') }),

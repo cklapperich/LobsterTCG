@@ -57,6 +57,9 @@ export type { UnpackedMoveAction } from './action-utils';
 // Re-export playmat loader
 export { loadPlaymat, parsePlaymat } from './playmat-loader';
 
+// Re-export zone perspective utilities
+export { toPlayerPerspective, fromPlayerPerspective } from './zone-perspective';
+
 // Re-export action factory functions
 export {
   draw,
