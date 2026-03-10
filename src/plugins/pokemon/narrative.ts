@@ -156,9 +156,9 @@ function collectUniqueCards(readable: ReadableGameState): ReadableCard[] {
   for (const [zoneKey, zone] of Object.entries(readable.zones)) {
     // Skip deck zones — deck contents are listed as names only, no full reference
     if (zoneKey.endsWith('_deck')) continue;
-    // Skip hand zones — hand cards appear as names in the board section, not in full reference
-    // (prevents the AI from mistaking a hand Stadium for one already in play)
-    if (zoneKey.endsWith('_hand')) continue;
+    // Skip opponent hand — only show full references for the AI's own hand cards
+    const aiHandKey = `player${readable.viewer + 1}_hand`;
+    if (zoneKey.endsWith('_hand') && zoneKey !== aiHandKey) continue;
 
     const field = isFieldZone(zoneKey);
 

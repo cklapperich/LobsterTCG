@@ -677,12 +677,7 @@
     const snapshot = $state.snapshot(gameState);
     // Narrative: show AI perspective (opponent of local player)
     const aiIdx = opponent(local) as 0 | 1;
-    const oppIdx = aiIdx === 0 ? 1 : 0;
-    const debugOmniscient = new Set([
-      `player${aiIdx + 1}_deck`,
-      `player${oppIdx + 1}_hand`,
-    ]);
-    const aiReadable = pluginManager.applyReadableStateModifier(toReadableState(snapshot, aiIdx, debugOmniscient));
+    const aiReadable = pluginManager.applyReadableStateModifier(toReadableState(snapshot, aiIdx));
     aiReadable.deckStrategy = decks?.[aiIdx]?.strategy;
     debugNarrative = pluginManager.formatReadableState(aiReadable);
     // JSON: show active player's perspective
@@ -698,12 +693,7 @@
         // Snapshot strips Svelte 5 proxy so Object.entries() enumerates all template fields
         const snapshot = $state.snapshot(gameState!);
         const aiIdx = playerIndex as 0 | 1;
-        const oppIdx = aiIdx === 0 ? 1 : 0;
-        const omniscientZones = new Set([
-          `player${aiIdx + 1}_deck`,
-          `player${oppIdx + 1}_hand`,
-        ]);
-        const modified = pluginManager.applyReadableStateModifier(toReadableState(snapshot, aiIdx, omniscientZones));
+        const modified = pluginManager.applyReadableStateModifier(toReadableState(snapshot, aiIdx));
         modified.deckStrategy = decks?.[aiIdx]?.strategy;
         return pluginManager.formatReadableState(modified);
       },

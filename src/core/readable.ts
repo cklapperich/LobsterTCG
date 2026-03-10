@@ -66,12 +66,15 @@ export interface ReadableGameState {
 export function toReadableState<T extends CardTemplate>(
   state: GameState<T>,
   playerIndex: PlayerIndex,
-  omniscientZones?: Set<string>,
 ): ReadableGameState {
   const readableZones: Record<string, ReadableZone> = {};
 
+  // A player always has full visibility into their own deck (it's your cards, you know what's there).
+  // Everything else is governed solely by card.visibility flags set by the engine.
+  const ownDeckKey = `player${playerIndex + 1}_deck`;
+
   for (const [zoneKey, zone] of Object.entries(state.zones)) {
-    readableZones[zoneKey] = convertZone(zone, playerIndex, omniscientZones?.has(zoneKey));
+    readableZones[zoneKey] = convertZone(zone, playerIndex, zoneKey === ownDeckKey);
   }
 
   // Build instanceId → card name lookup for action conversion (visibility-aware)
