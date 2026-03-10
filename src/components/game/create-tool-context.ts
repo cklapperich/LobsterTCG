@@ -83,9 +83,6 @@ export function createToolContext(
         const blocked = executor.tryAction(action);
         if (blocked) return `Action blocked: ${blocked}`;
 
-        // Log the action
-        if (logMessage) executor.addLog(logMessage);
-
         // Auto-preview card when opponent moves it to staging
         if (action.type === ACTION_TYPES.MOVE_CARD && action.toZone === 'staging') {
           const stateNow = deps.getState();

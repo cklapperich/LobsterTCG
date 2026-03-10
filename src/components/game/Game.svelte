@@ -1,9 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { Playmat, CardInstance, CardTemplate, GameState, CounterDefinition, DeckSelection, ZoneConfig, Action, ActionExecutor } from '../../core';
-  import { executeAction, moveCard, moveCardStack, VISIBILITY, flipCard, endTurn, loadDeck, getCardName, findCardInZones,
+  import { executeAction, moveCard, moveCardStack, VISIBILITY, flipCard, endTurn, loadDeck, findCardInZones,
     toReadableState, PluginManager, setOrientation, createDecision, resolveDecision, revealHand, mulligan as mulliganAction,
-    PHASES, ACTION_TYPES, gameLog, systemLog, draw, coinFlip, addCounter, removeCounter, setCounter, fromPlayerPerspective } from '../../core';
+    PHASES, ACTION_TYPES, gameLog, systemLog, draw, coinFlip, addCounter, removeCounter, setCounter, fromPlayerPerspective,
+    checkOpponentZone } from '../../core';
   import { GAME_TYPES } from '../../game-types';
   import PlaymatGrid from './PlaymatGrid.svelte';
   import ZoneContextMenu from './ZoneContextMenu.svelte';
@@ -14,7 +15,7 @@
   import CoinFlip from './CoinFlip.svelte';
   import SplashAnnouncement from './SplashAnnouncement.svelte';
   import type { ActionPanelButton } from '../../core/types/action-panel';
-  import { dragStore, startPileDrag, updateDragPosition, endDrag, executeDrop, executeStackDrop } from './dragState.svelte';
+  import { dragStore, startPileDrag, updateDragPosition, endDrag } from './dragState.svelte';
   import { DEFAULT_CONFIG, isLocal, isAI, localPlayerIndex, opponent, playerFromZoneKey, isLocalZone, type PlayerConfig, type PlayerController } from './player-config';
   import {
     counterDragStore,
@@ -35,6 +36,24 @@
   import { runTurn } from '../../ai';
   import { contextMenuStore, openContextMenu, closeContextMenu as closeContextMenuStore } from './contextMenu.svelte';
   import { cardModalStore, openCardModal, closeCardModal as closeCardModalStore } from './cardModal.svelte';
+
+  // Action → SFX mapping: single source of truth for all action paths (UI, AI, drag-drop)
+  const ACTION_SFX_MAP: Record<string, string> = {
+    [ACTION_TYPES.DRAW]: 'cardDrop',
+    [ACTION_TYPES.MOVE_CARD]: 'cardDrop',
+    [ACTION_TYPES.MOVE_CARD_STACK]: 'cardDrop',
+    [ACTION_TYPES.SHUFFLE]: 'shuffle',
+    [ACTION_TYPES.MULLIGAN]: 'shuffle',
+    [ACTION_TYPES.END_TURN]: 'confirm',
+    [ACTION_TYPES.RESOLVE_DECISION]: 'confirm',
+    [ACTION_TYPES.CREATE_DECISION]: 'confirm',
+    [ACTION_TYPES.SET_ORIENTATION]: 'confirm',
+    [ACTION_TYPES.REVEAL_HAND]: 'confirm',
+    [ACTION_TYPES.DECLARE_ACTION]: 'confirm',
+    [ACTION_TYPES.ADD_COUNTER]: 'cursor',
+    [ACTION_TYPES.REMOVE_COUNTER]: 'cursor',
+    [ACTION_TYPES.SET_COUNTER]: 'cursor',
+  };
 
   // Props
   interface Props {
@@ -288,6 +307,9 @@
     // P2P: inject a deterministic seed into shuffle actions
     action = p2p.prepareAction(action);
 
+    // Resolve log message BEFORE action executes (card names may change post-move)
+    const logMsg = describeAction(gameState, action, counterNameResolver);
+
     const snapshot = $state.snapshot(gameState) as GameState<CardTemplate>;
     const preResult = pluginManager.runPreHooks(snapshot, action);
     if (preResult.outcome === 'block') {
@@ -302,6 +324,18 @@
     }
     if (preResult.outcome === 'warn') {
       gameLog(gameState, `Warning: ${preResult.reason}`);
+    }
+
+    // Opponent zone check (game-universal, not plugin-specific)
+    const opponentCheck = checkOpponentZone(snapshot, action);
+    if (opponentCheck) {
+      if (opponentCheck.shouldBlock) {
+        gameLog(gameState, `Action blocked: ${opponentCheck.reason}`);
+        gameState = { ...gameState };
+        if (!p2p.isRemoteAction) playSfx('error');
+        return opponentCheck.reason;
+      }
+      gameLog(gameState, `Warning: ${opponentCheck.reason}`);
     }
 
     const blocked = executeAction(gameState, action);
@@ -320,6 +354,13 @@
     } else if (action.type === ACTION_TYPES.MOVE_CARD && action.toZone === 'stadium') {
       const stadiumCard = gameState.zones['stadium']?.cards.find(c => c.instanceId === action.cardInstanceId);
       if (stadiumCard) showSplash(stadiumCard.template.name.toUpperCase());
+    }
+
+    // Auto-feedback (SFX + log) for local actions
+    if (!p2p.isRemoteAction) {
+      const sfx = ACTION_SFX_MAP[action.type];
+      if (sfx) playSfx(sfx as any);
+      if (logMsg) addLog(logMsg);
     }
 
     gameState = { ...gameState };
@@ -342,32 +383,8 @@
   }
 
   function createExecutor(): ActionExecutor {
-    const sfxMap: Record<string, string> = {
-      [ACTION_TYPES.DRAW]: 'cardDrop',
-      [ACTION_TYPES.MOVE_CARD]: 'cardDrop',
-      [ACTION_TYPES.MOVE_CARD_STACK]: 'cardDrop',
-      [ACTION_TYPES.SHUFFLE]: 'shuffle',
-      [ACTION_TYPES.MULLIGAN]: 'shuffle',
-      [ACTION_TYPES.END_TURN]: 'confirm',
-      [ACTION_TYPES.RESOLVE_DECISION]: 'confirm',
-      [ACTION_TYPES.CREATE_DECISION]: 'confirm',
-      [ACTION_TYPES.SET_ORIENTATION]: 'confirm',
-      [ACTION_TYPES.REVEAL_HAND]: 'confirm',
-      [ACTION_TYPES.DECLARE_ACTION]: 'confirm',
-      [ACTION_TYPES.ADD_COUNTER]: 'cursor',
-      [ACTION_TYPES.REMOVE_COUNTER]: 'cursor',
-      [ACTION_TYPES.SET_COUNTER]: 'cursor',
-    };
-
     return {
-      tryAction: (action: Action) => {
-        const blocked = tryAction(action);
-        if (!blocked) {
-          const sfx = sfxMap[action.type];
-          if (sfx) playSfx(sfx as any);
-        }
-        return blocked;
-      },
+      tryAction: (action: Action) => tryAction(action),
       flipCoin: async () => {
         const isHeads = Math.random() < 0.5;
         // In P2P, broadcast the result so the peer plays the animation at the same time.
@@ -378,13 +395,10 @@
       playSfx: (key: string) => playSfx(key as any),
       shuffleZone: async (playerIndex, zoneKey) => {
         if (!gameState) return;
-        playSfx('shuffle');
         if (playmatGridRef) await playmatGridRef.shuffleZone(zoneKey);
         // P2P: use a seeded shuffle so both peers get the same card order
         const shuffleAct = p2p.createSeededShuffle(playerIndex, zoneKey);
-        executeAction(gameState, shuffleAct);
-        p2p.broadcastAction(shuffleAct);
-        gameState = { ...gameState };
+        tryAction(shuffleAct);
       },
       addLog: (message: string) => addLog(message),
       chooseFirstOrSecond: async (winner: 0 | 1, _results: boolean[]): Promise<0 | 1> => {
@@ -489,30 +503,20 @@
   function handleDrop(cardInstanceId: string, toZoneKey: string, position?: number) {
     if (!gameState || !canLocalAct) {
       playSfx('error');
+      endDrag();
       return;
     }
 
-    const cardName = getCardName(gameState, cardInstanceId);
     const fromZoneKey = dragStore.current?.fromZoneKey;
-    const fromZoneName = fromZoneKey ? (gameState.zones[fromZoneKey]?.config.name ?? fromZoneKey) : '?';
-    const updatedState = executeDrop(cardInstanceId, toZoneKey, gameState, position, pluginManager);
-    if (updatedState) {
-      gameState = updatedState;
-
-      // P2P: broadcast the card move so the remote peer stays in sync
-      if (fromZoneKey) {
-        p2p.broadcastAction(moveCard(playerFromZoneKey(toZoneKey), cardInstanceId, fromZoneKey, toZoneKey, position));
-      }
-
-      if (fromZoneKey !== toZoneKey) {
-        const toZoneName = gameState.zones[toZoneKey]?.config.name ?? toZoneKey;
-        addLog(`Moved ${cardName} from ${fromZoneName} to ${toZoneName}`);
-      } else {
-        gameState = { ...gameState };
-      }
-    } else {
-      playSfx('error');
+    if (!fromZoneKey || (fromZoneKey === toZoneKey && position === undefined)) {
+      endDrag();
+      return;
     }
+
+    const action = moveCard(playerFromZoneKey(toZoneKey), cardInstanceId, fromZoneKey, toZoneKey, position);
+    endDrag();
+    const blocked = tryAction(action);
+    if (blocked) playSfx('error');
   }
 
   function handlePreview(card: CardInstance<CardTemplate>) {
@@ -531,18 +535,12 @@
     const activePlayer = gameState.activePlayer;
 
     if (settings.dblClickDeckToDraw && zone.key === `player${local + 1}_deck`) {
-      const blocked = tryAction(draw(local, 1));
-      if (!blocked) {
-        playSfx('cardDrop');
-        addLog(`Drew a card`);
-      }
+      tryAction(draw(local, 1));
       return;
     }
 
     const newVisibility = card.visibility[local] ? VISIBILITY.HIDDEN : VISIBILITY.PUBLIC;
     tryAction(flipCard(activePlayer, cardInstanceId, newVisibility));
-    const flipDirection = newVisibility === VISIBILITY.PUBLIC ? 'face up' : 'face down';
-    addLog(`Flipped ${card.template.name} ${flipDirection}`);
   }
 
   // Context menu handlers
@@ -563,7 +561,6 @@
     if (!zone || zone.cards.length < 2) return;
 
     await createExecutor().shuffleZone(playerFromZoneKey(zoneKey), zoneKey);
-    addLog(`Shuffled ${gameState!.zones[zoneKey]?.config.name ?? zoneKey}`);
   }
 
   function handlePeekTop(count: number) {
@@ -624,11 +621,6 @@
     if (shouldShuffle) {
       await createExecutor().shuffleZone(playerIndex as 0 | 1, fromZone);
     }
-
-    const zoneName = gameState!.zones[fromZone]?.config.name ?? fromZone;
-    const destName = destZone === 'staging' ? 'staging' : 'hand';
-    const cardNames = selectedCards.map(c => c.template.name).join(', ');
-    addLog(`Took ${cardNames} from ${zoneName} to ${destName}`);
   }
 
   function handleCloseCardModal() {
@@ -712,7 +704,7 @@
       counterTypes: plugin.getAICounterTypes?.(),
       translateZoneKey: (key, aiIdx) => fromPlayerPerspective(key, aiIdx as 0 | 1),
       describeAction: (state, action) => describeAction(state, action, counterNameResolver),
-      onPreviewCard: (card) => { previewCards = [card]; },
+      onPreviewCard: (card) => { previewCards = card ? [card] : []; },
       createCheckpoint: () => JSON.parse(JSON.stringify($state.snapshot(gameState!))),
       restoreState: (snapshot) => { gameState = snapshot as GameState<CardTemplate>; gameState = { ...gameState }; },
     };
@@ -772,11 +764,7 @@
 
   function handleMulligan() {
     if (!gameState || !canLocalAct) return;
-    const action = mulliganAction(gameState.activePlayer);
-    const blocked = createExecutor().tryAction(action);
-    if (!blocked) {
-      addLog('Mulliganed');
-    }
+    tryAction(mulliganAction(gameState.activePlayer));
   }
 
   function handleEndTurn() {
@@ -816,9 +804,6 @@
     const action = endTurn(currentPlayer);
     tryAction(action);
 
-    addLog(wasSetup ? 'Ended setup' : 'Ended turn');
-    playSfx('confirm');
-
     // Setup just completed → coin flip + dispatch to winner
     if (wasSetup && await handlePostSetupTransition()) return;
 
@@ -833,8 +818,6 @@
   function handleResolveDecision() {
     if (!gameState || !gameState.pendingDecision) return;
     tryAction(resolveDecision(local));
-    addLog('Resolved decision');
-    playSfx('confirm');
 
     // Unblock the AI's tool call if it was waiting
     if (pendingDecisionResolve) {
@@ -853,7 +836,6 @@
     showRequestModal = false;
     const opp = opponent(local);
     tryAction(createDecision(local, opp, value || undefined));
-    playSfx('confirm');
     controllers[opp].handleDecision();
   }
 
@@ -869,14 +851,10 @@
     const sourceCardId = drag.source !== 'tray' ? drag.source : null;
     endCounterDrag();
 
-    const cardName = getCardName(gameState, cardInstanceId);
-    const counter = getCounterById(counterId);
     if (sourceCardId) {
       tryAction(removeCounter(local, sourceCardId, counterId, 1));
     }
     tryAction(addCounter(local, cardInstanceId, counterId, 1));
-    addLog(`Added ${counter?.name ?? counterId} to ${cardName}`);
-    playSfx('cursor');
   }
 
   function handleCounterReturn() {
@@ -886,18 +864,12 @@
     const { counterId, source: sourceCardId } = drag;
     endCounterDrag();
 
-    const cardName = getCardName(gameState, sourceCardId);
-    const counter = getCounterById(counterId);
     tryAction(removeCounter(local, sourceCardId, counterId, 1));
-    addLog(`Removed ${counter?.name ?? counterId} from ${cardName}`);
-    playSfx('cancel');
   }
 
   function handleClearCounters() {
     if (!gameState || !contextMenu || !canLocalAct) return;
-    const zoneKey = contextMenu.zoneKey;
-    const zoneName = contextMenu.zoneName;
-    const zone = gameState.zones[zoneKey];
+    const zone = gameState.zones[contextMenu.zoneKey];
     if (zone) {
       for (const card of zone.cards) {
         for (const counterType of Object.keys(card.counters)) {
@@ -905,8 +877,6 @@
         }
       }
     }
-    addLog(`Cleared all counters from ${zoneName}`);
-    playSfx('confirm');
   }
 
   function handleSetOrientation(degrees: string) {
@@ -915,24 +885,16 @@
     if (!zone || zone.cards.length === 0) return;
     const card = zone.cards.at(-1)!;
     tryAction(setOrientation(gameState.activePlayer, card.instanceId, degrees));
-    const label = degrees === '0' ? 'rotation cleared' : `rotated to ${degrees}°`;
-    addLog(`${card.template.name} ${label}`);
-    playSfx('confirm');
   }
 
   function handleRevealToOpponent() {
     if (!gameState || !contextMenu || !canLocalAct) return;
 
     const zoneKey = contextMenu.zoneKey;
-    const zone = gameState.zones[zoneKey];
-    const cardNames = zone?.cards.map(c => c.template.name).join(', ') ?? '';
-    const zoneName = zone?.config.name ?? zoneKey;
     const err_or_block_reason = tryAction(revealHand(local, zoneKey));
     if (err_or_block_reason) {
       return;
     }
-    addLog(`Revealed ${zoneName}: ${cardNames}`);
-    playSfx('confirm');
 
     // Dispatch to the decision target's controller
     if (gameState.pendingDecision) {
@@ -940,10 +902,25 @@
     }
   }
 
+  /** Attach mousemove/mouseup listeners for a drag, guaranteeing cleanup even if onDrop throws. */
+  function createDragSession(onMove: (e: MouseEvent) => void, onDrop: (e: MouseEvent) => void) {
+    function handleMove(e: MouseEvent) { onMove(e); }
+    function handleUp(e: MouseEvent) {
+      document.removeEventListener('mousemove', handleMove);
+      document.removeEventListener('mouseup', handleUp);
+      try {
+        onDrop(e);
+      } finally {
+        endDrag();
+      }
+    }
+    document.addEventListener('mousemove', handleMove);
+    document.addEventListener('mouseup', handleUp);
+  }
+
   function handleMovePile() {
     if (!gameState || !contextMenu || !canLocalAct) return;
     const zoneKey = contextMenu.zoneKey;
-    const zoneName = contextMenu.zoneName;
     const zone = gameState.zones[zoneKey];
     if (!zone || zone.cards.length === 0) return;
 
@@ -953,42 +930,30 @@
     closeContextMenuStore();
     startPileDrag(cards, zoneKey, startX, startY);
 
-    function onMouseMove(e: MouseEvent) {
-      updateDragPosition(e.clientX, e.clientY);
-    }
-    function onMouseUp(e: MouseEvent) {
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
+    createDragSession(
+      (e) => updateDragPosition(e.clientX, e.clientY),
+      (e) => {
+        // Eat the subsequent click so the destination zone's browse handler doesn't fire
+        document.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          ev.stopImmediatePropagation();
+          ev.preventDefault();
+        }, { capture: true, once: true });
 
-      // Eat the subsequent click event so the destination zone's browse handler doesn't fire
-      document.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        ev.stopImmediatePropagation();
-        ev.preventDefault();
-      }, { capture: true, once: true });
-
-      const el = document.elementFromPoint(e.clientX, e.clientY);
-      const zoneEl = el?.closest('[data-zone-key]') as HTMLElement | null;
-      if (zoneEl && gameState) {
-        const toZoneKey = zoneEl.dataset.zoneKey!;
-        const fromZoneKey = dragStore.current?.fromZoneKey;
-        const pileCardIds = dragStore.current?.pileCardIds ? [...dragStore.current.pileCardIds] : undefined;
-        const updatedState = executeStackDrop(toZoneKey, gameState, undefined, pluginManager);
-        if (updatedState) {
-          gameState = updatedState;
-          const toZoneName = gameState.zones[toZoneKey]?.config.name ?? toZoneKey;
-          addLog(`Moved ${cards.length} cards from ${zoneName} to ${toZoneName}`);
-
-          // P2P: broadcast the pile move so the remote peer stays in sync
-          if (fromZoneKey && pileCardIds) {
-            p2p.broadcastAction(moveCardStack(playerFromZoneKey(toZoneKey), pileCardIds, fromZoneKey, toZoneKey));
+        const el = document.elementFromPoint(e.clientX, e.clientY);
+        const zoneEl = el?.closest('[data-zone-key]') as HTMLElement | null;
+        if (zoneEl && gameState) {
+          const toZoneKey = zoneEl.dataset.zoneKey!;
+          const fromZoneKey = dragStore.current?.fromZoneKey;
+          const pileCardIds = dragStore.current?.pileCardIds ? [...dragStore.current.pileCardIds] : undefined;
+          if (fromZoneKey && pileCardIds && fromZoneKey !== toZoneKey) {
+            const action = moveCardStack(playerFromZoneKey(toZoneKey), pileCardIds, fromZoneKey, toZoneKey);
+            const blocked = tryAction(action);
+            if (blocked) playSfx('error');
           }
         }
-      }
-      endDrag();
-    }
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
+      },
+    );
   }
 </script>
 

@@ -588,18 +588,6 @@
 
             <!-- AI options (greyed when locked) -->
             <div class:opacity-40={!hasApiKey} class:pointer-events-none={!hasApiKey}>
-              <!-- AI Model Selection -->
-              <div class="model-select mb-4">
-                <div class="player-label text-gbc-green text-[0.6rem] mb-3 flex items-center gap-2">
-                  <span class="player-badge bg-gbc-yellow text-gbc-border px-2 py-1">AI</span>
-                  AI MODEL
-                </div>
-                <GbcDropdown
-                  options={MODEL_OPTIONS.map(m => ({ value: m.modelId, label: m.label }))}
-                  bind:value={aiModel}
-                />
-              </div>
-
               <!-- AI Mode Selection -->
               <div class="mode-select mb-4">
                 <div class="player-label text-gbc-green text-[0.6rem] mb-3 flex items-center gap-2">
@@ -628,6 +616,18 @@
                   />
                 </div>
               {/if}
+
+              <!-- AI Model Selection -->
+              <div class="model-select mb-4">
+                <div class="player-label text-gbc-green text-[0.6rem] mb-3 flex items-center gap-2">
+                  <span class="player-badge bg-gbc-yellow text-gbc-border px-2 py-1">AI</span>
+                  {aiMode === 'pipeline' ? 'EXECUTION MODEL' : 'AI MODEL'}
+                </div>
+                <GbcDropdown
+                  options={MODEL_OPTIONS.map(m => ({ value: m.modelId, label: m.label }))}
+                  bind:value={aiModel}
+                />
+              </div>
             </div>
           </div>
         {/if}

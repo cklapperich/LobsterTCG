@@ -501,7 +501,7 @@ export const plugin: GamePlugin<PokemonCardTemplate> = {
   getActionPanels,
   onActionPanelClick,
   getMarkers,
-  onMarkerClick(state, playerIndex, markerId) {
+  onMarkerClick(_state, playerIndex, markerId) {
     if (markerId.endsWith(`_${MARKER_IDS.GX}`)) {
       return declareAction(playerIndex, POKEMON_DECLARATION_TYPES.GX_MARKER, 'GX Marker');
     } else if (markerId.endsWith(`_${MARKER_IDS.VSTAR}`)) {

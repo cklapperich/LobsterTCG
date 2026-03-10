@@ -17,7 +17,7 @@ export function describeAction(
 
   switch (action.type) {
     case ACTION_TYPES.DRAW:
-      return `Drew ${action.count} card(s)`;
+      return `Drew ${action.count === 1 ? 'a card' : action.count + ' cards'}`;
     case ACTION_TYPES.MOVE_CARD:
       return `Moved ${cardName(action.cardInstanceId)} from ${zoneId(action.fromZone)} to ${zoneId(action.toZone)}`;
     case ACTION_TYPES.MOVE_CARD_STACK:
