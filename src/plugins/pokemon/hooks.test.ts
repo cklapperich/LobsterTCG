@@ -1,20 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import {
-  createGameState,
-  createCardInstance,
-  generateInstanceId,
-  GameLoop,
-  PluginManager,
-  moveCard,
-  moveCardStack,
-  addCounter,
-  declareAction,
-  VISIBILITY,
-  ACTION_SOURCES,
-  GAME_EVENTS,
-  CARD_FLAGS,
-} from '../../core';
-import type { GameState, Action, ZoneConfig } from '../../core';
+import { createGameState, createCardInstance, generateInstanceId } from '../../core/engine';
+import { GameLoop } from '../../core/game-loop';
+import { PluginManager } from '../../core/plugin/plugin-manager';
+import { moveCard, moveCardStack, addCounter, declareAction } from '../../core/action';
+import { VISIBILITY } from '../../core/types/card';
+import { ACTION_SOURCES, GAME_EVENTS, CARD_FLAGS } from '../../core/types/constants';
+import type { GameState } from '../../core/types/game';
+import type { Action } from '../../core/types/action';
+import type { ZoneConfig } from '../../core/types/zone';
 import { POKEMON_DECLARATION_TYPES } from './constants';
 import type { PokemonCardTemplate } from './cards';
 import { getTemplate } from './cards';
@@ -412,7 +405,7 @@ describe('trainer rules in readable state', () => {
     const { toReadableState } = await import('../../core/readable');
     const { pokemonHooksPlugin: hooksPlugin } = await import('./hooks');
     const { formatNarrativeState } = await import('./narrative');
-    const { PluginManager } = await import('../../core');
+    const { PluginManager } = await import('../../core/plugin/plugin-manager');
 
     const { state } = setupGame();
     const IONO = 'sv45-80';

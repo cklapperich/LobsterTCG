@@ -4,7 +4,7 @@ import { buildPrompt } from '../plugins/pokemon/prompt-builder';
 import { formatCardInventory } from '../core/readable';
 import { getTemplate } from '../plugins/pokemon/cards';
 import { formatCardReference } from '../plugins/pokemon/narrative';
-import type { DeckList } from '../core';
+import type { DeckList } from '../core/types/deck';
 
 export async function generateDeckStrategy(deckList: DeckList): Promise<string> {
   const templates = deckList.cards

@@ -1,6 +1,5 @@
+import type { PlayerIndex, Visibility } from './types/card';
 import type {
-  PlayerIndex,
-  Visibility,
   DrawAction,
   MoveCardAction,
   MoveCardStackAction,
@@ -26,14 +25,14 @@ import type {
   SwapCardStacksAction,
   RearrangeZoneAction,
   DeclareAction,
-} from './types';
+} from './types/action';
 import {
   ACTION_TYPES,
   POSITIONS,
   REVEAL_TARGETS,
   ORIENTATION_NAMES,
-} from './types';
-import type { Position } from './types';
+} from './types/constants';
+import type { Position } from './types/constants';
 
 // ============================================================================
 // Action Factory Functions

@@ -1,8 +1,12 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { Snippet } from 'svelte';
-  import type { Playmat, CardInstance, GameState, CardTemplate, CounterDefinition, ZoneConfig, PlaymatSlot } from '../../core';
-  import { VISIBILITY } from '../../core';
+  import type { CardInstance, CardTemplate } from '../../core/types/card';
+  import type { ZoneConfig } from '../../core/types/zone';
+  import type { Playmat, PlaymatSlot } from '../../core/types/playmat';
+  import type { GameState } from '../../core/types/game';
+  import type { CounterDefinition } from '../../core/types/counter';
+  import { VISIBILITY } from '../../core/types/card';
   import Zone from './Zone.svelte';
 
   interface Props {

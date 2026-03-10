@@ -6,15 +6,10 @@
 import type { ToolSet } from 'ai';
 import { tool as aiTool } from 'ai';
 import { z } from 'zod';
-import {
-  INSTANCE_ID_PREFIX,
-  resolveCardName,
-  declareAction,
-  setOrientation,
-  moveCardStack,
-  moveCard,
-  ACTION_TYPES,
-} from '../../core';
+import { INSTANCE_ID_PREFIX } from '../../core/types/constants';
+import { ACTION_TYPES } from '../../core/types/constants';
+import { resolveCardName } from '../../core/readable';
+import { declareAction, setOrientation, moveCardStack, moveCard } from '../../core/action';
 import { type ToolContext } from '../../core/ai-tools';
 import { ZONE_IDS } from './zones';
 import {

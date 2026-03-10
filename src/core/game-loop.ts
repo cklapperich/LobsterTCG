@@ -1,11 +1,13 @@
-import type { CardTemplate, Action, GameState, PlayerIndex } from './types';
-import { ACTION_TYPES, GAME_EVENTS } from './types';
-import type { GameEventType } from './types';
+import type { CardTemplate, PlayerIndex } from './types/card';
+import type { Action } from './types/action';
+import type { GameState } from './types/game';
+import { ACTION_TYPES, GAME_EVENTS } from './types/constants';
+import type { GameEventType } from './types/constants';
 import type { ReadableGameState } from './readable';
 import { toReadableState } from './readable';
 import { executeAction, checkOpponentZone } from './engine';
 import { gameLog } from './game-log';
-import type { PluginManager } from './plugin';
+import type { PluginManager } from './plugin/plugin-manager';
 
 type GameEventListener<T extends CardTemplate = CardTemplate> = (
   event: GameEventType,

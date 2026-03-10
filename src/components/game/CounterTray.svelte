@@ -1,5 +1,6 @@
 <script lang="ts">
-  import type { CounterDefinition, MarkerState } from '../../core';
+  import type { CounterDefinition } from '../../core/types/counter';
+  import type { MarkerState } from '../../core/types/game-plugin';
   import CounterIcon from './CounterIcon.svelte';
   import {
     startCounterDrag,

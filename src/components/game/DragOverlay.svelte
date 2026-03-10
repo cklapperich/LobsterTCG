@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { CardInstance, CardTemplate } from '../../core';
+  import type { CardInstance, CardTemplate } from '../../core/types/card';
 
   interface Props {
     card: CardInstance<CardTemplate>;

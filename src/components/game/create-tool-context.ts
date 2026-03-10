@@ -1,5 +1,8 @@
-import type { Action, CardTemplate, CardInstance, GameState, ActionExecutor } from '../../core';
-import { ACTION_TYPES, ACTION_SOURCES } from '../../core';
+import type { Action } from '../../core/types/action';
+import type { CardTemplate, CardInstance } from '../../core/types/card';
+import type { GameState } from '../../core/types/game';
+import type { ActionExecutor } from '../../core/action-executor';
+import { ACTION_TYPES, ACTION_SOURCES } from '../../core/types/constants';
 import type { ToolContext } from '../../core/ai-tools';
 import type { PlayerController } from './player-config';
 

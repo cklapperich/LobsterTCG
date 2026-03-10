@@ -1,5 +1,7 @@
-import type { GameState, CardTemplate, PlayerIndex } from '../../core';
-import { VISIBILITY, PHASES } from '../../core';
+import type { GameState } from '../../core/types/game';
+import type { CardTemplate, PlayerIndex } from '../../core/types/card';
+import { VISIBILITY } from '../../core/types/card';
+import { PHASES } from '../../core/types/constants';
 import { ZONE_IDS, TABLEAU_ZONE_IDS } from './zones';
 
 /**

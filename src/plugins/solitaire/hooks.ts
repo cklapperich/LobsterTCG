@@ -1,6 +1,7 @@
 import type { Plugin } from '../../core/plugin/types';
-import type { CardTemplate } from '../../core';
-import { VISIBILITY, ACTION_TYPES } from '../../core';
+import type { CardTemplate } from '../../core/types/card';
+import { VISIBILITY } from '../../core/types/card';
+import { ACTION_TYPES } from '../../core/types/constants';
 import { TABLEAU_ZONE_IDS, FOUNDATION_ZONE_IDS } from './zones';
 
 /**

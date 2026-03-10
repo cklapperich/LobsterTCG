@@ -1,5 +1,5 @@
 // Context menu store - manages zone context menu state
-import type { ZoneConfig } from '../../core';
+import type { ZoneConfig } from '../../core/types/zone';
 
 export interface ContextMenuState {
   zoneKey: string;

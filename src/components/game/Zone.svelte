@@ -1,6 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Zone as ZoneType, PlaymatSlot, CardInstance, CardTemplate, CounterDefinition, ZoneConfig } from '../../core';
+  import type { CardInstance, CardTemplate } from '../../core/types/card';
+  import type { ZoneConfig, Zone as ZoneType } from '../../core/types/zone';
+  import type { PlaymatSlot } from '../../core/types/playmat';
+  import type { CounterDefinition } from '../../core/types/counter';
   import CardStack from './CardStack.svelte';
   import { dragStore } from './dragState.svelte';
 

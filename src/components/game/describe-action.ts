@@ -1,5 +1,8 @@
-import type { Action, CardTemplate, GameState } from '../../core';
-import { ACTION_TYPES, getCardName } from '../../core';
+import type { Action } from '../../core/types/action';
+import type { CardTemplate } from '../../core/types/card';
+import type { GameState } from '../../core/types/game';
+import { ACTION_TYPES } from '../../core/types/constants';
+import { getCardName } from '../../core/engine';
 
 export type CounterNameResolver = (counterTypeId: string) => string;
 

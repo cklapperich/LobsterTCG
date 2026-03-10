@@ -3,7 +3,7 @@ import { ACTION_TYPES } from '../../core/types/constants';
 import { isFieldZone } from './helpers';
 import { SUPERTYPES, COUNTER_IDS, NARRATIVE, FIRST_EVOLUTION_TURN, FIRST_SUPPORTER_TURN } from './constants';
 import { toPlayerPerspective } from '../../core/zone-perspective';
-import type { PlayerIndex } from '../../core/types';
+import type { PlayerIndex } from '../../core/types/card';
 import type { PokemonPluginState } from './plugin-state';
 
 /**

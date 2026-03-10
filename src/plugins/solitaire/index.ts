@@ -1,6 +1,14 @@
-import type { GamePlugin, GameState, PlayerIndex, Playmat, ActionPanel, Action } from '../../core';
-import { loadPlaymat, createGameState, VISIBILITY, executeAction, gameLog } from '../../core';
-import { moveCard } from '../../core';
+import type { GamePlugin } from '../../core/types/game-plugin';
+import type { GameState } from '../../core/types/game';
+import type { PlayerIndex } from '../../core/types/card';
+import type { Playmat } from '../../core/types/playmat';
+import type { ActionPanel } from '../../core/types/action-panel';
+import type { Action } from '../../core/types/action';
+import { loadPlaymat } from '../../core/playmat-loader';
+import { createGameState, executeAction } from '../../core/engine';
+import { VISIBILITY } from '../../core/types/card';
+import { gameLog } from '../../core/game-log';
+import { moveCard } from '../../core/action';
 import type { SolitaireCardTemplate } from './cards';
 import { ZONE_IDS } from './zones';
 

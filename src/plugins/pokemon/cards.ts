@@ -1,5 +1,5 @@
-import type { CardTemplate } from '../../core';
-import type { DeckList } from '../../core/engine';
+import type { CardTemplate } from '../../core/types/card';
+import type { DeckList } from '../../core/types/deck';
 import cardsData from './cards-western.json';
 import cardbackImg from './cardback.png';
 import type { WesternCard } from './pokemon-shared/types';

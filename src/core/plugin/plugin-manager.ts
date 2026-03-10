@@ -1,5 +1,7 @@
-import type { CardTemplate, Action, GameState } from '../types';
-import { DEFAULT_HOOK_PRIORITY } from '../types';
+import type { CardTemplate } from '../types/card';
+import type { Action } from '../types/action';
+import type { GameState } from '../types/game';
+import { DEFAULT_HOOK_PRIORITY } from '../types/constants';
 import type { ReadableGameState } from '../readable';
 import type {
   Plugin,

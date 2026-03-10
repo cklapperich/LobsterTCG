@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { CounterDefinition } from '../../core';
+  import type { CounterDefinition } from '../../core/types/counter';
 
   interface Props {
     counter: CounterDefinition;

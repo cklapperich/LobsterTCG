@@ -1,5 +1,5 @@
-import type { Action, MoveCardAction, MoveCardStackAction } from './types';
-import { ACTION_TYPES } from './types';
+import type { Action, MoveCardAction, MoveCardStackAction } from './types/action';
+import { ACTION_TYPES } from './types/constants';
 
 /**
  * Unpacked fields from a move_card or move_card_stack action.

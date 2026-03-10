@@ -1,17 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import {
-  createGameState,
-  createCardInstance,
-  generateInstanceId,
-  GameLoop,
-  moveCard,
-  moveCardStack,
-  addCounter,
-  VISIBILITY,
-  ACTION_SOURCES,
-  GAME_EVENTS,
-} from './index';
-import type { GameState, CardTemplate, ZoneConfig } from './types';
+import { createGameState, createCardInstance, generateInstanceId } from './engine';
+import { GameLoop } from './game-loop';
+import { moveCard, moveCardStack, addCounter } from './action';
+import { VISIBILITY } from './types/card';
+import { ACTION_SOURCES, GAME_EVENTS } from './types/constants';
+import type { GameState } from './types/game';
+import type { CardTemplate } from './types/card';
+import type { ZoneConfig } from './types/zone';
 
 // ---------------------------------------------------------------------------
 // Minimal zone configs for testing

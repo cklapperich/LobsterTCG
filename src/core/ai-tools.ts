@@ -1,7 +1,8 @@
-import type { CardTemplate, PlayerIndex, Action } from './types';
-import type { GameState } from './types';
+import type { CardTemplate, PlayerIndex } from './types/card';
+import type { Action } from './types/action';
+import type { GameState } from './types/game';
 import type { ToolSet } from 'ai';
-import { INSTANCE_ID_PREFIX, ORIENTATIONS } from './types';
+import { INSTANCE_ID_PREFIX, ORIENTATIONS } from './types/constants';
 import { resolveCardName, formatCardInventory } from './readable';
 import {
   draw,
@@ -27,7 +28,7 @@ import {
   swapCardStacks,
   rearrangeZone,
 } from './action';
-import type { Visibility } from './types';
+import type { Visibility } from './types/card';
 import { tool as aiTool } from 'ai';
 import { z } from 'zod';
 

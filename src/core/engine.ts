@@ -1,10 +1,6 @@
+import type { CardTemplate, CardInstance, Visibility, PlayerIndex } from './types/card';
+import type { Zone, ZoneConfig } from './types/zone';
 import type {
-  CardTemplate,
-  CardInstance,
-  Visibility,
-  PlayerIndex,
-  Zone,
-  ZoneConfig,
   Action,
   DrawAction,
   MoveCardAction,
@@ -29,12 +25,9 @@ import type {
   MulliganAction,
   SwapCardStacksAction,
   RearrangeZoneAction,
-  PlayerInfo,
-  GameConfig,
-  GameState,
-  Turn,
-} from './types';
-import { VISIBILITY } from './types';
+} from './types/action';
+import type { PlayerInfo, GameConfig, GameState, Turn } from './types/game';
+import { VISIBILITY } from './types/card';
 import {
   ACTION_TYPES,
   PHASES,
@@ -44,7 +37,7 @@ import {
   COIN_FLIP_THRESHOLD,
   CARD_FLAGS,
   UNLIMITED_CAPACITY,
-} from './types';
+} from './types/constants';
 import { gameLog, systemLog } from './game-log';
 
 

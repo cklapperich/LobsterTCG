@@ -1,5 +1,6 @@
 <script lang="ts">
-  import type { CardInstance, CardTemplate, CounterDefinition } from '../../core';
+  import type { CardInstance, CardTemplate } from '../../core/types/card';
+  import type { CounterDefinition } from '../../core/types/counter';
   import { startDrag, updateDragPosition, endDrag } from './dragState.svelte';
   import {
     startCounterDrag,

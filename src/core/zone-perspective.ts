@@ -1,4 +1,4 @@
-import type { PlayerIndex } from './types';
+import type { PlayerIndex } from './types/card';
 
 /**
  * Zone key perspective translation.

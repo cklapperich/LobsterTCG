@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { DeckSelection } from '../../core';
+  import type { DeckSelection } from '../../core/types/deck';
   import type { PlayerConfig } from '../game/player-config';
   import { P2PChannel, type P2PRole } from '../../lib/p2p.svelte';
   import { playSfx } from '../../lib/audio.svelte';

@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { ZoneConfig } from '../../core';
+  import type { ZoneConfig } from '../../core/types/zone';
   import type { ActionPanelButton } from '../../core/types/action-panel';
-  import { ORIENTATIONS } from '../../core';
+  import { ORIENTATIONS } from '../../core/types/constants';
   import { playSfx } from '../../lib/audio.svelte';
 
   interface Props {

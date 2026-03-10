@@ -1,4 +1,4 @@
-import type { CardInstance, CardTemplate, Visibility } from '../../core';
+import type { CardInstance, CardTemplate, Visibility } from '../../core/types/card';
 
 export interface DragState {
   cardInstanceId: string;

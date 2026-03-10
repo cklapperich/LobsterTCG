@@ -7,7 +7,7 @@
  */
 import type { ToolSet } from 'ai';
 import sectionsRaw from './prompt-sections.md?raw';
-import { ACTION_TYPES } from '../../core';
+import { ACTION_TYPES } from '../../core/types/constants';
 import { createDefaultTools, type ToolContext } from '../../core/ai-tools';
 import {
   createPokemonCustomTools,

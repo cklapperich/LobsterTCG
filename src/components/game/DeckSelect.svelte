@@ -1,10 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { DeckList, DeckSelection } from '../../core';
+  import type { DeckList } from '../../core/types/deck';
+  import type { DeckSelection } from '../../core/types/deck';
   import { parsePTCGODeck } from '../../plugins/pokemon/cards';
   import { playSfx } from '../../lib/audio.svelte';
   import SettingsModal from './SettingsModal.svelte';
-  import { MODEL_OPTIONS, DEFAULT_PLANNER } from '../../ai';
+  import { MODEL_OPTIONS, DEFAULT_PLANNER } from '../../ai/providers';
   import { DEFAULT_CONFIG, type PlayerConfig } from './player-config';
   import GbcDropdown from './GbcDropdown.svelte';
   import { GAME_TYPES, DEFAULT_GAME_TYPE } from '../../game-types';

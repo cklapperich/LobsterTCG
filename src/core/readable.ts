@@ -1,20 +1,13 @@
-import type {
-  CardTemplate,
-  CardInstance,
-  GameState,
-  Zone,
-  Action,
-  PlayerInfo,
-  GameResult,
-  Decision,
-  PlayerIndex,
-} from './types';
-import type { Phase } from './types';
+import type { CardTemplate, CardInstance, PlayerIndex } from './types/card';
+import type { GameState, PlayerInfo, GameResult, Decision } from './types/game';
+import type { Zone } from './types/zone';
+import type { Action } from './types/action';
+import type { Phase } from './types/constants';
 import {
   HIDDEN_CARD,
   READABLE_LOG_LIMIT,
   ORIENTATION_NAMES,
-} from './types';
+} from './types/constants';
 
 /**
  * Readable card: template fields (minus id/imageUrl) with a

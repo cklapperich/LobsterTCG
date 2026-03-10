@@ -1,25 +1,17 @@
-import type { GameState, Playmat, DeckList, PlayerIndex, CardTemplate, CardInstance, GameConfig, GamePlugin, CounterDefinition, ActionPanel, Action, MarkerState } from '../../core';
-import {
-  createGameState,
-  createCardInstance,
-  generateInstanceId,
-  loadDeck,
-  loadPlaymat,
-  shuffle as shuffleAction,
-  moveCard,
-  draw as drawAction,
-  concede as concedeAction,
-  executeAction,
-  declareAction,
-  coinFlip as coinFlipAction,
-  gameLog,
-  systemLog,
-
-  VISIBILITY,
-  zoneVisibility,
-  ACTION_TYPES,
-  ORIENTATIONS,
-} from '../../core';
+import type { GameState, GameConfig } from '../../core/types/game';
+import type { Playmat } from '../../core/types/playmat';
+import type { DeckList } from '../../core/types/deck';
+import type { PlayerIndex, CardTemplate, CardInstance } from '../../core/types/card';
+import type { GamePlugin, MarkerState } from '../../core/types/game-plugin';
+import type { CounterDefinition } from '../../core/types/counter';
+import type { ActionPanel } from '../../core/types/action-panel';
+import type { Action } from '../../core/types/action';
+import { createGameState, createCardInstance, generateInstanceId, loadDeck, executeAction, zoneVisibility } from '../../core/engine';
+import { loadPlaymat } from '../../core/playmat-loader';
+import { shuffle as shuffleAction, moveCard, draw as drawAction, concede as concedeAction, declareAction, coinFlip as coinFlipAction } from '../../core/action';
+import { gameLog, systemLog } from '../../core/game-log';
+import { VISIBILITY } from '../../core/types/card';
+import { ACTION_TYPES, ORIENTATIONS } from '../../core/types/constants';
 import type { ToolContext } from '../../core/ai-tools';
 import type { ActionExecutor } from '../../core/action-executor';
 import { ZONE_IDS } from './zones';

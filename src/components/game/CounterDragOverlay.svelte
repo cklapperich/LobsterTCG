@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { CounterDefinition } from '../../core';
+  import type { CounterDefinition } from '../../core/types/counter';
   import CounterIcon from './CounterIcon.svelte';
 
   interface Props {

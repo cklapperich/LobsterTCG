@@ -1,4 +1,4 @@
-import type { PlayerIndex } from '../../core';
+import type { PlayerIndex } from '../../core/types/card';
 
 export type PlayerRole = 'local' | 'ai' | 'remote';
 

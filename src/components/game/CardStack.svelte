@@ -1,5 +1,6 @@
 <script lang="ts">
-  import type { CardInstance, CardTemplate, CounterDefinition } from '../../core';
+  import type { CardInstance, CardTemplate } from '../../core/types/card';
+  import type { CounterDefinition } from '../../core/types/counter';
   import Card from './Card.svelte';
 
   interface Props {

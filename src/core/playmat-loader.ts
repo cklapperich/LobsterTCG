@@ -1,5 +1,8 @@
-import type { Playmat, Visibility, ZoneConfig } from './types';
-import { VISIBILITY, PLAYMAT_VISIBILITY } from './types';
+import type { Playmat } from './types/playmat';
+import type { Visibility } from './types/card';
+import type { ZoneConfig } from './types/zone';
+import { VISIBILITY } from './types/card';
+import { PLAYMAT_VISIBILITY } from './types/constants';
 
 // JSON representation uses string visibility
 type VisibilityString = typeof PLAYMAT_VISIBILITY[keyof typeof PLAYMAT_VISIBILITY];

@@ -1,5 +1,5 @@
-import type { Action } from './types';
-import type { PlayerIndex } from './types';
+import type { Action } from './types/action';
+import type { PlayerIndex } from './types/card';
 
 export interface ActionExecutor {
   /** Execute action through plugin hooks + state mutation + reactivity trigger. Returns error string if blocked, null on success. */

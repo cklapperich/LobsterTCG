@@ -1,5 +1,5 @@
 // Card modal store - manages peek/browse/search modal state
-import type { CardInstance, CardTemplate } from '../../core';
+import type { CardInstance, CardTemplate } from '../../core/types/card';
 
 export interface CardModalState {
   cards: CardInstance<CardTemplate>[];

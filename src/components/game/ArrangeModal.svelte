@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { CardInstance, CardTemplate } from '../../core';
-  import { VISIBILITY } from '../../core';
+  import type { CardInstance, CardTemplate } from '../../core/types/card';
+  import { VISIBILITY } from '../../core/types/card';
   import Card from './Card.svelte';
   import { playSfx } from '../../lib/audio.svelte';
   import { startDrag, updateDragPosition, endDrag } from './dragState.svelte';

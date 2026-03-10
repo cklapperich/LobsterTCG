@@ -1,4 +1,5 @@
-import type { CardTemplate, DeckList } from '../../core';
+import type { CardTemplate } from '../../core/types/card';
+import type { DeckList } from '../../core/types/deck';
 
 const SUITS = ['spades', 'hearts', 'diamonds', 'clubs'] as const;
 const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'] as const;

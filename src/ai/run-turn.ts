@@ -1,7 +1,7 @@
 import { streamText, tool } from 'ai';
 import type { ToolSet, ModelMessage } from 'ai';
 import { z } from 'zod';
-import type { GamePlugin } from '../core';
+import type { GamePlugin } from '../core/types/game-plugin';
 import type { ToolContext } from '../core/ai-tools';
 import { wrapToolsWithContext } from '../core/ai-tools';
 import { logStepFinish } from './logging';

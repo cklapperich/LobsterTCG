@@ -3,7 +3,7 @@ import type { Action } from '../../core/types/action';
 import type { GameState } from '../../core/types/game';
 import type { CardTemplate } from '../../core/types/card';
 import { ACTION_TYPES } from '../../core/types/constants';
-import { shuffle } from '../../core';
+import { shuffle } from '../../core/action';
 
 export interface P2PAdapterCallbacks {
   tryAction: (action: Action) => string | null;

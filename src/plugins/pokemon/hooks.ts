@@ -1,5 +1,7 @@
-import type { Action, GameState, DeclareAction } from '../../core/types';
-import { VISIBILITY, ACTION_TYPES, PHASES, CARD_FLAGS } from '../../core/types';
+import type { Action, DeclareAction } from '../../core/types/action';
+import type { GameState } from '../../core/types/game';
+import { VISIBILITY } from '../../core/types/card';
+import { ACTION_TYPES, PHASES, CARD_FLAGS } from '../../core/types/constants';
 import type { PostHookResult, Plugin, PrioritizedPostHook } from '../../core/plugin/types';
 import type { PokemonCardTemplate } from './cards';
 import { getTemplate } from './cards';

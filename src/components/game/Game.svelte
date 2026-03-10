@@ -1,10 +1,21 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Playmat, CardInstance, CardTemplate, GameState, CounterDefinition, DeckSelection, ZoneConfig, Action, ActionExecutor } from '../../core';
-  import { executeAction, moveCard, moveCardStack, VISIBILITY, flipCard, endTurn, loadDeck, findCardInZones,
-    toReadableState, PluginManager, setOrientation, createDecision, resolveDecision, revealHand, mulligan as mulliganAction,
-    PHASES, ACTION_TYPES, gameLog, systemLog, draw, coinFlip, addCounter, removeCounter, setCounter, fromPlayerPerspective,
-    checkOpponentZone } from '../../core';
+  import type { CardInstance, CardTemplate } from '../../core/types/card';
+  import type { ZoneConfig } from '../../core/types/zone';
+  import type { Playmat } from '../../core/types/playmat';
+  import type { GameState } from '../../core/types/game';
+  import type { CounterDefinition } from '../../core/types/counter';
+  import type { DeckSelection } from '../../core/types/deck';
+  import type { Action } from '../../core/types/action';
+  import type { ActionExecutor } from '../../core/action-executor';
+  import { executeAction, loadDeck, findCardInZones, checkOpponentZone } from '../../core/engine';
+  import { moveCard, moveCardStack, flipCard, endTurn, setOrientation, createDecision, resolveDecision, revealHand, mulligan as mulliganAction, draw, coinFlip, addCounter, removeCounter, setCounter } from '../../core/action';
+  import { toReadableState } from '../../core/readable';
+  import { PluginManager } from '../../core/plugin/plugin-manager';
+  import { VISIBILITY } from '../../core/types/card';
+  import { PHASES, ACTION_TYPES } from '../../core/types/constants';
+  import { gameLog, systemLog } from '../../core/game-log';
+  import { fromPlayerPerspective } from '../../core/zone-perspective';
   import { GAME_TYPES } from '../../game-types';
   import PlaymatGrid from './PlaymatGrid.svelte';
   import ZoneContextMenu from './ZoneContextMenu.svelte';
@@ -33,7 +44,7 @@
   import StagingConfirmModal from './StagingConfirmModal.svelte';
   import RequestActionModal from './RequestActionModal.svelte';
   import DebugModal from './DebugModal.svelte';
-  import { runTurn } from '../../ai';
+  import { runTurn } from '../../ai/run-turn';
   import { contextMenuStore, openContextMenu, closeContextMenu as closeContextMenuStore } from './contextMenu.svelte';
   import { cardModalStore, openCardModal, closeCardModal as closeCardModalStore } from './cardModal.svelte';
 
