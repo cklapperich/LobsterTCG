@@ -387,28 +387,21 @@ function formatFieldZoneCompact(label: string, zone: ReadableZone): string[] {
   const pokemon = cards[cards.length - 1];
   const attached = cards.slice(0, -1);
 
-  lines.push(`[${label}] ${formatInstanceStats(pokemon)}`);
+  // Separate pre-evo Pokemon from energy/tools
+  const topSubtypes = pokemon.subtypes as string[] | undefined;
+  const topIsBreak = pokemon.supertype === SUPERTYPES.POKEMON &&
+    (topSubtypes ?? []).includes('BREAK');
+  const nonPokemon = attached.filter(c => c.supertype !== SUPERTYPES.POKEMON);
+  const preEvoPokemon = topIsBreak ? attached.filter(c => c.supertype === SUPERTYPES.POKEMON) : [];
 
-  if (attached.length > 0) {
-    // Separate pre-evo Pokemon from energy/tools for display
-    const topSubtypes = pokemon.subtypes as string[] | undefined;
-    const topIsBreak = pokemon.supertype === SUPERTYPES.POKEMON &&
-      (topSubtypes ?? []).includes('BREAK');
+  // Inline attached energy/tools on the Pokemon's own line so the AI sees them as
+  // belonging to THIS Pokemon instance, not the zone.
+  const attachedStr = nonPokemon.length > 0 ? condenseNames(nonPokemon) : 'no energy';
+  lines.push(`[${label}] ${formatInstanceStats(pokemon)} (${attachedStr})`);
 
-    const nonPokemon = attached.filter(c => c.supertype !== SUPERTYPES.POKEMON);
-    const preEvoPokemon = topIsBreak ? attached.filter(c => c.supertype === SUPERTYPES.POKEMON) : [];
-
-    if (nonPokemon.length > 0) {
-      lines.push(`  Attached: ${condenseNames(nonPokemon)}`);
-    } else {
-      lines.push(`  Attached: (none) — cannot attack without required energy`);
-    }
-    if (preEvoPokemon.length > 0) {
-      const preEvo = preEvoPokemon[preEvoPokemon.length - 1];
-      lines.push(`  Pre-evo: ${preEvo.name} (attacks available — see CARD REFERENCE)`);
-    }
-  } else {
-    lines.push(`  Attached: (none) — cannot attack without required energy`);
+  if (preEvoPokemon.length > 0) {
+    const preEvo = preEvoPokemon[preEvoPokemon.length - 1];
+    lines.push(`  Pre-evo: ${preEvo.name} (attacks available — see CARD REFERENCE)`);
   }
 
   const flags = pokemon.flags as string[] | undefined;

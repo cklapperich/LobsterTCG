@@ -407,11 +407,10 @@ function blockStrandedCards(state: PokemonState, action: Action): PreHookResult 
  */
 function logBetweenTurnsTriggers(state: PokemonState, action: Action): PostHookResult {
   if (action.type !== ACTION_TYPES.END_TURN) return {};
-  const p = (action as { player?: number }).player ?? -1;
-  if (p < 0) return {};
-
+  // Always check the AI's field (player 2, index 1) — never the opponent's
+  const AI_PLAYER_INDEX = 1;
   const benchIds = ['bench_1', 'bench_2', 'bench_3', 'bench_4', 'bench_5'];
-  const fieldZones = [`player${p + 1}_active`, ...benchIds.map(b => `player${p + 1}_${b}`)];
+  const fieldZones = [`player${AI_PLAYER_INDEX + 1}_active`, ...benchIds.map(b => `player${AI_PLAYER_INDEX + 1}_${b}`)];
 
   const triggered: string[] = [];
   for (const zoneKey of fieldZones) {
@@ -430,7 +429,7 @@ function logBetweenTurnsTriggers(state: PokemonState, action: Action): PostHookR
 
   if (triggered.length > 0) {
     gameLog(state as GameState<PokemonCardTemplate>,
-      `[Between Turns] Player ${p + 1} has passive triggers: ${triggered.join(' | ')}`);
+      `[Between Turns] ${triggered.join(' | ')}`);
   }
 
   return {};

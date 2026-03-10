@@ -458,9 +458,6 @@ async function shouldSkipEndOfTurn(ctx: ToolContext): Promise<boolean> {
   const topCard = activeZone?.cards.at(-1);
   if (topCard?.orientation === ORIENTATIONS.TAPPED) return false;
 
-  // If passive trigger cards are present, agent may need to handle them
-  if (hasPassiveTriggerCards(state as any, p)) return false;
-
   return true;
 }
 
