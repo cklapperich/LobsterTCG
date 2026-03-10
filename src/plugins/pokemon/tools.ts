@@ -64,6 +64,23 @@ export function createEndPhaseTool(description: string = 'Signal that this phase
 }
 
 /**
+ * Check whether an attack was already declared this turn.
+ */
+function wasAttackDeclaredThisTurn(ctx: ToolContext, p: number): boolean {
+  const state = ctx.getState();
+  for (const a of state.currentTurn.actions) {
+    if (
+      a.type === ACTION_TYPES.DECLARE_ACTION &&
+      (a as any).declarationType === POKEMON_DECLARATION_TYPES.ATTACK &&
+      a.player === p
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Check whether a manual energy attachment already happened this turn.
  * Scans currentTurn.actions for a MOVE_CARD from hand to a field zone
  * that is NOT marked allowed_by_card_effect (i.e. the one-per-turn manual attach).
@@ -136,27 +153,40 @@ export function createAttachEnergyTool(ctx: ToolContext): ToolSet[string] {
 export function createPokemonCustomTools(ctx: ToolContext): ToolSet {
   const p = ctx.playerIndex;
 
-  return {
-    declare_attack: aiTool({
-      description: 'Declare that your active Pokemon is using an attack. Validates energy cost and first-turn restrictions.',
-      inputSchema: z.object({
-        attackName: z.string().describe('Name of the attack to use'),
-        targetCardName: z.string().optional().describe('Optional: name of a target card'),
-        allowed_by_card_effect: z.boolean().optional().describe('Set true when a card effect permits bypassing normal rules'),
-      }),
-      async execute(input) {
-        return ctx.execute((state) => {
-          const activeKey = `player${p + 1}_${ZONE_IDS.ACTIVE}`;
-          const topCard = state.zones[activeKey]?.cards.at(-1);
-          const activeName = topCard?.template?.name ?? 'Active Pokemon';
-          const target = input.targetCardName ? ` targeting ${input.targetCardName}` : '';
-          const msg = `${activeName} used ${input.attackName}!${target}`;
-          const action = declareAction(p, POKEMON_DECLARATION_TYPES.ATTACK, input.attackName, { targetCardName: input.targetCardName }, msg);
-          if (input.allowed_by_card_effect) action.allowed_by_card_effect = true;
-          return action;
-        });
-      },
+  const attackTool = aiTool({
+    description: 'Declare that your active Pokemon is using an attack. You may only attack once per turn. After attacking, call end_turn.',
+    inputSchema: z.object({
+      attackName: z.string().describe('Name of the attack to use'),
+      targetCardName: z.string().optional().describe('Optional: name of a target card'),
+      allowed_by_card_effect: z.boolean().optional().describe('Set true when a card effect permits bypassing normal rules'),
     }),
+    async execute(input) {
+      if (wasAttackDeclaredThisTurn(ctx, p)) {
+        return '[ALREADY USED THIS TURN] You already attacked this turn. Call end_turn to finish your turn.';
+      }
+      return ctx.execute((state) => {
+        const activeKey = `player${p + 1}_${ZONE_IDS.ACTIVE}`;
+        const topCard = state.zones[activeKey]?.cards.at(-1);
+        const activeName = topCard?.template?.name ?? 'Active Pokemon';
+        const target = input.targetCardName ? ` targeting ${input.targetCardName}` : '';
+        const msg = `${activeName} used ${input.attackName}!${target}`;
+        const action = declareAction(p, POKEMON_DECLARATION_TYPES.ATTACK, input.attackName, { targetCardName: input.targetCardName }, msg);
+        if (input.allowed_by_card_effect) action.allowed_by_card_effect = true;
+        return action;
+      });
+    },
+  });
+
+  Object.defineProperty(attackTool, 'description', {
+    get: () => wasAttackDeclaredThisTurn(ctx, p)
+      ? '[ALREADY USED THIS TURN] Attack already declared this turn. Call end_turn to finish your turn.'
+      : 'Declare that your active Pokemon is using an attack. You may only attack once per turn. After attacking, call end_turn.',
+    enumerable: true,
+    configurable: true,
+  });
+
+  return {
+    declare_attack: attackTool,
 
     declare_retreat: aiTool({
       description: 'Declare that your active Pokemon is retreating. Logs the declaration to the game log.',

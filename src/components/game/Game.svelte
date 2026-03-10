@@ -769,7 +769,7 @@
   }
 
   function handleEndTurn() {
-    if (!gameState || !canLocalAct) return;
+    if (!gameState || !canLocalAct || gameState.pendingDecision) return;
 
     // Check if staging has cards — prompt human player for confirmation
     const staging = gameState.zones['staging'];
@@ -802,8 +802,16 @@
     if (!gameState) return;
     const currentPlayer = gameState.activePlayer;
     const wasSetup = gameState.phase === PHASES.SETUP;
+    const turnBefore = gameState.turnNumber;
     const action = endTurn(currentPlayer);
     tryAction(action);
+
+    // If endTurn auto-resolved a pending decision instead of actually ending the turn
+    // (the engine returns early when pendingDecision exists, without advancing turnNumber),
+    // do not dispatch to the next player — the AI's turn is still logically in progress.
+    if (!wasSetup && gameState.phase === PHASES.PLAYING && gameState.turnNumber === turnBefore) {
+      return;
+    }
 
     // Setup just completed → coin flip + dispatch to winner
     if (wasSetup && await handlePostSetupTransition()) return;

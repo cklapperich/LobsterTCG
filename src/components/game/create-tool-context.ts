@@ -114,7 +114,7 @@ export function createToolContext(
                 : '';
 
               await new Promise(r => setTimeout(r, ACTION_DELAY_MS));
-              return `Decision resolved.${opponentActions} Continue your turn from where you left off — do NOT restart or re-draw.`;
+              return `Decision resolved.${opponentActions} If you already attacked this turn, call end_turn NOW — do not attack again. Otherwise continue your turn from where you left off.`;
             }
           }
         }
