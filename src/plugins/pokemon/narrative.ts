@@ -400,11 +400,15 @@ function formatFieldZoneCompact(label: string, zone: ReadableZone): string[] {
 
     if (nonPokemon.length > 0) {
       lines.push(`  Attached: ${condenseNames(nonPokemon)}`);
+    } else {
+      lines.push(`  Attached: (none) — cannot attack without required energy`);
     }
     if (preEvoPokemon.length > 0) {
       const preEvo = preEvoPokemon[preEvoPokemon.length - 1];
       lines.push(`  Pre-evo: ${preEvo.name} (attacks available — see CARD REFERENCE)`);
     }
+  } else {
+    lines.push(`  Attached: (none) — cannot attack without required energy`);
   }
 
   const flags = pokemon.flags as string[] | undefined;

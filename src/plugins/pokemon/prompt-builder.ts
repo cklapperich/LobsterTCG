@@ -112,6 +112,7 @@ const MODE_CONFIGS: Record<AgentMode, ModeConfig> = {
       'INTRO', 'ROLE_FULLTURN', 'TURN_STRUCTURE_MAIN', 'WIN_CONDITIONS',
       'ZONE_LAYOUT', 'KEY_RULES', 'STATUS_CONDITIONS', 'DAMAGE',
       'TOOL_USAGE', 'PEEK_AND_SEARCH', 'DECISIONS', 'STRATEGY_PLANNING',
+      'ATTACK_ENERGY_CHECK',
     ],
     coreToolFilter: 'exclude',
     coreTools: [
@@ -152,9 +153,10 @@ const MODE_CONFIGS: Record<AgentMode, ModeConfig> = {
 
   planner: {
     sections: [
-      'INTRO', 'ROLE_PLANNER', 'TURN_STRUCTURE_MAIN', 
-      'WIN_CONDITIONS', 'ZONE_LAYOUT', 'KEY_RULES', 
+      'INTRO', 'ROLE_PLANNER', 'TURN_STRUCTURE_MAIN',
+      'WIN_CONDITIONS', 'ZONE_LAYOUT', 'KEY_RULES',
       'STATUS_CONDITIONS', 'DAMAGE', 'STRATEGY_PLANNING',
+      'ATTACK_ENERGY_CHECK',
     ],
     coreToolFilter: 'include',
     coreTools: [

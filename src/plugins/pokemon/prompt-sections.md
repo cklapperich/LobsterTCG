@@ -291,6 +291,79 @@ Sometimes during a turn, one player needs the other to make a decision (e.g., af
 - Think through whether retreating is better than absorbing a hit
 - When declaring an attack, apply damage with `add_counter` immediately after declaration, resolve all attack effects, then call `end_turn`
 
+## @ATTACK_ENERGY_CHECK
+### Verifying Attack Energy Requirements
+
+**Before planning or declaring any attack**, read the `Attached:` line for the attacking Pokemon and verify it satisfies the attack cost. Energy in hand does NOT count.
+
+**How to read costs:**
+- `[Fire]` = 1 Fire Energy
+- `[Water, Colorless]` = 1 Water Energy + 1 any Energy
+- `[Fighting, Fighting, Colorless]` = 2 Fighting + 1 any Energy
+- `[Colorless, Colorless]` = 2 of any Energy type
+- **Rainbow Energy** counts as 1 Energy of any single type
+- **Double Colorless Energy** counts as 2 Colorless (satisfies any 2 `[Colorless]` slots, but NOT typed slots like `[Fire]`)
+
+---
+
+**Examples:**
+
+```
+[Your Active] Gligar — 50 HP
+  Attached: (none) — cannot attack without required energy
+```
+Stun Poison costs [Fighting, Colorless] — no energy attached → **CANNOT ATTACK**
+
+```
+[Your Active] Gligar — 50 HP
+  Attached: Fighting Energy
+```
+Stun Poison costs [Fighting, Colorless] — Fighting ✓, need 1 more Colorless → **CANNOT ATTACK**
+
+```
+[Your Active] Gligar — 50 HP
+  Attached: Fighting Energy, Water Energy
+```
+Stun Poison costs [Fighting, Colorless] — Fighting ✓, Water satisfies Colorless ✓ → **CAN ATTACK**
+
+```
+[Your Active] Seel — 50 HP
+  Attached: Water Energy
+```
+Take Down costs [Water, Colorless] — Water ✓, need 1 more Colorless → **CANNOT ATTACK**
+
+```
+[Your Active] Seel — 50 HP
+  Attached: Water Energy, Fighting Energy
+```
+Take Down costs [Water, Colorless] — Water ✓, Fighting satisfies Colorless ✓ → **CAN ATTACK**
+
+```
+[Your Active] Charizard — 120 HP
+  Attached: Rainbow Energy
+```
+Fire Spin costs [Fire, Fire, Fire, Fire] — Rainbow counts as 1 Fire ✓, need 3 more → **CANNOT ATTACK**
+
+```
+[Your Active] Mewtwo — 60 HP
+  Attached: Double Colorless Energy
+```
+Psyburn costs [Psychic, Colorless, Colorless] — Double Colorless fills both [Colorless] ✓, still need 1 [Psychic] → **CANNOT ATTACK**
+
+```
+[Your Active] Mewtwo — 60 HP
+  Attached: Psychic Energy, Double Colorless Energy
+```
+Psywave costs [Psychic, Psychic, Colorless] — 1 Psychic ✓, Double Colorless fills [Colorless] ✓, still need 1 more [Psychic] → **CANNOT ATTACK**
+
+```
+[Your Active] Hitmonlee — 60 HP
+  Attached: Fighting Energy x2
+```
+Stretch Kick costs [Colorless, Colorless] — any energy satisfies Colorless, 2 Fighting ✓✓ → **CAN ATTACK**
+
+**Rule:** If `Attached:` does not cover every slot in the attack cost, do NOT plan the attack. Attach more energy first.
+
 ## @ERROR_CORRECTION
 ### Error Correction and Rewind Policy
 
