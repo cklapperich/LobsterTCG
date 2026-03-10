@@ -110,7 +110,8 @@
   let playmat = $state<Playmat | null>(null);
   let loading = $state(true);
   let error = $state<string | null>(null);
-  let aiThinking = $state(false);
+  let turnFlow = $state<{ tag: 'local' | 'waiting' | 'transition' }>({ tag: 'local' });
+  let setupTransitionComplete = $state(false);
   let pendingDecisionResolve: (() => void) | null = $state(null);
   // P2P adapter — wraps P2PChannel with all sync logic. No-ops when no channel.
   // Declared early but initialized after tryAction is defined (see below).
@@ -152,6 +153,53 @@
     return [builders[playerConfig.player0](), builders[playerConfig.player1]()];
   }
   const controllers = buildControllers();
+
+  /** Single source of truth for "what happens next after state changes". */
+  async function advance() {
+    if (turnFlow.tag !== 'local') return; // re-entry guard
+    const gs = gameState;
+    if (!gs) return;
+
+    // Decision pending — dispatch to non-local responder
+    if (gs.pendingDecision) {
+      const responder = gs.pendingDecision.targetPlayer;
+      if (isLocal(playerConfig, responder)) return; // human responds via UI
+      const playerBefore = gs.activePlayer;
+      const phaseBefore = gs.phase;
+      turnFlow = { tag: 'waiting' };
+      await controllers[responder].handleDecision();
+      turnFlow = { tag: 'local' };
+      if (gameState?.activePlayer !== playerBefore || gameState?.phase !== phaseBefore) advance();
+      return;
+    }
+
+    if (isLocal(playerConfig, gs.activePlayer)) return; // human's turn, UI handles it
+
+    // Setup→playing transition: coin flip (fires exactly once)
+    if (gs.phase === PHASES.PLAYING && gs.turnNumber === 1 && !setupTransitionComplete) {
+      setupTransitionComplete = true;
+      turnFlow = { tag: 'transition' };
+      await gameConfig.onSetupComplete?.(gs, createExecutor());
+      gameState = { ...gameState };
+      turnFlow = { tag: 'local' };
+      advance();
+      return;
+    }
+
+    // Non-local controller's turn (AI or remote no-op)
+    const playerBefore = gs.activePlayer;
+    const phaseBefore = gs.phase;
+    turnFlow = { tag: 'waiting' };
+    if (gs.phase === PHASES.SETUP) {
+      await controllers[gs.activePlayer].takeSetupTurn();
+    } else {
+      await controllers[gs.activePlayer].takeTurn();
+    }
+    turnFlow = { tag: 'local' };
+    // Only recurse if state changed — remote no-op controllers return immediately
+    // with unchanged activePlayer, so they don't cause recursion
+    if (gameState?.activePlayer !== playerBefore || gameState?.phase !== phaseBefore) advance();
+  }
 
   // Derived: is a decision targeting the local player?
   const decisionTargetsHuman = $derived(
@@ -379,6 +427,9 @@
     // P2P: broadcast local actions to the remote peer
     p2p.broadcastAction(action);
 
+    // P2P: after remote action, check if local machine needs to act
+    if (p2p.isRemoteAction) advance();
+
     return null;
   }
 
@@ -498,8 +549,9 @@
             // Host: send the full initial state to the guest
             p2p.sendStateSync($state.snapshot(gameState) as GameState<CardTemplate>);
             p2p.subscribe();
-          } else if (hasAI) {
-            playBgm();
+          } else {
+            if (hasAI) playBgm();
+            advance(); // dispatch if non-local player goes first
           }
         }
       } catch (e) {
@@ -648,10 +700,12 @@
     plugin.startGame().then((state) => {
       initializeGameState(state);
       gameState = state;
+      setupTransitionComplete = false;
       previewCards = [];
       closeContextMenuStore();
       closeCardModalStore();
       if (hasAI) playBgm();
+      advance();
     });
   }
 
@@ -714,13 +768,12 @@
   type AIPhase = 'turn' | 'setup' | 'decision';
 
   async function runAIPhase(phase: AIPhase) {
-    if (!gameState || aiThinking || !hasAI) return;
+    if (!gameState || !hasAI) return;
 
     const currentPlayer = phase === 'decision'
       ? (gameState.pendingDecision?.targetPlayer ?? gameState.activePlayer)
       : gameState.activePlayer;
 
-    aiThinking = true;
     addLog(phase === 'decision' ? 'Responding to decision...' : phase === 'setup' ? 'Setting up...' : 'Thinking...');
 
     const { ctx } = createToolContext(
@@ -756,11 +809,7 @@
         addLog(`${phase === 'setup' ? 'Setup' : 'Turn'} auto-ended (AI did not call end_turn)`);
       }
     }
-
-    // Setup→playing transition: coin flip + dispatch to winner
-    if (phase === 'setup' && await handlePostSetupTransition()) return;
-
-    aiThinking = false;
+    // advance() in the caller (via controllers[n].takeTurn) handles what comes next
   }
 
   function handleMulligan() {
@@ -773,55 +822,19 @@
 
     // Check if staging has cards — prompt human player for confirmation
     const staging = gameState.zones['staging'];
-    if (staging && staging.cards.length > 0 && isLocal(playerConfig, gameState.activePlayer)) {
+    if (staging?.cards.length > 0 && isLocal(playerConfig, gameState.activePlayer)) {
       showStagingConfirm = true;
       stagingConfirmCallback = () => {
         showStagingConfirm = false;
         stagingConfirmCallback = null;
-        executeEndTurnInner();
+        tryAction(endTurn(gameState!.activePlayer));
+        advance();
       };
       return;
     }
 
-    executeEndTurnInner();
-  }
-
-  /** Handle setup→playing transition: onSetupComplete (coin flip), then dispatch to winner. */
-  async function handlePostSetupTransition(): Promise<boolean> {
-    if (!gameState || gameState.phase !== PHASES.PLAYING || gameState.turnNumber !== 1) return false;
-    // onSetupComplete animates the coin flip and dispatches a COIN_FLIP action with
-    // setActivePlayer — the engine applies activePlayer on both peers via P2P broadcast.
-    await gameConfig.onSetupComplete?.(gameState, createExecutor());
-    aiThinking = false;
-    gameState = { ...gameState };
-    controllers[gameState.activePlayer].takeTurn();
-    return true;
-  }
-
-  async function executeEndTurnInner() {
-    if (!gameState) return;
-    const currentPlayer = gameState.activePlayer;
-    const wasSetup = gameState.phase === PHASES.SETUP;
-    const turnBefore = gameState.turnNumber;
-    const action = endTurn(currentPlayer);
-    tryAction(action);
-
-    // If endTurn auto-resolved a pending decision instead of actually ending the turn
-    // (the engine returns early when pendingDecision exists, without advancing turnNumber),
-    // do not dispatch to the next player — the AI's turn is still logically in progress.
-    if (!wasSetup && gameState.phase === PHASES.PLAYING && gameState.turnNumber === turnBefore) {
-      return;
-    }
-
-    // Setup just completed → coin flip + dispatch to winner
-    if (wasSetup && await handlePostSetupTransition()) return;
-
-    // Still in setup or normal play → dispatch to next player
-    if (gameState.phase === PHASES.SETUP) {
-      controllers[gameState.activePlayer].takeSetupTurn();
-    } else if (gameState.phase === PHASES.PLAYING) {
-      controllers[gameState.activePlayer].takeTurn();
-    }
+    tryAction(endTurn(gameState.activePlayer));
+    advance();
   }
 
   function handleResolveDecision() {
@@ -833,10 +846,11 @@
       pendingDecisionResolve();
       pendingDecisionResolve = null;
     }
+    advance();
   }
 
   function handleRequestAction() {
-    if (!gameState || aiThinking || gameState.pendingDecision) return;
+    if (!gameState || turnFlow.tag !== 'local' || gameState.pendingDecision) return;
     showRequestModal = true;
   }
 
@@ -845,7 +859,7 @@
     showRequestModal = false;
     const opp = opponent(local);
     tryAction(createDecision(local, opp, value || undefined));
-    controllers[opp].handleDecision();
+    advance();
   }
 
   function handleRequestCancel() {
@@ -900,15 +914,9 @@
     if (!gameState || !contextMenu || !canLocalAct) return;
 
     const zoneKey = contextMenu.zoneKey;
-    const err_or_block_reason = tryAction(revealHand(local, zoneKey));
-    if (err_or_block_reason) {
-      return;
-    }
-
-    // Dispatch to the decision target's controller
-    if (gameState.pendingDecision) {
-      controllers[gameState.pendingDecision.targetPlayer].handleDecision();
-    }
+    const err = tryAction(revealHand(local, zoneKey));
+    if (err) return;
+    advance();
   }
 
   /** Attach mousemove/mouseup listeners for a drag, guaranteeing cleanup even if onDrop throws. */
@@ -991,8 +999,8 @@
                 {:else}
                   <span class="text-gbc-blue">FRIEND'S SETUP</span>
                 {/if}
-              {:else if aiThinking}
-                <span class="text-gbc-red animate-pulse">AI THINKING</span>
+              {:else if turnFlow.tag === 'waiting' || turnFlow.tag === 'transition'}
+                <span class="text-gbc-red animate-pulse">THINKING...</span>
               {:else if decisionTargetsHuman}
                 <span class="text-gbc-red animate-pulse">DECISION</span>
               {:else if gameState.pendingDecision && isAI(playerConfig, gameState.pendingDecision.targetPlayer)}

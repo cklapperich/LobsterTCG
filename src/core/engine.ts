@@ -912,35 +912,13 @@ function executeRevealHand<T extends CardTemplate>(
 
   const zoneName = zone.config.name ?? action.zoneKey;
   const revealedZones = [action.zoneKey];
-  const playerCardNames = zone.cards.map(c => c.template.name).join(', ');
-
-  // Mutual mode: also reveal the opponent's equivalent zone
-  if (action.mutual) {
-    const suffix = action.zoneKey.replace(/^player[12]_/, '');
-    const opponentZoneKey = action.zoneKey.startsWith('player1_')
-      ? `player2_${suffix}`
-      : `player1_${suffix}`;
-    const opponentZone = state.zones[opponentZoneKey];
-    if (opponentZone) {
-      for (const card of opponentZone.cards) {
-        card.visibility = VISIBILITY.PUBLIC;
-      }
-      revealedZones.push(opponentZoneKey);
-      const opponentCardNames = opponentZone.cards.map(c => c.template.name).join(', ');
-      systemLog(state, `Player ${action.player + 1} ${zoneName}: ${playerCardNames}`);
-      systemLog(state, `Opponent ${zoneName}: ${opponentCardNames}`);
-    }
-  }
 
   // Create a decision so opponent acknowledges
   const opponent = (action.player === 0 ? 1 : 0) as PlayerIndex;
   state.pendingDecision = {
     createdBy: action.player,
     targetPlayer: opponent,
-    message: action.message
-      ?? (action.mutual
-        ? `Both hands revealed`
-        : `Player ${action.player + 1} revealed their ${zoneName}`),
+    message: action.message ?? `Player ${action.player + 1} revealed their ${zoneName}`,
     revealedZones,
   };
   state.activePlayer = opponent;

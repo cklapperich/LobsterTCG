@@ -409,7 +409,7 @@ export function createDefaultTools(ctx: ToolContext): ToolSet {
         zone: z.string().describe('Zone key to reveal (e.g. "your_hand")'),
         message: z.string().optional().describe('Custom decision message describing what the opponent should do'),
       }),
-      async ({ zone, message }) => ctx.execute(revealHand(p, tz(ctx, zone), false, message))),
+      async ({ zone, message }) => ctx.execute(revealHand(p, tz(ctx, zone), message))),
 
     create_decision: createTool('Request the opponent to make a decision (mini-turn). The opponent gets control to take actions, then resolves the decision back to you.',
       z.object({ message: z.string().optional().describe('Optional message describing what the opponent needs to do') }),

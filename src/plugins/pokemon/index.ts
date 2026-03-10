@@ -8,7 +8,7 @@ import type { ActionPanel } from '../../core/types/action-panel';
 import type { Action } from '../../core/types/action';
 import { createGameState, createCardInstance, generateInstanceId, loadDeck, executeAction, zoneVisibility } from '../../core/engine';
 import { loadPlaymat } from '../../core/playmat-loader';
-import { shuffle as shuffleAction, moveCard, draw as drawAction, concede as concedeAction, declareAction, coinFlip as coinFlipAction } from '../../core/action';
+import { shuffle as shuffleAction, moveCard, draw as drawAction, concede as concedeAction, declareAction, coinFlip as coinFlipAction, setOrientation } from '../../core/action';
 import { gameLog, systemLog } from '../../core/game-log';
 import { VISIBILITY } from '../../core/types/card';
 import { ACTION_TYPES, ORIENTATIONS } from '../../core/types/constants';
@@ -32,6 +32,8 @@ import {
   AI_COUNTER_TYPES,
   MARKER_IDS,
   SUPERTYPES,
+  STATUS_CONDITIONS,
+  STATUS_TO_DEGREES,
 } from './constants';
 
 // Import counter images
@@ -376,7 +378,7 @@ function onActionPanelClick(state: GameState<PokemonCardTemplate>, player: Playe
   return undefined;
 }
 
-// ── Start-of-Turn Skip Hook ──────────────────────────────────────
+// ── Between-Turns Skip Hook ──────────────────────────────────────
 
 /** Status orientations that require agent attention. */
 const STATUS_ORIENTATIONS: Set<string> = new Set([
@@ -386,15 +388,16 @@ const STATUS_ORIENTATIONS: Set<string> = new Set([
 ]);
 
 /**
- * Check if the start-of-turn agent can be skipped.
+ * Check if the between-turns agent can be skipped.
  * Conditions for skipping (all must be true):
+ *   - No status orientation (paralyzed/asleep/confused) on any AI field Pokemon
  *   - No poison/burn counters on any AI field Pokemon
- *   - No status orientation (sleep/paralyzed/confused) on any AI field Pokemon
  *   - Active slot is occupied (no need to promote)
+ *   - No passive trigger cards needing between-turns handling
  *
  * When skipping: auto-draw 1 card, check deck-out → auto-concede.
  */
-async function shouldSkipStartOfTurn(ctx: ToolContext): Promise<boolean> {
+async function shouldSkipBetweenTurns(ctx: ToolContext): Promise<boolean> {
   const state = ctx.getState();
   const p = ctx.playerIndex;
 
@@ -413,9 +416,7 @@ async function shouldSkipStartOfTurn(ctx: ToolContext): Promise<boolean> {
     const zone = state.zones[zoneKey];
     if (!zone) continue;
     for (const card of zone.cards) {
-      // Check orientation-based status
       if (card.orientation && STATUS_ORIENTATIONS.has(card.orientation)) return false;
-      // Check poison/burn counters
       if (card.counters) {
         if (card.counters[COUNTER_IDS.POISON] > 0) return false;
         if (card.counters[COUNTER_IDS.BURN] > 0) return false;
@@ -431,34 +432,31 @@ async function shouldSkipStartOfTurn(ctx: ToolContext): Promise<boolean> {
   const deck = state.zones[deckKey];
 
   if (!deck || deck.cards.length === 0) {
-    // Deck-out: auto-concede
     console.log('[AI Pipeline] Deck empty at draw — auto-conceding');
     await ctx.execute(concedeAction(p));
     return true;
   }
 
   await ctx.execute(drawAction(p, 1));
-  console.log('[AI Pipeline] Start-of-turn skipped (no checkup needed), auto-drew 1 card');
+  console.log('[AI Pipeline] Between-turns skipped (no checkup needed), auto-drew 1 card');
   return true;
 }
 
 /**
- * Check if the end-of-turn cleanup agent can be skipped.
- * Skip only when:
- *   - Active Pokemon is NOT paralyzed (nothing to clear)
- *   - No passive trigger cards attached (no between-turns effects)
+ * Deterministic end-of-turn cleanup — no LLM needed.
+ * Clears paralysis if the AI's active Pokemon is paralyzed.
+ * Paralysis always expires at end of the affected player's turn.
  */
-async function shouldSkipEndOfTurn(ctx: ToolContext): Promise<boolean> {
+async function onAfterTurn(ctx: ToolContext): Promise<void> {
   const state = ctx.getState();
   const p = ctx.playerIndex;
-
-  // If active Pokemon is paralyzed, agent must clear it
   const activeKey = `player${p + 1}_${ZONE_IDS.ACTIVE}`;
-  const activeZone = state.zones[activeKey];
-  const topCard = activeZone?.cards.at(-1);
-  if (topCard?.orientation === ORIENTATIONS.TAPPED) return false;
-
-  return true;
+  const topCard = state.zones[activeKey]?.cards.at(-1);
+  if (topCard?.orientation === ORIENTATIONS.TAPPED) {
+    const degrees = STATUS_TO_DEGREES[STATUS_CONDITIONS.NORMAL];
+    await ctx.execute(state2 => setOrientation(p, state2.zones[activeKey]!.cards.at(-1)!.instanceId, degrees));
+    console.log('[AI Pipeline] Paralysis cleared after turn (deterministic)');
+  }
 }
 
 // ── GX / VSTAR Plugin State ──────────────────────────────────────
@@ -511,8 +509,8 @@ export const plugin: GamePlugin<PokemonCardTemplate> = {
   getCoinBack,
   formatCardForSearch: (template) => formatCardReference(template as any).join('\n'),
   getAICounterTypes: () => Object.values(AI_COUNTER_TYPES),
-  shouldSkipStartOfTurn,
-  shouldSkipEndOfTurn,
+  shouldSkipBetweenTurns,
+  onAfterTurn,
   getAgentConfig,
   getActionPanels,
   onActionPanelClick,

@@ -219,8 +219,8 @@ export function resolveDecision(player: PlayerIndex): ResolveDecisionAction {
   return { type: ACTION_TYPES.RESOLVE_DECISION, player };
 }
 
-export function revealHand(player: PlayerIndex, zoneKey: string, mutual?: boolean, message?: string): RevealHandAction {
-  return { type: ACTION_TYPES.REVEAL_HAND, player, zoneKey, ...(mutual ? { mutual } : {}), ...(message ? { message } : {}) };
+export function revealHand(player: PlayerIndex, zoneKey: string, message?: string): RevealHandAction {
+  return { type: ACTION_TYPES.REVEAL_HAND, player, zoneKey, ...(message ? { message } : {}) };
 }
 
 export function mulligan(player: PlayerIndex, drawCount: number = 7): MulliganAction {

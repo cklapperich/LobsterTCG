@@ -278,7 +278,7 @@ export interface AIConfig {
   logging?: boolean;
 }
 
-function resolveMode(ctx: ToolContext): 'setup' | 'startOfTurn' | 'main' | 'decision' {
+function resolveMode(ctx: ToolContext): 'setup' | 'main' | 'decision' {
   if (ctx.isDecisionResponse) return 'decision';
   if (ctx.getState().phase === 'setup') return 'setup';
   return 'main';
@@ -293,16 +293,16 @@ export async function runTurn(config: AIConfig): Promise<void> {
     console.log(mode);
 
     if (isNormalTurn) {
-      const skip = await plugin.shouldSkipStartOfTurn?.(ctx) ?? false;
+      const skip = await plugin.shouldSkipBetweenTurns?.(ctx) ?? false;
 
       if (!skip) {
-        const { prompt, tools } = plugin.getAgentConfig!(ctx, 'startOfTurn');
+        const { prompt, tools } = plugin.getAgentConfig!(ctx, 'betweenTurns');
         await runAgent({
           model,
           systemPrompt: prompt,
           getState: () => ctx.getReadableState(),
           tools,
-          label: 'StartOfTurn',
+          label: 'BetweenTurns',
           logging: config.logging,
         });
       }
@@ -343,21 +343,8 @@ export async function runTurn(config: AIConfig): Promise<void> {
           checkpoint: mainCheckpoint,
         });
       }
-      // End-of-turn cleanup: clear paralysis and other effects that expire at turn end.
-      // Runs after end_turn has already fired (activePlayer switched), but ctx.getReadableState()
-      // still returns state from the AI's perspective since aiPlayer is captured at context creation.
-      const skipEoT = await plugin.shouldSkipEndOfTurn?.(ctx) ?? false;
-      if (!skipEoT) {
-        const { prompt: eotPrompt, tools: eotTools } = plugin.getAgentConfig!(ctx, 'endOfTurn');
-        await runAgent({
-          model,
-          systemPrompt: eotPrompt,
-          getState: () => ctx.getReadableState(),
-          tools: eotTools,
-          label: 'EndOfTurn',
-          logging: config.logging,
-        });
-      }
+      // Deterministic end-of-turn cleanup (e.g. clear paralysis) — no LLM needed.
+      await plugin.onAfterTurn?.(ctx);
     } else if (mode === 'decision') {
       const { prompt, tools } = plugin.getAgentConfig!(ctx, 'decision');
       const decisionCheckpoint = ctx.createCheckpoint && ctx.restoreState

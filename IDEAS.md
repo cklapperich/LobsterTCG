@@ -52,6 +52,7 @@ a. importable cardback
 b. importable playmats
 c. sound effects?? leave for now?
 d. image import like how twinleaf does it, we dont store links to the images
+e. create an "install plugin from github URL feature
 
 12. Get the AI to use Lass properly? lol
 
@@ -66,21 +67,3 @@ d. image import like how twinleaf does it, we dont store links to the images
 17. better/easier ai debugging
 
 18. FOR POKEMON - what if there were +/- maxhp markers and an 'under a special effect' market
-
-
-
-
-GAME.SVELTE refactor:
-
-The issue isn't that this file exists, it's that it's doing orchestration AND rendering AND UI event handling AND modal management all at once. If I started fresh, I'd split along those lines.
-A headless game engine would be the core. Pure TypeScript, no framework dependency. It owns the GameState, exposes an dispatch(action) method, runs plugin hooks, validates moves, and emits events. This is independently testable — you can simulate an entire game in a unit test with no DOM. The tryAction function in this file is already 80% of the way there, it just needs to be extracted.
-An input layer would sit on top, adapting different sources into actions. The local player's clicks, the AI's tool calls, and P2P messages from a remote peer all get normalized into the same Action type before hitting dispatch. Right now that mapping is scattered across dozens of handler functions in the component.
-A presentation layer would subscribe to state changes and render. In Svelte 5 you could have a single reactive gameState derived from the engine, and then smaller components that each own their own concern — a TurnBanner, a DecisionModal, a GameLog, etc. The playmat grid is already its own component here, which is good.
-An effects/feedback layer would handle the side-effecty stuff — SFX, animations, splash announcements, coin flip visuals. These react to actions after they resolve, not inline with dispatch. The ACTION_SFX_MAP in this file is a primitive version of that idea.
-So the architecture would look something like:
-[Input Sources] → [Action Dispatch] → [Game Engine + Plugins]
-                                            ↓
-                                      [State Change Event]
-                                       ↓              ↓
-                                [Render/UI]    [Effects/SFX]
-The "orchestrator" still exists, but it becomes thin — maybe 50-80 lines that wires the engine to the inputs and the renderer. It doesn't contain the logic, it just connects the pieces.

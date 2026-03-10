@@ -48,7 +48,7 @@ export function buildPrompt(...keys: string[]): string {
   }).join('\n\n');
 }
 
-export type AgentMode = 'setup' | 'startOfTurn' | 'main' | 'endOfTurn' | 'decision' | 'planner' | 'executor';
+export type AgentMode = 'setup' | 'betweenTurns' | 'main' | 'decision' | 'planner' | 'executor';
 
 interface ModeConfig {
   sections: string[];
@@ -84,9 +84,9 @@ const MODE_CONFIGS: Record<AgentMode, ModeConfig> = {
     },
   },
 
-  startOfTurn: {
+  betweenTurns: {
     sections: [
-      'INTRO', 'ROLE_CHECKUP', 'TURN_STRUCTURE_CHECKUP', 'WIN_CONDITIONS',
+      'INTRO', 'ROLE_BETWEEN_TURNS', 'WIN_CONDITIONS',
       'ZONE_LAYOUT', 'KEY_RULES', 'STATUS_CONDITIONS', 'DAMAGE',
       'TOOL_USAGE', 'DECISIONS',
     ],
@@ -103,7 +103,7 @@ const MODE_CONFIGS: Record<AgentMode, ModeConfig> = {
     addCustomTools: false,
     extras: (ctx) => ({
       set_status: createSetStatusTool(ctx),
-      end_phase: createEndPhaseTool('Signal that start-of-turn phase is complete.'),
+      end_phase: createEndPhaseTool('Signal that between-turns phase is complete.'),
     }),
   },
 
@@ -123,16 +123,6 @@ const MODE_CONFIGS: Record<AgentMode, ModeConfig> = {
     addCustomTools: true,
   },
 
-  endOfTurn: {
-    sections: ['INTRO', 'ROLE_ENDOFTURN', 'TURN_STRUCTURE_ENDOFTURN'],
-    coreToolFilter: 'include',
-    coreTools: [],
-    addCustomTools: false,
-    extras: (ctx) => ({
-      set_status: createSetStatusTool(ctx),
-      end_phase: createEndPhaseTool('Signal that end-of-turn cleanup is complete.'),
-    }),
-  },
 
   decision: {
     sections: [

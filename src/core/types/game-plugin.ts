@@ -49,19 +49,19 @@ export interface GamePlugin<T extends CardTemplate = CardTemplate> {
   getAICounterTypes?(): string[];
 
   /**
-   * Called before the start-of-turn agent runs in the pipeline.
-   * Return true to skip the agent — the hook should handle any mandatory
-   * start-of-turn actions (draw, deck-out) via ctx.execute() before returning.
+   * Called before the between-turns agent runs in the pipeline.
+   * Return true to skip the agent — the hook should handle mandatory
+   * between-turns actions (draw, deck-out) via ctx.execute() before returning.
    * Return false (or omit) to let the agent run normally.
    */
-  shouldSkipStartOfTurn?(ctx: ToolContext): Promise<boolean>;
+  shouldSkipBetweenTurns?(ctx: ToolContext): Promise<boolean>;
 
   /**
-   * Called before the end-of-turn agent runs in the pipeline.
-   * Return true to skip the agent — nothing to do this turn end.
-   * Return false (or omit) to let the agent run normally.
+   * Called after the main/pipeline agent finishes (after end_turn fires).
+   * Use for deterministic end-of-turn cleanup that doesn't need an LLM
+   * (e.g. clearing paralysis, which always expires at end of turn).
    */
-  shouldSkipEndOfTurn?(ctx: ToolContext): Promise<boolean>;
+  onAfterTurn?(ctx: ToolContext): Promise<void>;
 
   /**
    * Called before the setup agent runs.
@@ -75,7 +75,7 @@ export interface GamePlugin<T extends CardTemplate = CardTemplate> {
    * Return the system prompt and tool set for a given AI agent mode.
    * Colocates prompt + tools so they stay in sync.
    */
-  getAgentConfig?(ctx: ToolContext, mode: 'setup' | 'startOfTurn' | 'main' | 'endOfTurn' | 'decision' | 'planner' | 'executor'): { prompt: string; tools: ToolSet };
+  getAgentConfig?(ctx: ToolContext, mode: 'setup' | 'betweenTurns' | 'main' | 'decision' | 'planner' | 'executor'): { prompt: string; tools: ToolSet };
 
   /** Return action panels for the sidebar UI. */
   getActionPanels?(state: GameState<T>, player: PlayerIndex): ActionPanel[];
