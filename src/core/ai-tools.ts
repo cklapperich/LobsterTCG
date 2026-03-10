@@ -187,7 +187,13 @@ export function createDefaultTools(ctx: ToolContext): ToolSet {
         zone1: z.string().describe('First zone key (e.g. "your_active")'),
         zone2: z.string().describe('Second zone key (e.g. "your_bench_1")'),
       }),
-      async ({ zone1, zone2 }) => ctx.execute(swapCardStacks(p, tz(ctx, zone1), tz(ctx, zone2)))),
+      async ({ zone1, zone2 }) => {
+        const rz1 = tz(ctx, zone1);
+        const rz2 = tz(ctx, zone2);
+        if (!ctx.getState().zones[rz1]) return `Error: zone "${zone1}" not found`;
+        if (!ctx.getState().zones[rz2]) return `Error: zone "${zone2}" not found`;
+        return ctx.execute(swapCardStacks(p, rz1, rz2));
+      }),
 
     place_on_zone: createTool('Place cards on the top or bottom of a zone.',
       z.object({

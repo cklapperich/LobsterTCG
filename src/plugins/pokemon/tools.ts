@@ -12,6 +12,8 @@ import { resolveCardName } from '../../core/readable';
 import { declareAction, setOrientation, moveCardStack, moveCard } from '../../core/action';
 import { type ToolContext } from '../../core/ai-tools';
 import { ZONE_IDS } from './zones';
+import { getTemplate } from './cards';
+import { isEnergy } from './helpers';
 import {
   STATUS_TO_DEGREES,
   STATUS_CONDITIONS,
@@ -61,10 +63,43 @@ export function createEndPhaseTool(description: string = 'Signal that this phase
   });
 }
 
+/**
+ * Check whether a manual energy attachment already happened this turn.
+ * Scans currentTurn.actions for a MOVE_CARD from hand to a field zone
+ * that is NOT marked allowed_by_card_effect (i.e. the one-per-turn manual attach).
+ */
+function wasManualEnergyAttachedThisTurn(ctx: ToolContext, p: number): boolean {
+  const state = ctx.getState();
+  const handKey = `player${p + 1}_${ZONE_IDS.HAND}`;
+  const activeKey = `player${p + 1}_active`;
+  const benchPrefix = `player${p + 1}_bench_`;
+
+  for (const a of state.currentTurn.actions) {
+    if (a.type !== ACTION_TYPES.MOVE_CARD) continue;
+    const action = a as { fromZone?: string; toZone?: string; cardInstanceId?: string; allowed_by_card_effect?: boolean };
+    if (action.fromZone !== handKey) continue;
+    const toZone = action.toZone ?? '';
+    if (toZone !== activeKey && !toZone.startsWith(benchPrefix)) continue;
+    if (action.allowed_by_card_effect) continue;
+
+    // Only count actual energy cards — Tools/Trainers (Berry, etc.) do not use the attachment slot
+    const cardId = action.cardInstanceId;
+    if (!cardId) continue;
+    for (const zone of Object.values(state.zones)) {
+      const card = zone.cards.find(c => c.instanceId === cardId);
+      if (card) {
+        const template = getTemplate(card.template.id);
+        if (template && isEnergy(template)) return true;
+        break;
+      }
+    }
+  }
+  return false;
+}
+
 export function createAttachEnergyTool(ctx: ToolContext): ToolSet[string] {
   const p = ctx.playerIndex;
   const handKey = `player${p + 1}_${ZONE_IDS.HAND}`;
-  let usedThisTurn = false;
 
   const attachTool = aiTool({
     description: 'Attach 1 energy card from your hand to a Pokemon on your field. You get 1 manual energy attachment per turn.',
@@ -73,22 +108,22 @@ export function createAttachEnergyTool(ctx: ToolContext): ToolSet[string] {
       toZone: z.string().describe('Field zone to attach energy to (e.g. "your_active", "your_bench_1")'),
     }),
     async execute(input) {
+      // Always check live game state — correctly handles rewind (state restored = flag cleared)
+      if (wasManualEnergyAttachedThisTurn(ctx, p)) {
+        return '[ALREADY USED THIS TURN] You already manually attached 1 energy this turn.';
+      }
       const toZone = tzp(ctx, input.toZone);
-      const result = await ctx.execute((state) => {
+      return ctx.execute((state) => {
         const cardId = input.cardName.startsWith(INSTANCE_ID_PREFIX)
           ? input.cardName
           : resolveCardName(state, input.cardName, handKey);
         return moveCard(p, cardId, handKey, toZone);
       });
-      if (!result.startsWith('Action blocked:') && !result.startsWith('Error:')) {
-        usedThisTurn = true;
-      }
-      return result;
     },
   });
 
   Object.defineProperty(attachTool, 'description', {
-    get: () => usedThisTurn
+    get: () => wasManualEnergyAttachedThisTurn(ctx, p)
       ? '[ALREADY USED THIS TURN] Attach 1 energy from hand to a Pokemon. Your manual energy attachment has been used.'
       : 'Attach 1 energy card from your hand to a Pokemon on your field. You get 1 manual energy attachment per turn.',
     enumerable: true,

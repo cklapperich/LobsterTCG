@@ -346,15 +346,18 @@ export async function runTurn(config: AIConfig): Promise<void> {
       // End-of-turn cleanup: clear paralysis and other effects that expire at turn end.
       // Runs after end_turn has already fired (activePlayer switched), but ctx.getReadableState()
       // still returns state from the AI's perspective since aiPlayer is captured at context creation.
-      const { prompt: eotPrompt, tools: eotTools } = plugin.getAgentConfig!(ctx, 'endOfTurn');
-      await runAgent({
-        model,
-        systemPrompt: eotPrompt,
-        getState: () => ctx.getReadableState(),
-        tools: eotTools,
-        label: 'EndOfTurn',
-        logging: config.logging,
-      });
+      const skipEoT = await plugin.shouldSkipEndOfTurn?.(ctx) ?? false;
+      if (!skipEoT) {
+        const { prompt: eotPrompt, tools: eotTools } = plugin.getAgentConfig!(ctx, 'endOfTurn');
+        await runAgent({
+          model,
+          systemPrompt: eotPrompt,
+          getState: () => ctx.getReadableState(),
+          tools: eotTools,
+          label: 'EndOfTurn',
+          logging: config.logging,
+        });
+      }
     } else if (mode === 'decision') {
       const { prompt, tools } = plugin.getAgentConfig!(ctx, 'decision');
       const decisionCheckpoint = ctx.createCheckpoint && ctx.restoreState

@@ -57,6 +57,13 @@ export interface GamePlugin<T extends CardTemplate = CardTemplate> {
   shouldSkipStartOfTurn?(ctx: ToolContext): Promise<boolean>;
 
   /**
+   * Called before the end-of-turn agent runs in the pipeline.
+   * Return true to skip the agent — nothing to do this turn end.
+   * Return false (or omit) to let the agent run normally.
+   */
+  shouldSkipEndOfTurn?(ctx: ToolContext): Promise<boolean>;
+
+  /**
    * Called before the setup agent runs.
    * Return true to skip the agent — the hook should handle setup
    * (e.g. auto-place cards) via ctx.execute() before returning.

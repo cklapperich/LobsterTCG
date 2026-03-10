@@ -156,6 +156,9 @@ function collectUniqueCards(readable: ReadableGameState): ReadableCard[] {
   for (const [zoneKey, zone] of Object.entries(readable.zones)) {
     // Skip deck zones — deck contents are listed as names only, no full reference
     if (zoneKey.endsWith('_deck')) continue;
+    // Skip hand zones — hand cards appear as names in the board section, not in full reference
+    // (prevents the AI from mistaking a hand Stadium for one already in play)
+    if (zoneKey.endsWith('_hand')) continue;
 
     const field = isFieldZone(zoneKey);
 
@@ -606,12 +609,12 @@ function formatCombatNotes(readable: ReadableGameState, aiIdx: PlayerIndex = 1):
 
   if (oppWeakMatch.length > 0) {
     for (const w of oppWeakMatch) {
-      lines.push(`Your ${myActive.name} VS ${oppActive.name}: WEAKNESS applies: ${myActive.name} takes 2x damage from ${w.type} types such as ${oppActive.name} (unless an effect nullifies it`);
+      lines.push(`Your ${myActive.name} VS ${oppActive.name}: WEAKNESS applies: ${oppActive.name} takes 2x damage from ${w.type} types such as your ${myActive.name} (unless an effect nullifies it)`);
     }
   }
   if (oppResistMatch.length > 0) {
     for (const r of oppResistMatch) {
-      lines.push(`Your ${myActive.name} VS ${oppActive.name}: RESISTANCE applies: ${myActive.name} takes -30 damage from ${r.type} types such as ${oppActive.name} (unless an effect nullifies it`);
+      lines.push(`Your ${myActive.name} VS ${oppActive.name}: RESISTANCE applies: ${oppActive.name} takes -30 damage from ${r.type} types such as your ${myActive.name} (unless an effect nullifies it)`);
     }
   }
 
@@ -621,12 +624,12 @@ function formatCombatNotes(readable: ReadableGameState, aiIdx: PlayerIndex = 1):
 
   if (myWeakMatch.length > 0) {
     for (const w of myWeakMatch) {
-      lines.push(`Your ${myActive.name} VS ${oppActive.name}: WEAKNESS applies: ${oppActive.name} takes 2x damage from ${w.type} types such as your ${myActive.name} (unless an effect nullifies it`);
+      lines.push(`Your ${myActive.name} VS ${oppActive.name}: WEAKNESS applies: ${myActive.name} takes 2x damage from ${w.type} types such as ${oppActive.name} (unless an effect nullifies it)`);
     }
   }
   if (myResistMatch.length > 0) {
     for (const r of myResistMatch) {
-      lines.push(`Your ${myActive.name} VS ${oppActive.name}: RESISTANCE applies: ${oppActive.name} takes -30 damage from ${r.type} types such as your ${myActive.name} (unless an effect nullifies it`);
+      lines.push(`Your ${myActive.name} VS ${oppActive.name}: RESISTANCE applies: ${myActive.name} takes -30 damage from ${r.type} types such as ${oppActive.name} (unless an effect nullifies it)`);
     }
   }
 

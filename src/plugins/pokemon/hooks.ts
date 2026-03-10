@@ -1,8 +1,8 @@
 import type { Action, DeclareAction } from '../../core/types/action';
 import type { GameState } from '../../core/types/game';
 import { VISIBILITY } from '../../core/types/card';
-import { ACTION_TYPES, PHASES, CARD_FLAGS } from '../../core/types/constants';
-import type { PostHookResult, Plugin, PrioritizedPostHook } from '../../core/plugin/types';
+import { ACTION_TYPES, PHASES, CARD_FLAGS, HOOK_OUTCOMES } from '../../core/types/constants';
+import type { PreHookResult, PostHookResult, Plugin, PrioritizedPreHook, PrioritizedPostHook } from '../../core/plugin/types';
 import type { PokemonCardTemplate } from './cards';
 import { getTemplate } from './cards';
 import { findCardInZones, consolidateCountersToTop } from '../../core/engine';
@@ -322,7 +322,120 @@ export function modifyReadableState(
   return readable;
 }
 
+// ── Pre-Hook Helpers ─────────────────────────────────────────────
+
+/** Block AI actions; warn (non-blocking) for UI actions. */
+function blockOrWarn(action: Action, reason: string): PreHookResult {
+  if ((action as { source?: string }).source === 'ai') {
+    return { outcome: HOOK_OUTCOMES.BLOCK, reason };
+  }
+  return { outcome: HOOK_OUTCOMES.WARN, reason };
+}
+
+/** Keywords in a Trainer card's rules text that indicate between-turns passive triggers. */
+const PASSIVE_TRIGGER_KEYWORDS = [
+  'between turns',
+  'at any point between',
+  'at the end of your turn',
+  'end of each',
+  'each turn',
+] as const;
+
+/**
+ * Check whether a player has attached Trainer cards with passive "between turns" triggers.
+ * Scans the non-top cards (attached cards under the top Pokemon) of each field zone.
+ * Exported so index.ts can use it in shouldSkipStartOfTurn / shouldSkipEndOfTurn.
+ */
+export function hasPassiveTriggerCards(state: PokemonState, p: number): boolean {
+  const benchIds = ['bench_1', 'bench_2', 'bench_3', 'bench_4', 'bench_5'];
+  const fieldZones = [`player${p + 1}_active`, ...benchIds.map(b => `player${p + 1}_${b}`)];
+
+  for (const zoneKey of fieldZones) {
+    const zone = state.zones[zoneKey];
+    if (!zone) continue;
+    // Non-top cards are attached cards (energy, tools, trainer items)
+    for (let i = 0; i < zone.cards.length - 1; i++) {
+      const card = zone.cards[i];
+      const template = getTemplate(card.template.id);
+      if (!template || template.supertype !== SUPERTYPES.TRAINER) continue;
+      const rulesText = (template.rules ?? []).join(' ').toLowerCase();
+      if (PASSIVE_TRIGGER_KEYWORDS.some(kw => rulesText.includes(kw))) return true;
+    }
+  }
+  return false;
+}
+
+// ── Pre-Hooks ────────────────────────────────────────────────────
+
+/**
+ * Block moves that would strand energy/tools in a field zone without a Pokemon.
+ * Fires on MOVE_CARD and MOVE_CARD_STACK when the top Pokemon is being moved out
+ * while non-Pokemon cards (energy/tools) would remain.
+ */
+function blockStrandedCards(state: PokemonState, action: Action): PreHookResult {
+  const move = unpackMoveAction(action);
+  if (!move || !isFieldZone(move.fromZone)) return { outcome: HOOK_OUTCOMES.CONTINUE };
+
+  const zone = state.zones[move.fromZone];
+  if (!zone || zone.cards.length === 0) return { outcome: HOOK_OUTCOMES.CONTINUE };
+
+  const movingIds = new Set(move.allCardIds);
+  const topCard = zone.cards.at(-1);
+  if (!topCard || !movingIds.has(topCard.instanceId)) return { outcome: HOOK_OUTCOMES.CONTINUE };
+
+  // Only block when the top card is a Pokemon
+  const template = getTemplate(topCard.template.id);
+  if (!template || template.supertype !== SUPERTYPES.POKEMON) return { outcome: HOOK_OUTCOMES.CONTINUE };
+
+  // Check if non-Pokemon cards would remain after the move
+  const remainingCards = zone.cards.filter(c => !movingIds.has(c.instanceId));
+  const hasStranded = remainingCards.some(c => {
+    const t = getTemplate(c.template.id);
+    return t && t.supertype !== SUPERTYPES.POKEMON;
+  });
+
+  if (!hasStranded) return { outcome: HOOK_OUTCOMES.CONTINUE };
+
+  const reason = `Cannot move ${topCard.template.name} — ${move.fromZone} still has attached energy/tools. Discard them first.`;
+  return blockOrWarn(action, reason);
+}
+
 // ── Hook Registration ────────────────────────────────────────────
+/**
+ * Post-hook: at the end of a player's turn, log any passive "between turns" trigger cards
+ * attached to their field Pokemon. The AI's start-of-turn checkup agent reads this log entry.
+ */
+function logBetweenTurnsTriggers(state: PokemonState, action: Action): PostHookResult {
+  if (action.type !== ACTION_TYPES.END_TURN) return {};
+  const p = (action as { player?: number }).player ?? -1;
+  if (p < 0) return {};
+
+  const benchIds = ['bench_1', 'bench_2', 'bench_3', 'bench_4', 'bench_5'];
+  const fieldZones = [`player${p + 1}_active`, ...benchIds.map(b => `player${p + 1}_${b}`)];
+
+  const triggered: string[] = [];
+  for (const zoneKey of fieldZones) {
+    const zone = state.zones[zoneKey];
+    if (!zone) continue;
+    for (let i = 0; i < zone.cards.length - 1; i++) {
+      const card = zone.cards[i];
+      const template = getTemplate(card.template.id);
+      if (!template || template.supertype !== SUPERTYPES.TRAINER) continue;
+      const rulesText = (template.rules ?? []).join(' ').toLowerCase();
+      if (PASSIVE_TRIGGER_KEYWORDS.some(kw => rulesText.includes(kw))) {
+        triggered.push(`${template.name}: ${(template.rules ?? []).join(' ')}`);
+      }
+    }
+  }
+
+  if (triggered.length > 0) {
+    gameLog(state as GameState<PokemonCardTemplate>,
+      `[Between Turns] Player ${p + 1} has passive triggers: ${triggered.join(' | ')}`);
+  }
+
+  return {};
+}
+
 /** Post-hook: when setup transitions to playing, flip all field Pokemon face-up on both peers. */
 function flipFieldFaceUpOnSetupComplete(state: PokemonState, action: Action): PostHookResult {
   if (action.type !== ACTION_TYPES.END_TURN) return {};
@@ -350,6 +463,10 @@ const MOVE_POST_HOOKS: PrioritizedPostHook<PokemonCardTemplate>[] = [
   { hook: consolidateCountersAfterReorder, priority: 250 },
 ];
 
+const MOVE_PRE_HOOKS: PrioritizedPreHook<PokemonCardTemplate>[] = [
+  { hook: blockStrandedCards, priority: 100 },
+];
+
 export const pokemonHooksPlugin: Plugin<PokemonCardTemplate> = {
   id: 'pokemon-hooks',
   name: 'Pokemon TCG Hooks',
@@ -368,8 +485,11 @@ export const pokemonHooksPlugin: Plugin<PokemonCardTemplate> = {
     ],
     [ACTION_TYPES.END_TURN]: [
       { hook: flipFieldFaceUpOnSetupComplete, priority: 100 },
+      { hook: logBetweenTurnsTriggers, priority: 200 },
     ],
   },
-  // No pre-hooks — all rules enforcement handled by AI via prompts
-  preHooks: {},
+  preHooks: {
+    [ACTION_TYPES.MOVE_CARD]: MOVE_PRE_HOOKS,
+    [ACTION_TYPES.MOVE_CARD_STACK]: MOVE_PRE_HOOKS,
+  },
 };

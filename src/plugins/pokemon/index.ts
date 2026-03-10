@@ -23,6 +23,7 @@ import {
 import { isBasicPokemon, isFieldZone, isLegendPokemon, isVUnionPokemon } from './helpers';
 import { formatCardReference } from './narrative';
 import { getAgentConfig } from './prompt-builder';
+import { hasPassiveTriggerCards } from './hooks';
 import {
   COUNTER_IDS,
   COUNTER_CATEGORIES,
@@ -422,6 +423,9 @@ async function shouldSkipStartOfTurn(ctx: ToolContext): Promise<boolean> {
     }
   }
 
+  // Check for passive trigger cards that need between-turns handling
+  if (hasPassiveTriggerCards(state as any, p)) return false;
+
   // Nothing to do — auto-draw and check deck-out
   const deckKey = `player${p + 1}_${ZONE_IDS.DECK}`;
   const deck = state.zones[deckKey];
@@ -435,6 +439,28 @@ async function shouldSkipStartOfTurn(ctx: ToolContext): Promise<boolean> {
 
   await ctx.execute(drawAction(p, 1));
   console.log('[AI Pipeline] Start-of-turn skipped (no checkup needed), auto-drew 1 card');
+  return true;
+}
+
+/**
+ * Check if the end-of-turn cleanup agent can be skipped.
+ * Skip only when:
+ *   - Active Pokemon is NOT paralyzed (nothing to clear)
+ *   - No passive trigger cards attached (no between-turns effects)
+ */
+async function shouldSkipEndOfTurn(ctx: ToolContext): Promise<boolean> {
+  const state = ctx.getState();
+  const p = ctx.playerIndex;
+
+  // If active Pokemon is paralyzed, agent must clear it
+  const activeKey = `player${p + 1}_${ZONE_IDS.ACTIVE}`;
+  const activeZone = state.zones[activeKey];
+  const topCard = activeZone?.cards.at(-1);
+  if (topCard?.orientation === ORIENTATIONS.TAPPED) return false;
+
+  // If passive trigger cards are present, agent may need to handle them
+  if (hasPassiveTriggerCards(state as any, p)) return false;
+
   return true;
 }
 
@@ -489,6 +515,7 @@ export const plugin: GamePlugin<PokemonCardTemplate> = {
   formatCardForSearch: (template) => formatCardReference(template as any).join('\n'),
   getAICounterTypes: () => Object.values(AI_COUNTER_TYPES),
   shouldSkipStartOfTurn,
+  shouldSkipEndOfTurn,
   getAgentConfig,
   getActionPanels,
   onActionPanelClick,

@@ -51,7 +51,7 @@ You are a mechanical executor. Your job is to follow the TASK INSTRUCTIONS exact
 - Call `end_turn` only when the instructions explicitly say to end the turn
 
 **Tool Guidance:**
-- Status conditions: Use `set_orientation` — paralyzed=90°, asleep=-90°, confused=180°, normal=0°
+- Status conditions: Use `set_status` with status name: "paralyzed", "asleep", "confused", or "normal" — and specify the zone (e.g. "your_active")
 - Energy attachment: Use `move_card` from your_hand to your_active/bench
 - Evolution: Use `move_card` from hand to occupied zone (evolution goes on top)
 - Attacking: Use `declare_attack`, then `add_counter` for damage, then `end_turn`
@@ -317,9 +317,10 @@ Use parallel tool calls when you can.
 Tools will be executed first to last.
 
 Your job:
-1. **Pokemon Check up** — Apply burn, poison, or sleep as needed, or remove sleep/confusion as needed. Do NOT remove paralysis here — paralysis is cleared by the end-of-turn cleanup agent at the end of the paralyzed player's turn.
-2. If active slot is empty, use `swap_card_stacks` to promote a benched Pokemon to active.
-3. **Draw Card** — Draw 1 card from your deck (mandatory). If opponent mulliganed, and its your first turn, draw 1 extra. If your deck is empty and you cannot draw, call `concede` — you lose by deck-out.
+1. **Between-Turns Effects** — Check the LOG for any `[Between Turns]` entries from the previous turn. If present, resolve the listed card effects now. Example — Berry: if the attached Pokemon has ≥2 damage counters, remove 2 damage counters (use `add_counter` with a negative value) and discard the Berry by moving it from the field zone to your discard pile.
+2. **Pokemon Check up** — Apply burn, poison, or sleep as needed, or remove sleep/confusion as needed. Do NOT remove paralysis here — paralysis is cleared by the end-of-turn cleanup agent at the end of the paralyzed player's turn.
+3. If active slot is empty, use `swap_card_stacks` to promote a benched Pokemon to active.
+4. **Draw Card** — Draw 1 card from your deck (mandatory). If opponent mulliganed, and its your first turn, draw 1 extra. If your deck is empty and you cannot draw, call `concede` — you lose by deck-out.
 
 ## @ROLE_DECISION
 You are an autonomous agent playing pokemon. Your opponent has asked you to do something. Figure out what and respond.
