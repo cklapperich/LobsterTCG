@@ -42,14 +42,14 @@
   import SplashAnnouncement from './SplashAnnouncement.svelte';
   import type { ActionPanelButton } from '../../core/types/action-panel';
   import { dragStore, startPileDrag, updateDragPosition, endDrag } from './dragState.svelte';
-  import { DEFAULT_CONFIG, isLocal, isAI, localPlayerIndex, opponent, playerFromZoneKey, isLocalZone, type PlayerConfig, type PlayerController } from './player-config';
+  import { DEFAULT_CONFIG, isLocal, localPlayerIndex, opponent, playerFromZoneKey, isLocalZone, type PlayerConfig, type PlayerController } from './player-config';
   import {
     counterDragStore,
     endCounterDrag,
   } from './counterDragState.svelte';
   import { describeAction, type CounterNameResolver } from './describe-action';
   import { createToolContext, type ToolContextDeps } from './create-tool-context';
-  import { playSfx, playBgm, stopBgm } from '../../lib/audio.svelte';
+  import { playSfx, playBgm} from '../../lib/audio.svelte';
   import { settings } from '../../lib/settings.svelte';
   import type { P2PChannel } from '../../lib/p2p.svelte';
   import { P2PAdapter } from './p2p-adapter';
@@ -196,7 +196,7 @@
       setupTransitionComplete = true;
       turnFlow = { tag: 'transition' };
       await gameConfig.onSetupComplete?.(gs, createExecutor());
-      gameState = { ...gameState };
+      gameState = { ...gs };
       turnFlow = { tag: 'local' };
       advance();
       return;
@@ -703,12 +703,6 @@
       if (hasAI) playBgm();
       advance();
     });
-  }
-
-  function handleBackToMenu() {
-    stopBgm();
-    playSfx('cancel');
-    onBackToMenu?.();
   }
 
   function handleDebug() {
