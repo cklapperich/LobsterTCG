@@ -2,8 +2,14 @@ import type { GamePlugin } from './game-plugin';
 import type { Plugin } from '../plugin/types';
 import type { CardTemplate, PlayerIndex } from './card';
 import type { GameState } from './game';
-import type { DeckList } from './deck';
+import type { DeckList, DeckEntry } from './deck';
 import type { ActionExecutor } from '../action-executor';
+
+/** Result of parsing a deck text import. */
+export interface DeckParseResult {
+  deckList: DeckList;
+  warnings: string[];
+}
 
 export interface GameTypeConfig {
   id: string;
@@ -26,4 +32,10 @@ export interface GameTypeConfig {
   injectTestCards?: (state: GameState, testId: string, playerIndex: PlayerIndex) => void;
   /** Filter key for loading user decks from Supabase (e.g. 'Pokemon'). */
   tcgFilter?: string;
+  /** URL to an external deckbuilder tool (e.g. limitlesstcg.com/builder). */
+  deckbuilderLink?: string;
+  /** Parse a deck text export (e.g. PTCGO format) into a DeckList. */
+  parseDeckText?: (text: string, name: string) => DeckParseResult;
+  /** Export a DeckList's cards back to text format. */
+  exportDeckText?: (cards: DeckEntry[]) => string;
 }

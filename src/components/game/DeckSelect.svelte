@@ -21,6 +21,7 @@
   import { parsePTCGODeck } from '../../plugins/pokemon';
   import { playSfx } from '../../lib/audio.svelte';
   import SettingsModal from './SettingsModal.svelte';
+  import DeckEditorModal from './DeckEditorModal.svelte';
   import { MODEL_OPTIONS, DEFAULT_PLANNER } from '../../ai/providers';
   import { DEFAULT_CONFIG, type PlayerConfig } from './player-config';
   import GbcDropdown from './GbcDropdown.svelte';
@@ -81,6 +82,10 @@
   let generatingStrategy = $state(false);
   let savingStrategy = $state(false);
   let strategyError = $state('');
+
+  // Deck editor modal state
+  let showDeckEditor = $state(false);
+  let editingDeck = $state<DeckOption | null>(null);
 
   // Lobby state (vs Friend)
   let lobbyTab = $state<'host' | 'join'>('host');
@@ -430,6 +435,31 @@
   const canStart = $derived(
     gameConfig && (!gameConfig.needsDeckSelection || (player1Deck && player2Deck))
   );
+
+  function openNewDeck() {
+    editingDeck = null;
+    showDeckEditor = true;
+    playSfx('cursor');
+  }
+
+  function openEditDeck(deck: DeckOption) {
+    editingDeck = deck;
+    showDeckEditor = true;
+    playSfx('cursor');
+  }
+
+  function handleDeckSaved(saved: DeckOption) {
+    showDeckEditor = false;
+    // Refresh supabase decks and select the saved one
+    loadSupabaseDecks().then(() => {
+      player1Deck = saved.id;
+    });
+  }
+
+  function handleDeckDeleted() {
+    showDeckEditor = false;
+    loadSupabaseDecks();
+  }
 </script>
 
 <div class="deck-select-container font-retro bg-gbc-bg min-h-screen w-screen flex flex-col items-center justify-start pt-8 px-4 pb-4 box-border relative">
@@ -511,10 +541,29 @@
               <span class="player-badge bg-gbc-red text-gbc-cream px-2 py-1">YOU</span>
               YOUR DECK
             </div>
-            <GbcDropdown
-              options={deckOptions.map(d => ({ value: d.id, label: `${d.source === 'supabase' ? '★ ' : ''}${d.name} (${d.cardCount} cards)` }))}
-              bind:value={player1Deck}
-            />
+            <div class="flex gap-2 items-start">
+              <div class="flex-1">
+                <GbcDropdown
+                  options={deckOptions.map(d => ({ value: d.id, label: `${d.source === 'supabase' ? '★ ' : ''}${d.name} (${d.cardCount} cards)` }))}
+                  bind:value={player1Deck}
+                />
+              </div>
+              {#if authState.user}
+                {@const selectedDeck = deckOptions.find(d => d.id === player1Deck)}
+                {#if selectedDeck?.source === 'supabase'}
+                  <button
+                    class="gbc-btn text-[0.45rem] py-1.5 px-2"
+                    onclick={() => openEditDeck(selectedDeck)}
+                    title="Edit deck"
+                  >EDIT</button>
+                {/if}
+                <button
+                  class="gbc-btn text-[0.45rem] py-1.5 px-2"
+                  onclick={openNewDeck}
+                  title="New deck"
+                >+ NEW</button>
+              {/if}
+            </div>
           </div>
 
           {#if vsMode === 'ai'}
@@ -766,6 +815,16 @@
 
   {#if showSettings}
     <SettingsModal onClose={() => { showSettings = false; playSfx('cancel'); }} />
+  {/if}
+
+  {#if showDeckEditor}
+    <DeckEditorModal
+      deck={editingDeck}
+      {gameType}
+      onSave={handleDeckSaved}
+      onDelete={handleDeckDeleted}
+      onClose={() => { showDeckEditor = false; }}
+    />
   {/if}
 </div>
 
