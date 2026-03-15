@@ -22,13 +22,13 @@
   import { playSfx } from '../../lib/audio.svelte';
   import SettingsModal from './SettingsModal.svelte';
   import DeckEditorModal from './DeckEditorModal.svelte';
+  import AISettingsModal from './AISettingsModal.svelte';
   import { MODEL_OPTIONS, DEFAULT_PLANNER } from '../../ai/providers';
   import { DEFAULT_CONFIG, type PlayerConfig } from './player-config';
   import GbcDropdown from './GbcDropdown.svelte';
   import { GAME_TYPES, DEFAULT_GAME_TYPE } from '../../game-types';
   import { authState, signInWithGoogle, signOut } from '../../lib/auth.svelte';
-  import { loadDecksFromSupabase, saveDeckStrategy } from '../../lib/deckSync';
-  import { generateDeckStrategy } from '../../lib/strategyGenerator';
+  import { loadDecksFromSupabase } from '../../lib/deckSync';
   import { settings } from '../../lib/settings.svelte';
   import { P2PChannel } from '../../lib/p2p.svelte';
 
@@ -77,15 +77,11 @@
   let aiMode = $state<string>('pipeline');
   let plannerModel = $state<string>(DEFAULT_PLANNER.modelId);
   let showSettings = $state(false);
-  let strategyText = $state('');
-  let strategyDeckId = $state('');
-  let generatingStrategy = $state(false);
-  let savingStrategy = $state(false);
-  let strategyError = $state('');
 
   // Deck editor modal state
   let showDeckEditor = $state(false);
   let editingDeck = $state<DeckOption | null>(null);
+  let showAISettings = $state(false);
 
   // Lobby state (vs Friend)
   let lobbyTab = $state<'host' | 'join'>('host');
@@ -97,7 +93,6 @@
   let codeCopied = $state(false);
 
   const gameConfig = $derived(GAME_TYPES[gameType]);
-  const selectedP2Deck = $derived(deckOptions.find(d => d.id === player2Deck));
 
   const gameTypeOptions = Object.values(GAME_TYPES).map(g => ({
     value: g.id,
@@ -228,13 +223,6 @@
     loadSupabaseDecks();
   });
 
-  $effect(() => {
-    if (selectedP2Deck && selectedP2Deck.id !== strategyDeckId) {
-      strategyText = selectedP2Deck.strategy ?? '';
-      strategyDeckId = selectedP2Deck.id;
-      strategyError = '';
-    }
-  });
 
   // Surface P2P connection errors
   $effect(() => {
@@ -357,37 +345,6 @@
     return null;
   });
 
-  async function handleGenerateStrategy() {
-    if (!selectedP2Deck || generatingStrategy) return;
-    generatingStrategy = true;
-    strategyError = '';
-    try {
-      const text = await generateDeckStrategy(selectedP2Deck.deckList);
-      strategyText = text;
-      selectedP2Deck.strategy = text;
-    } catch (e: any) {
-      strategyError = e.message ?? 'Failed to generate strategy';
-    } finally {
-      generatingStrategy = false;
-    }
-  }
-
-  async function handleSaveStrategy() {
-    if (!selectedP2Deck || savingStrategy) return;
-    const rawId = selectedP2Deck.deckList.id;
-    savingStrategy = true;
-    strategyError = '';
-    try {
-      const ok = await saveDeckStrategy(rawId, strategyText);
-      if (!ok) strategyError = 'Failed to save strategy';
-      else selectedP2Deck.strategy = strategyText;
-    } catch (e: any) {
-      strategyError = e.message ?? 'Failed to save strategy';
-    } finally {
-      savingStrategy = false;
-    }
-  }
-
   function handleStartGame() {
     if (!gameConfig) return;
 
@@ -431,9 +388,13 @@
   }
 
   const hasApiKey = $derived(!!settings.openRouterApiKey);
+  const aiModelLabel = $derived(MODEL_OPTIONS.find(m => m.modelId === aiModel)?.label ?? aiModel);
+  const aiModeLabel = $derived(aiMode === 'pipeline' ? 'Pipeline' : 'Autonomous');
 
   const canStart = $derived(
-    gameConfig && (!gameConfig.needsDeckSelection || (player1Deck && player2Deck))
+    gameConfig
+    && (!gameConfig.needsDeckSelection || (player1Deck && player2Deck))
+    && (vsMode !== 'ai' || !gameConfig.needsAIModel || hasApiKey)
   );
 
   function openNewDeck() {
@@ -465,7 +426,7 @@
 <div class="deck-select-container font-retro bg-gbc-bg min-h-screen w-screen flex flex-col items-center justify-start pt-8 px-4 pb-4 box-border relative">
   <div class="scanlines"></div>
 
-  <div class="gbc-panel-lg max-w-2xl w-full relative">
+  <div class="gbc-panel-lg max-w-3xl w-full relative">
     <button
       class="settings-btn"
       onclick={() => { showSettings = true; playSfx('cursor'); }}
@@ -475,24 +436,24 @@
         <path fill-rule="evenodd" d="M11.078 2.25c-.917 0-1.699.663-1.85 1.567L9.05 4.889c-.02.12-.115.26-.297.348a7.463 7.463 0 0 0-.986.57c-.166.115-.334.126-.45.083L6.3 5.508a1.875 1.875 0 0 0-2.282.819l-.922 1.597a1.875 1.875 0 0 0 .432 2.385l.84.692c.095.078.17.229.154.43a7.598 7.598 0 0 0 0 1.139c.015.2-.059.352-.153.43l-.841.692a1.875 1.875 0 0 0-.432 2.385l.922 1.597a1.875 1.875 0 0 0 2.282.818l1.019-.382c.115-.043.283-.031.45.082.312.214.641.405.985.57.182.088.277.228.297.35l.178 1.071c.151.904.933 1.567 1.85 1.567h1.844c.916 0 1.699-.663 1.85-1.567l.178-1.072c.02-.12.114-.26.297-.349.344-.165.673-.356.985-.57.167-.114.335-.125.45-.082l1.02.382a1.875 1.875 0 0 0 2.28-.819l.923-1.597a1.875 1.875 0 0 0-.432-2.385l-.84-.692c-.095-.078-.17-.229-.154-.43a7.614 7.614 0 0 0 0-1.139c-.016-.2.059-.352.153-.43l.84-.692c.708-.582.891-1.59.433-2.385l-.922-1.597a1.875 1.875 0 0 0-2.282-.818l-1.02.382c-.114.043-.282.031-.449-.083a7.49 7.49 0 0 0-.985-.57c-.183-.087-.277-.227-.297-.348l-.179-1.072a1.875 1.875 0 0 0-1.85-1.567h-1.843ZM12 15.75a3.75 3.75 0 1 0 0-7.5 3.75 3.75 0 0 0 0 7.5Z" clip-rule="evenodd"/>
       </svg>
     </button>
-    <h1 class="text-gbc-yellow text-xl text-center mb-8 tracking-wide title-shadow">
+    <h1 class="text-gbc-yellow text-2xl text-center mb-8 tracking-wide title-shadow">
       {gameConfig?.name ?? 'LOBSTER TCG'}
     </h1>
 
     <!-- Auth Section -->
     <div class="auth-section mb-6 text-center">
       {#if authState.loading}
-        <span class="text-gbc-light text-[0.5rem]">...</span>
+        <span class="text-gbc-light text-xs">...</span>
       {:else if authState.user}
-        <div class="flex items-center justify-center gap-3 text-[0.5rem]">
+        <div class="flex items-center justify-center gap-3 text-xs">
           <span class="text-gbc-green">{authState.user.email}</span>
-          <button class="text-gbc-light/60 hover:text-gbc-light underline cursor-pointer bg-transparent border-none font-retro text-[0.5rem]" onclick={() => signOut()}>
+          <button class="text-gbc-light/60 hover:text-gbc-light underline cursor-pointer bg-transparent border-none font-retro text-xs" onclick={() => signOut()}>
             SIGN OUT
           </button>
         </div>
       {:else}
         <button
-          class="gbc-btn text-[0.5rem] py-1.5 px-4"
+          class="gbc-btn text-xs py-2 px-5"
           onclick={() => signInWithGoogle()}
         >
           SIGN IN WITH GOOGLE
@@ -502,7 +463,7 @@
 
     <!-- Game Type Selection -->
     <div class="game-type-select mb-6">
-      <div class="player-label text-gbc-green text-[0.6rem] mb-3 flex items-center gap-2">
+      <div class="player-label text-gbc-green text-sm mb-3 flex items-center gap-2">
         <span class="player-badge bg-gbc-yellow text-gbc-border px-2 py-1">GAME</span>
         GAME TYPE
       </div>
@@ -513,23 +474,39 @@
     </div>
 
     <!-- VS Mode Toggle -->
-    <div class="vs-mode-toggle flex gap-2 mb-6">
+    <div class="vs-mode-toggle flex gap-3 mb-6">
       <button
-        class="flex-1 gbc-btn text-[0.6rem] py-2 {vsMode === 'ai' ? '' : 'opacity-50'}"
+        class="flex-1 gbc-btn text-sm py-2.5 {vsMode === 'ai' ? '' : 'opacity-50'}"
         onclick={() => switchVsMode('ai')}
       >
         VS AI
       </button>
       <button
-        class="flex-1 gbc-btn text-[0.6rem] py-2 {vsMode === 'friend' ? '' : 'opacity-50'}"
+        class="flex-1 gbc-btn text-sm py-2.5 {vsMode === 'friend' ? '' : 'opacity-50'}"
         onclick={() => switchVsMode('friend')}
       >
         VS FRIEND
       </button>
     </div>
 
+    {#if vsMode === 'ai' && gameConfig?.needsAIModel}
+      <div class="ai-summary mb-6">
+        <button
+          class="gbc-btn text-xs py-2.5 px-5 text-left"
+          style="width: calc(50% - 0.375rem)"
+          onclick={() => { showAISettings = true; playSfx('cursor'); }}
+        >
+          {#if hasApiKey}
+            AI OPPONENT: {aiModelLabel} · {aiModeLabel}
+          {:else}
+            AI OPPONENT SETTINGS
+          {/if}
+        </button>
+      </div>
+    {/if}
+
     {#if loading}
-      <div class="text-gbc-yellow text-[0.6rem] text-center py-8">
+      <div class="text-gbc-yellow text-sm text-center py-8">
         LOADING...
       </div>
     {:else}
@@ -537,7 +514,7 @@
         <div class="deck-selectors flex flex-col gap-8 mb-8">
           <!-- Player 1 Deck Selection (always shown) -->
           <div class="player-select">
-            <div class="player-label text-gbc-green text-[0.6rem] mb-3 flex items-center gap-2">
+            <div class="player-label text-gbc-green text-sm mb-3 flex items-center gap-2">
               <span class="player-badge bg-gbc-red text-gbc-cream px-2 py-1">YOU</span>
               YOUR DECK
             </div>
@@ -552,13 +529,13 @@
                 {@const selectedDeck = deckOptions.find(d => d.id === player1Deck)}
                 {#if selectedDeck?.source === 'supabase'}
                   <button
-                    class="gbc-btn text-[0.45rem] py-1.5 px-2"
+                    class="gbc-btn text-xs py-2 px-3"
                     onclick={() => openEditDeck(selectedDeck)}
                     title="Edit deck"
                   >EDIT</button>
                 {/if}
                 <button
-                  class="gbc-btn text-[0.45rem] py-1.5 px-2"
+                  class="gbc-btn text-xs py-2 px-3"
                   onclick={openNewDeck}
                   title="New deck"
                 >+ NEW</button>
@@ -569,7 +546,7 @@
           {#if vsMode === 'ai'}
             <!-- Player 2 (AI) Deck Selection -->
             <div class="player-select">
-              <div class="player-label text-gbc-green text-[0.6rem] mb-3 flex items-center gap-2">
+              <div class="player-label text-gbc-green text-sm mb-3 flex items-center gap-2">
                 <span class="player-badge bg-gbc-blue text-gbc-cream px-2 py-1">AI</span>
                 AI DECK
               </div>
@@ -578,50 +555,14 @@
                 bind:value={player2Deck}
               />
             </div>
-
-            <!-- AI Deck Strategy -->
-            <div class="strategy-section">
-              <div class="player-label text-gbc-green text-[0.6rem] mb-3 flex items-center gap-2">
-                <span class="player-badge bg-gbc-yellow text-gbc-border px-2 py-1">STRAT</span>
-                AI DECK STRATEGY
-              </div>
-              <textarea
-                class="strategy-textarea w-full bg-gbc-cream/10 text-gbc-light text-[0.5rem] font-retro border-2 border-gbc-border p-2 resize-y leading-relaxed"
-                rows="6"
-                placeholder="No strategy yet. Generate one or type your own."
-                bind:value={strategyText}
-                oninput={() => { if (selectedP2Deck) selectedP2Deck.strategy = strategyText; }}
-              ></textarea>
-              <div class="flex gap-2 mt-2">
-                <button
-                  class="gbc-btn text-[0.45rem] py-1.5 px-3"
-                  onclick={handleGenerateStrategy}
-                  disabled={!hasApiKey || generatingStrategy}
-                >
-                  {generatingStrategy ? 'GENERATING...' : 'GENERATE WITH OPUS'}
-                </button>
-                {#if selectedP2Deck?.source === 'supabase'}
-                  <button
-                    class="gbc-btn text-[0.45rem] py-1.5 px-3"
-                    onclick={handleSaveStrategy}
-                    disabled={savingStrategy}
-                  >
-                    {savingStrategy ? 'SAVING...' : 'SAVE STRATEGY'}
-                  </button>
-                {/if}
-              </div>
-              {#if strategyError}
-                <div class="text-gbc-red text-[0.45rem] mt-1">{strategyError}</div>
-              {/if}
-            </div>
           {/if}
         </div>
       {/if}
 
       <!-- Playmat Selection -->
       {#if playmatOptions.length > 0 && gameConfig?.needsDeckSelection}
-        <div class="playmat-select mb-4">
-          <div class="player-label text-gbc-green text-[0.6rem] mb-3 flex items-center gap-2">
+        <div class="playmat-select mb-6">
+          <div class="player-label text-gbc-green text-sm mb-3 flex items-center gap-2">
             <span class="player-badge bg-gbc-green text-gbc-cream px-2 py-1">MAT</span>
             PLAYMAT
           </div>
@@ -633,75 +574,10 @@
       {/if}
 
       {#if vsMode === 'ai'}
-        {#if gameConfig?.needsAIModel}
-          <!-- AI Section -->
-          <div class="ai-section mb-4" class:ai-locked={!hasApiKey}>
-            <!-- Key missing: instructions + button -->
-            {#if !hasApiKey}
-              <div class="api-key-prompt mb-3">
-                <div class="text-gbc-yellow text-[0.55rem] font-retro mb-1">▶ PLAY VS BOT</div>
-                <div class="text-gbc-light/70 text-[0.45rem] font-retro leading-relaxed mb-2">
-                  Visit <span class="text-gbc-green">openrouter.ai</span>, create an account, add credits, then copy your API key and paste it below.
-                </div>
-                <button
-                  class="gbc-btn text-[0.5rem] py-1.5 px-4 w-full"
-                  onclick={() => { showSettings = true; playSfx('cursor'); }}
-                >
-                  SET OPENROUTER API KEY
-                </button>
-              </div>
-            {/if}
-
-            <!-- AI options (greyed when locked) -->
-            <div class:opacity-40={!hasApiKey} class:pointer-events-none={!hasApiKey}>
-              <!-- AI Mode Selection -->
-              <div class="mode-select mb-4">
-                <div class="player-label text-gbc-green text-[0.6rem] mb-3 flex items-center gap-2">
-                  <span class="player-badge bg-gbc-red text-gbc-cream px-2 py-1">MODE</span>
-                  AI MODE
-                </div>
-                <GbcDropdown
-                  options={[
-                    { value: 'pipeline', label: 'Pipeline (Plan+Execute)' },
-                    { value: 'autonomous', label: 'Autonomous (Single Agent)' },
-                  ]}
-                  bind:value={aiMode}
-                />
-              </div>
-
-              <!-- Planner Model Selection (only in pipeline mode) -->
-              {#if aiMode === 'pipeline'}
-                <div class="model-select mb-4">
-                  <div class="player-label text-gbc-green text-[0.6rem] mb-3 flex items-center gap-2">
-                    <span class="player-badge bg-gbc-yellow text-gbc-border px-2 py-1">PLAN</span>
-                    PLANNER MODEL
-                  </div>
-                  <GbcDropdown
-                    options={MODEL_OPTIONS.map(m => ({ value: m.modelId, label: m.label }))}
-                    bind:value={plannerModel}
-                  />
-                </div>
-              {/if}
-
-              <!-- AI Model Selection -->
-              <div class="model-select mb-4">
-                <div class="player-label text-gbc-green text-[0.6rem] mb-3 flex items-center gap-2">
-                  <span class="player-badge bg-gbc-yellow text-gbc-border px-2 py-1">AI</span>
-                  {aiMode === 'pipeline' ? 'EXECUTION MODEL' : 'AI MODEL'}
-                </div>
-                <GbcDropdown
-                  options={MODEL_OPTIONS.map(m => ({ value: m.modelId, label: m.label }))}
-                  bind:value={aiModel}
-                />
-              </div>
-            </div>
-          </div>
-        {/if}
-
         {#if gameConfig?.testOptions && gameConfig.testOptions.length > 0}
-          <div class="test-options flex justify-center gap-4 mb-4">
+          <div class="test-options flex justify-center gap-4 mb-6">
             {#each gameConfig.testOptions as opt}
-              <label class="gbc-checkbox flex items-center gap-2 cursor-pointer text-gbc-green text-[0.5rem]">
+              <label class="gbc-checkbox flex items-center gap-2 cursor-pointer text-gbc-green text-xs">
                 <input type="checkbox" checked={testFlags[opt.id] ?? false} onchange={() => { testFlags[opt.id] = !testFlags[opt.id]; handleCheckboxChange(); }} />
                 <span>{opt.label}</span>
               </label>
@@ -711,7 +587,7 @@
 
         <div class="flex justify-center">
           <button
-            class="gbc-btn text-sm py-3 px-8 start-btn"
+            class="gbc-btn text-base py-3.5 px-10 start-btn"
             onclick={handleStartGame}
             disabled={!canStart}
           >
@@ -721,23 +597,23 @@
       {:else}
         <!-- VS FRIEND: Inline Lobby -->
         {#if gameConfig?.needsDeckSelection}
-          <div class="lobby-section mt-2 mb-4">
-            <div class="player-label text-gbc-green text-[0.6rem] mb-4 flex items-center gap-2">
+          <div class="lobby-section mt-2 mb-6">
+            <div class="player-label text-gbc-green text-sm mb-4 flex items-center gap-2">
               <span class="player-badge bg-gbc-blue text-gbc-cream px-2 py-1">NET</span>
               PLAY ONLINE
             </div>
 
             {#if !channel || channel.state.status === 'error'}
               <!-- Host / Join tabs -->
-              <div class="flex gap-2 mb-4">
+              <div class="flex gap-3 mb-4">
                 <button
-                  class="flex-1 gbc-btn text-[0.5rem] py-2 {lobbyTab === 'host' ? '' : 'opacity-50'}"
+                  class="flex-1 gbc-btn text-xs py-2.5 {lobbyTab === 'host' ? '' : 'opacity-50'}"
                   onclick={() => { lobbyTab = 'host'; playSfx('cursor'); }}
                 >
                   HOST
                 </button>
                 <button
-                  class="flex-1 gbc-btn text-[0.5rem] py-2 {lobbyTab === 'join' ? '' : 'opacity-50'}"
+                  class="flex-1 gbc-btn text-xs py-2.5 {lobbyTab === 'join' ? '' : 'opacity-50'}"
                   onclick={() => { lobbyTab = 'join'; playSfx('cursor'); }}
                 >
                   JOIN
@@ -746,25 +622,25 @@
 
               {#if lobbyTab === 'host'}
                 <div class="flex flex-col gap-3">
-                  <div class="text-gbc-green text-[0.5rem]">ROOM CODE</div>
+                  <div class="text-gbc-green text-xs">ROOM CODE</div>
                   <button
-                    class="code-display text-center text-gbc-yellow text-lg tracking-[0.5em] py-3 px-4 border-2 border-gbc-border bg-gbc-cream/10 cursor-pointer font-retro w-full"
+                    class="code-display text-center text-gbc-yellow text-xl tracking-[0.5em] py-3.5 px-4 border-2 border-gbc-border bg-gbc-cream/10 cursor-pointer font-retro w-full"
                     onclick={copyCode}
                   >
                     {roomCode}
                   </button>
-                  <p class="text-[0.45rem] text-center {codeCopied ? 'text-gbc-yellow' : 'text-gbc-light/70'}">
+                  <p class="text-xs text-center {codeCopied ? 'text-gbc-yellow' : 'text-gbc-light/70'}">
                     {codeCopied ? 'Copied to clipboard!' : 'Click to copy. Share with opponent — they enter it in JOIN.'}
                   </p>
-                  <button class="gbc-btn text-[0.5rem] py-2" onclick={handleCreateGame}>
+                  <button class="gbc-btn text-xs py-2.5" onclick={handleCreateGame}>
                     CREATE GAME
                   </button>
                 </div>
               {:else}
                 <div class="flex flex-col gap-3">
-                  <div class="text-gbc-green text-[0.5rem]">ENTER ROOM CODE</div>
+                  <div class="text-gbc-green text-xs">ENTER ROOM CODE</div>
                   <input
-                    class="code-input text-center text-gbc-yellow text-lg tracking-[0.4em] py-3 px-4 border-2 border-gbc-border bg-gbc-cream/10 font-retro w-full uppercase"
+                    class="code-input text-center text-gbc-yellow text-xl tracking-[0.4em] py-3.5 px-4 border-2 border-gbc-border bg-gbc-cream/10 font-retro w-full uppercase"
                     type="text"
                     maxlength="8"
                     placeholder="ABC123"
@@ -772,7 +648,7 @@
                     onkeydown={(e) => e.key === 'Enter' && handleJoinGame()}
                   />
                   <button
-                    class="gbc-btn text-[0.5rem] py-2"
+                    class="gbc-btn text-xs py-2.5"
                     onclick={handleJoinGame}
                     disabled={joinCode.trim().length < 4}
                   >
@@ -782,7 +658,7 @@
               {/if}
 
               {#if lobbyError}
-                <div class="mt-3 text-gbc-red text-[0.45rem] text-center">{lobbyError}</div>
+                <div class="mt-3 text-gbc-red text-xs text-center">{lobbyError}</div>
               {/if}
             {:else}
               <!-- Connecting / connected state -->
@@ -790,15 +666,15 @@
                 {#if channel.state.status === 'signaling'}
                   <div class="spinner"></div>
                 {:else if channel.state.status === 'connected'}
-                  <div class="text-gbc-green text-2xl">✓</div>
+                  <div class="text-gbc-green text-3xl">✓</div>
                 {/if}
-                <div class="text-gbc-yellow text-[0.5rem] text-center">{lobbyStatusLabel}</div>
+                <div class="text-gbc-yellow text-xs text-center">{lobbyStatusLabel}</div>
                 {#if channel.state.role === 'host' && channel.state.roomCode}
-                  <div class="text-gbc-light/60 text-[0.45rem] text-center">
+                  <div class="text-gbc-light/60 text-xs text-center">
                     Room: <span class="text-gbc-yellow tracking-widest">{channel.state.roomCode}</span>
                   </div>
                 {/if}
-                <button class="gbc-btn text-[0.45rem] py-1.5 px-4 opacity-70" onclick={handleLobbyCancel}>
+                <button class="gbc-btn text-xs py-2 px-5 opacity-70" onclick={handleLobbyCancel}>
                   CANCEL
                 </button>
               </div>
@@ -809,7 +685,7 @@
     {/if}
   </div>
 
-  <div class="credits text-gbc-border text-[0.4rem] mt-8 opacity-70">
+  <div class="credits text-gbc-border text-xs mt-8 opacity-70">
     LOBSTER TCG
   </div>
 
@@ -824,6 +700,20 @@
       onSave={handleDeckSaved}
       onDelete={handleDeckDeleted}
       onClose={() => { showDeckEditor = false; }}
+    />
+  {/if}
+
+  {#if showAISettings}
+    <AISettingsModal
+      {aiModel}
+      {aiMode}
+      {plannerModel}
+      onClose={(values) => {
+        aiModel = values.aiModel;
+        aiMode = values.aiMode;
+        plannerModel = values.plannerModel;
+        showAISettings = false;
+      }}
     />
   {/if}
 </div>
@@ -849,27 +739,17 @@
   }
 
   .player-badge {
-    @apply font-retro text-[0.5rem] tracking-wide;
+    @apply font-retro text-xs tracking-wide;
     box-shadow: 0.125rem 0.125rem 0 var(--color-gbc-border);
   }
 
   .gbc-checkbox input[type="checkbox"] {
-    @apply appearance-none w-4 h-4 border-2 border-gbc-border bg-gbc-cream cursor-pointer;
+    @apply appearance-none w-5 h-5 border-2 border-gbc-border bg-gbc-cream cursor-pointer;
   }
 
   .gbc-checkbox input[type="checkbox"]:checked {
     @apply bg-gbc-green;
     box-shadow: inset 0.125rem 0.125rem 0 rgba(0, 0, 0, 0.2);
-  }
-
-  .strategy-textarea {
-    @apply outline-none;
-    min-height: 4rem;
-    max-height: 12rem;
-  }
-
-  .strategy-textarea:focus {
-    border-color: var(--color-gbc-green);
   }
 
   .settings-btn {

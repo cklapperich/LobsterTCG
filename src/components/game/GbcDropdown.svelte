@@ -138,7 +138,7 @@
   }
 
   .dropdown-trigger {
-    @apply w-full font-retro text-[0.5rem] bg-gbc-cream text-gbc-border;
+    @apply w-full font-retro text-xs bg-gbc-cream text-gbc-border;
     @apply border-4 border-gbc-border p-3 pr-10 cursor-pointer;
     @apply text-left;
     box-shadow:
@@ -174,7 +174,7 @@
   }
 
   .dropdown-item {
-    @apply w-full font-retro text-[0.5rem] text-gbc-border;
+    @apply w-full font-retro text-xs text-gbc-border;
     @apply px-3 py-2.5 text-left cursor-pointer;
     @apply border-b-2 border-gbc-border/20;
     background: transparent;

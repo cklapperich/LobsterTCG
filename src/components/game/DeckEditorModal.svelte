@@ -1,8 +1,10 @@
 <script lang="ts">
-  import { saveDeckToSupabase, updateDeckCards, deleteDeck } from '../../lib/deckSync';
+  import { saveDeckToSupabase, updateDeckCards, deleteDeck, saveDeckStrategy } from '../../lib/deckSync';
   import { authState } from '../../lib/auth.svelte';
   import { playSfx } from '../../lib/audio.svelte';
   import { GAME_TYPES } from '../../game-types';
+  import { generateDeckStrategy } from '../../lib/strategyGenerator';
+  import { settings } from '../../lib/settings.svelte';
   import type { DeckList } from '../../core/types/deck';
 
   interface DeckOption {
@@ -34,6 +36,12 @@
   let errors = $state<string[]>([]);
   let showDeleteConfirm = $state(false);
   let deleting = $state(false);
+  let strategyText = $state(deck?.strategy ?? '');
+  let generatingStrategy = $state(false);
+  let savingStrategy = $state(false);
+  let strategyError = $state('');
+
+  const hasApiKey = $derived(!!settings.openRouterApiKey);
 
   // Pre-populate textarea when editing
   if (deck && gameConfig?.exportDeckText) {
@@ -94,7 +102,7 @@
         name: deckName.trim(),
         deckList: { ...deckList, id: rawId, name: deckName.trim() },
         cardCount,
-        strategy: deck.strategy,
+        strategy: strategyText,
         source: 'supabase',
       });
     } else {
@@ -110,7 +118,7 @@
         name: deckName.trim(),
         deckList: { ...deckList, id: newId, name: deckName.trim() },
         cardCount,
-        strategy: '',
+        strategy: strategyText,
         source: 'supabase',
       });
     }
@@ -132,6 +140,34 @@
     playSfx('confirm');
     deleting = false;
     onDelete?.();
+  }
+
+  async function handleGenerateStrategy() {
+    if (!deck || generatingStrategy) return;
+    generatingStrategy = true;
+    strategyError = '';
+    try {
+      strategyText = await generateDeckStrategy(deck.deckList);
+    } catch (e: any) {
+      strategyError = e.message ?? 'Failed to generate strategy';
+    } finally {
+      generatingStrategy = false;
+    }
+  }
+
+  async function handleSaveStrategy() {
+    if (!deck || savingStrategy) return;
+    const rawId = deck.id.startsWith('sb-') ? deck.id.slice(3) : deck.deckList.id;
+    savingStrategy = true;
+    strategyError = '';
+    try {
+      const ok = await saveDeckStrategy(rawId, strategyText);
+      if (!ok) strategyError = 'Failed to save strategy';
+    } catch (e: any) {
+      strategyError = e.message ?? 'Failed to save strategy';
+    } finally {
+      savingStrategy = false;
+    }
   }
 
   function handleClose() {
@@ -182,6 +218,40 @@
           bind:value={pasteText}
         ></textarea>
       </div>
+
+      <!-- AI Strategy (only when editing) -->
+      {#if isEditing}
+        <div class="flex flex-col gap-2">
+          <div class="text-gbc-green text-sm font-retro">AI DECK STRATEGY</div>
+          <textarea
+            class="strategy-textarea w-full bg-gbc-cream/10 text-gbc-light text-xs font-retro border-2 border-gbc-border p-3 resize-y leading-relaxed"
+            rows="5"
+            placeholder="No strategy yet. Generate one or type your own."
+            bind:value={strategyText}
+          ></textarea>
+          <div class="flex gap-3">
+            <button
+              class="gbc-btn text-xs py-2 px-4"
+              onclick={handleGenerateStrategy}
+              disabled={!hasApiKey || generatingStrategy}
+            >
+              {generatingStrategy ? 'GENERATING...' : 'GENERATE STRATEGY'}
+            </button>
+            {#if deck?.source === 'supabase'}
+              <button
+                class="gbc-btn text-xs py-2 px-4"
+                onclick={handleSaveStrategy}
+                disabled={savingStrategy}
+              >
+                {savingStrategy ? 'SAVING...' : 'SAVE STRATEGY'}
+              </button>
+            {/if}
+          </div>
+          {#if strategyError}
+            <div class="text-gbc-red text-xs font-retro">{strategyError}</div>
+          {/if}
+        </div>
+      {/if}
 
       <!-- Warnings / Errors -->
       {#if errors.length > 0}
@@ -272,8 +342,15 @@
     max-height: 24rem;
   }
 
-  .paste-textarea:focus {
+  .paste-textarea:focus,
+  .strategy-textarea:focus {
     border-color: var(--color-gbc-green);
+  }
+
+  .strategy-textarea {
+    @apply outline-none;
+    min-height: 4rem;
+    max-height: 12rem;
   }
 
   .warnings-list {

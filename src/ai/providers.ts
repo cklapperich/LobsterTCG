@@ -39,7 +39,7 @@ export interface ModelOption {
   costPerMTok: [number, number]; // [input, output] per million tokens
 }
 
-export const DEFAULT_PLANNER = MODEL_OPTIONS[0];
+export const DEFAULT_PLANNER = MODEL_OPTIONS[2]; // Claude Sonnet 4.6
 
 // Helper to get model option by label
 export function getModelOptionByLabel(label: string): ModelOption | undefined {
