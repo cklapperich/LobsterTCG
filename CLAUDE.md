@@ -8,6 +8,6 @@ Do NOT run tests unless you were messing with hooks.ts relating to evolution tim
 
 ## Philosophy
 
-Rules enforcement is HARD. Pokemon can evolve from their previous stage, except on first turn. Except if Forest of Giant Plants is played. Except if a pokemon ability negates stadiums. Unless that pokemon has a special condition OR Hex Maniac was played earlier in the turn, or there's a Rocket's Tower and it's a non-colorless pokemon, etc.
+- Rules enforcement is HARD (would require full rules engine), almost rule can be negated by some card effect. Plugins encode minimal logic for things card effects can never be negated by an effect.
 
-**Core principle:** Game logic cannot be fully encoded in TypeScript. Everything is game-system-blind except plugins. Plugins encode minimal logic for things card effects can never change.
+- Game logic cannot be fully encoded in TypeScript. Core systems must NEVER reference any aspect of a specific TCG or import from a plugin. 

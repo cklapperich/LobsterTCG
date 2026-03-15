@@ -1,3 +1,22 @@
+/**
+ * narrative.ts — Pokemon-specific AI context formatter.
+ *
+ * Exists because the raw GameState is too verbose and too machine-structured
+ * for an LLM to reason over efficiently. This file's job is to compress a
+ * ReadableGameState into the tightest human-readable text that still gives the
+ * AI everything it needs to make good decisions.
+ *
+ * Responsibilities:
+ *  - formatNarrativeState: produce the full prompt context block (card reference,
+ *    board state, stadium, action history, pending decisions)
+ *  - formatCardReference: render a single card's full details (attacks, abilities,
+ *    rules text, energy costs) in a compact, token-efficient format
+ *  - Deduplicate card details so each unique card appears in the reference only once,
+ *    keeping board state sections brief (names + instance data only)
+ *
+ * This is intentionally Pokemon-specific — it knows about supertypes, energy,
+ * status conditions, and prize structure. The core has no equivalent.
+ */
 import type { ReadableGameState, ReadableZone, ReadableCard, ReadableTurn } from '../../core/readable';
 import { ACTION_TYPES } from '../../core/types/constants';
 import { isFieldZone } from './helpers';

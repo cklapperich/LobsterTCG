@@ -1,8 +1,24 @@
 <script lang="ts">
+  /**
+   * DeckSelect.svelte — pre-game lobby and session configuration screen.
+   *
+   * Exists because the game itself (Game.svelte) assumes all configuration is
+   * already resolved — it needs decks, player modes, and a game type up front.
+   * This screen handles the messy human-facing setup work so Game.svelte stays clean.
+   *
+   * Responsibilities:
+   *  - Deck management: upload PTCGO exports, load from Supabase, display card counts
+   *  - Player config: choose local / AI / remote for each player slot
+   *  - AI config: model selection, AI mode (planner vs. direct)
+   *  - Game type selection and playmat image picker
+   *  - Auth: Google sign-in/out, gating cloud deck sync behind auth
+   *  - P2P lobby: create/join room, exchange decks with remote peer before starting
+   *  - Deck strategy: auto-generate and persist AI strategy text per deck
+   */
   import { onMount } from 'svelte';
   import type { DeckList } from '../../core/types/deck';
   import type { DeckSelection } from '../../core/types/deck';
-  import { parsePTCGODeck } from '../../plugins/pokemon/cards';
+  import { parsePTCGODeck } from '../../plugins/pokemon';
   import { playSfx } from '../../lib/audio.svelte';
   import SettingsModal from './SettingsModal.svelte';
   import { MODEL_OPTIONS, DEFAULT_PLANNER } from '../../ai/providers';

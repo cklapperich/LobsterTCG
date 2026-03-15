@@ -1,9 +1,7 @@
 import { generateText } from 'ai';
 import { resolveModel } from '../ai/providers';
-import { buildPrompt } from '../plugins/pokemon/prompt-builder';
+import { buildPrompt, getTemplate, formatCardReference } from '../plugins/pokemon';
 import { formatCardInventory } from '../core/readable';
-import { getTemplate } from '../plugins/pokemon/cards';
-import { formatCardReference } from '../plugins/pokemon/narrative';
 import type { DeckList } from '../core/types/deck';
 
 export async function generateDeckStrategy(deckList: DeckList): Promise<string> {

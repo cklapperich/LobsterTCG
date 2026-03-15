@@ -2,7 +2,7 @@ import type { CardTemplate } from '../../core/types/card';
 import type { DeckList } from '../../core/types/deck';
 import cardsData from './cards-western.json';
 import cardbackImg from './cardback.png';
-import type { WesternCard } from './pokemon-shared/types';
+import type { WesternCard, Supertype, Subtype, EnergyType, AbilityType } from './pokemon-shared/types';
 import { parsePTCGO } from './pokemon-shared/ptcgoParser';
 
 /**
@@ -10,7 +10,7 @@ import { parsePTCGO } from './pokemon-shared/ptcgoParser';
  */
 export interface PokemonAttack {
   name: string;
-  cost: string[];
+  cost: EnergyType[];
   damage: string;
   effect?: string;
 }
@@ -21,7 +21,7 @@ export interface PokemonAttack {
 export interface PokemonAbility {
   name: string;
   effect: string;
-  type: string;
+  type: AbilityType;
 }
 
 /**
@@ -29,16 +29,16 @@ export interface PokemonAbility {
  * Includes game-relevant text from the card database.
  */
 export interface PokemonCardTemplate extends CardTemplate {
-  supertype: string;
-  subtypes: string[];
-  types: string[];
+  supertype: Supertype;
+  subtypes: Subtype[];
+  types: EnergyType[];
   hp?: number;
   evolveFrom?: string;
   attacks?: PokemonAttack[];
   abilities?: PokemonAbility[];
-  weaknesses?: Array<{ type: string; value?: string }>;
-  resistances?: Array<{ type: string; value?: string }>;
-  retreatCost?: string[];
+  weaknesses?: Array<{ type: EnergyType; value?: string }>;
+  resistances?: Array<{ type: EnergyType; value?: string }>;
+  retreatCost?: EnergyType[];
   rules?: string[];
 }
 
@@ -245,4 +245,19 @@ export function parsePTCGODeck(ptcgoText: string, deckName?: string): PTCGOParse
     },
     warnings: output.errors.map(e => e.message),
   };
+}
+
+/**
+ * Get a single western card by ID.
+ */
+export function getWesternCard(id: string): WesternCard | undefined {
+  ensureWesternCardsLoaded();
+  return westernCardMap!.get(id);
+}
+
+/**
+ * Get all western cards from the dataset.
+ */
+export function getAllWesternCards(): WesternCard[] {
+  return cardsData as WesternCard[];
 }

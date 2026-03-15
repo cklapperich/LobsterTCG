@@ -1,19 +1,35 @@
 <script lang="ts">
   import type { CardInstance, CardTemplate } from '../../core/types/card';
+  import { playSfx } from '../../lib/audio.svelte';
 
-  interface Props {
-    cards: CardInstance<CardTemplate>[];
-    onConfirm: () => void;
-    onCancel: () => void;
+  let visible = $state(false);
+  let cards = $state<CardInstance<CardTemplate>[]>([]);
+  let confirmCallback: (() => void) | null = null;
+
+  export function show(c: CardInstance<CardTemplate>[], onConfirm: () => void) {
+    cards = c;
+    confirmCallback = onConfirm;
+    visible = true;
   }
 
-  let { cards, onConfirm, onCancel }: Props = $props();
+  function handleConfirm() {
+    visible = false;
+    confirmCallback?.();
+    confirmCallback = null;
+  }
+
+  function handleCancel() {
+    visible = false;
+    confirmCallback = null;
+    playSfx('cancel');
+  }
 </script>
 
+{#if visible}
 <div
   class="overlay"
-  onclick={onCancel}
-  onkeydown={(e) => { if (e.key === 'Escape') onCancel(); }}
+  onclick={handleCancel}
+  onkeydown={(e) => { if (e.key === 'Escape') handleCancel(); }}
   role="button"
   tabindex="-1"
 >
@@ -31,12 +47,13 @@
       </span>
       <span class="text-gbc-yellow text-[0.45rem]">End turn anyway?</span>
       <div class="flex justify-end gap-2 mt-1">
-        <button class="gbc-btn text-[0.45rem] py-1.5 px-4" onclick={onCancel}>CANCEL</button>
-        <button class="gbc-btn text-[0.45rem] py-1.5 px-4" onclick={onConfirm}>END TURN</button>
+        <button class="gbc-btn text-[0.45rem] py-1.5 px-4" onclick={handleCancel}>CANCEL</button>
+        <button class="gbc-btn text-[0.45rem] py-1.5 px-4" onclick={handleConfirm}>END TURN</button>
       </div>
     </div>
   </div>
 </div>
+{/if}
 
 <style>
   @reference "../../app.css";

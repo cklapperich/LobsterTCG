@@ -1,28 +1,39 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-
   interface Props {
     onSubmit: (value: string) => void;
-    onCancel: () => void;
   }
 
-  let { onSubmit, onCancel }: Props = $props();
+  let { onSubmit }: Props = $props();
 
+  let visible = $state(false);
   let inputValue = $state('');
   let inputEl = $state<HTMLInputElement | null>(null);
 
-  onMount(() => { inputEl?.focus(); });
+  export function show() {
+    inputValue = '';
+    visible = true;
+  }
+
+  $effect(() => {
+    if (visible && inputEl) inputEl.focus();
+  });
+
+  function handleCancel() {
+    visible = false;
+  }
 
   function handleSubmit(e: SubmitEvent) {
     e.preventDefault();
+    visible = false;
     onSubmit(inputValue.trim());
   }
 </script>
 
+{#if visible}
 <div
   class="overlay"
-  onclick={onCancel}
-  onkeydown={(e) => e.key === 'Escape' && onCancel()}
+  onclick={handleCancel}
+  onkeydown={(e) => e.key === 'Escape' && handleCancel()}
   role="button"
   tabindex="-1"
 >
@@ -45,12 +56,13 @@
         bind:this={inputEl}
       />
       <div class="flex justify-end gap-2 mt-1">
-        <button type="button" class="gbc-btn text-[0.45rem] py-1.5 px-4" onclick={onCancel}>CANCEL</button>
+        <button type="button" class="gbc-btn text-[0.45rem] py-1.5 px-4" onclick={handleCancel}>CANCEL</button>
         <button type="submit" class="gbc-btn text-[0.45rem] py-1.5 px-4">SEND</button>
       </div>
     </form>
   </div>
 </div>
+{/if}
 
 <style>
   @reference "../../app.css";

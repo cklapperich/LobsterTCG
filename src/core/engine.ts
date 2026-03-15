@@ -1,3 +1,21 @@
+/**
+ * Core game engine — pure state machine, TCG-agnostic.
+ *
+ * Exists because game logic must be fully separable from any specific TCG or UI.
+ * Plugins and components never mutate game state directly; they construct Action
+ * objects and pass them through here, so every state transition is auditable,
+ * replayable, and broadcastable over P2P without extra ceremony.
+ *
+ * Responsibilities:
+ *  - Execute every Action type against a GameState (draw, move, flip, counter, etc.)
+ *  - Enforce zone capacity, visibility rules, and turn/phase bookkeeping
+ *  - Maintain the game log as a side-effect of execution
+ *  - Provide helpers used by both plugins and UI (findCardInZones, loadDeck, etc.)
+ *
+ * Hard constraints:
+ *  - NEVER import from a plugin or reference any TCG-specific concept
+ *  - NEVER touch the DOM or any Svelte reactive state
+ */
 import type { CardTemplate, CardInstance, Visibility, PlayerIndex } from './types/card';
 import type { Zone, ZoneConfig } from './types/zone';
 import type {

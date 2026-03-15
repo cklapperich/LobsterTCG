@@ -1,3 +1,24 @@
+/**
+ * index.ts — Pokemon TCG plugin entry point and facade.
+ *
+ * Exists as the single integration point between the Pokemon plugin and the
+ * core engine. The core only knows about the GamePlugin interface; everything
+ * Pokemon-specific is either implemented here or imported and re-exported
+ * through here, so callers never need to dig into plugin internals.
+ *
+ * Responsibilities:
+ *  - Assemble and export the `plugin` object conforming to GamePlugin<PokemonCardTemplate>
+ *  - Game lifecycle: startPokemonGame, loadPlayerDeck, executeSetup, autoMulligan,
+ *    flipFieldCardsFaceUp, onSetupComplete (coin flip + first-player choice)
+ *  - Action panels: derive attack/ability/stadium buttons from live board state,
+ *    and translate button clicks into declarable Actions
+ *  - AI hooks: shouldSkipBetweenTurns (skip LLM call when nothing needs attention),
+ *    onAfterTurn (deterministic paralysis expiry)
+ *  - Markers: GX/VSTAR used-state display and click-to-declare handling
+ *  - Composite card preview: group LEGEND halves and V-UNION pieces for the card viewer
+ *  - Counter and coin image registration
+ *  - Re-export everything downstream consumers need (zones, cards, hooks, plugin state)
+ */
 import type { GameState, GameConfig } from '../../core/types/game';
 import type { Playmat } from '../../core/types/playmat';
 import type { DeckList } from '../../core/types/deck';
@@ -548,5 +569,32 @@ export {
   getTemplate,
   getCardBack,
   parsePTCGODeck,
+  getWesternCard,
+  getAllWesternCards,
   type PTCGOParseResult,
 } from './cards';
+export { formatCardReference } from './narrative';
+export { buildPrompt } from './prompt-builder';
+
+// Deckbuilder API
+export {
+  getAllCards as getDeckbuilderCards,
+  queryCards,
+  getFilterDescriptors,
+  getSortOptions,
+  getSearchableFields,
+  getDisplayHints,
+  validateDeck,
+  exportToPTCGO,
+  type DeckbuilderCard,
+  type FilterDescriptor,
+  type FilterValue,
+  type ActiveFilters,
+  type SortOption,
+  type DeckValidationResult,
+  type DeckValidationError,
+  type CardQuery,
+  type CardQueryResult,
+  type DeckbuilderDisplayHints,
+  type DeckEntry,
+} from './deckbuilder';

@@ -2,11 +2,14 @@
   import { settings } from '../../lib/settings.svelte';
   import { playSfx } from '../../lib/audio.svelte';
 
-  interface Props {
-    onClose: () => void;
-  }
+  let visible = $state(false);
 
-  let { onClose }: Props = $props();
+  export function show() { visible = true; }
+
+  function handleClose() {
+    visible = false;
+    playSfx('cancel');
+  }
 
   function handleSfxChange(e: Event) {
     const val = (e.target as HTMLInputElement).valueAsNumber;
@@ -41,14 +44,15 @@
   }
 </script>
 
+{#if visible}
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div class="settings-overlay" onclick={onClose} onkeydown={(e) => e.key === 'Escape' && onClose()} role="dialog" tabindex="-1">
+<div class="settings-overlay" onclick={handleClose} onkeydown={(e) => e.key === 'Escape' && handleClose()} role="dialog" tabindex="-1">
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div class="settings-panel gbc-panel" onclick={(e) => e.stopPropagation()} onkeydown={() => {}} role="dialog" tabindex="-1">
     <!-- Header -->
     <div class="flex items-center justify-between py-2 px-4 bg-gbc-border">
       <span class="text-gbc-yellow text-sm font-retro tracking-wide">SETTINGS</span>
-      <button class="gbc-btn text-xs py-1 px-3" onclick={onClose}>X</button>
+      <button class="gbc-btn text-xs py-1 px-3" onclick={handleClose}>X</button>
     </div>
 
     <!-- Body -->
@@ -155,10 +159,11 @@
 
     <!-- Footer -->
     <div class="p-5 pt-0 flex justify-center">
-      <button class="gbc-btn text-sm py-2 px-8" onclick={onClose}>DONE</button>
+      <button class="gbc-btn text-sm py-2 px-8" onclick={handleClose}>DONE</button>
     </div>
   </div>
 </div>
+{/if}
 
 <style>
   @reference "../../app.css";

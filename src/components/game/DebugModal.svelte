@@ -1,19 +1,24 @@
 <script lang="ts">
-  interface Props {
-    narrative: string;
-    json: string;
-    onClose: () => void;
+  let visible = $state(false);
+  let narrative = $state('');
+  let json = $state('');
+  let tab = $state<'narrative' | 'json'>('narrative');
+
+  export function show(n: string, j: string) {
+    narrative = n;
+    json = j;
+    tab = 'narrative';
+    visible = true;
   }
 
-  let { narrative, json, onClose }: Props = $props();
-
-  let tab = $state<'narrative' | 'json'>('narrative');
+  function handleClose() { visible = false; }
 </script>
 
+{#if visible}
 <div
   class="overlay"
-  onclick={onClose}
-  onkeydown={(e) => e.key === 'Escape' && onClose()}
+  onclick={handleClose}
+  onkeydown={(e) => e.key === 'Escape' && handleClose()}
   role="button"
   tabindex="-1"
 >
@@ -37,11 +42,12 @@
           onclick={() => tab = 'json'}
         >JSON</button>
       </div>
-      <button class="gbc-btn text-[0.45rem] py-0.5 px-2" onclick={onClose}>CLOSE</button>
+      <button class="gbc-btn text-[0.45rem] py-0.5 px-2" onclick={handleClose}>CLOSE</button>
     </div>
     <pre class="debug-content">{tab === 'narrative' ? narrative : json}</pre>
   </div>
 </div>
+{/if}
 
 <style>
   @reference "../../app.css";
