@@ -5,6 +5,9 @@
   import DeckSelect from './components/game/DeckSelect.svelte';
   import Game from './components/game/Game.svelte';
 
+  const isChrome = /Chrome\//.test(navigator.userAgent) && !/Edg\//.test(navigator.userAgent);
+  let showBrowserWarning = $state(!isChrome);
+
   type Screen = 'deck-select' | 'game';
 
   let currentScreen = $state<Screen>('deck-select');
@@ -41,6 +44,13 @@
   }
 </script>
 
+{#if showBrowserWarning}
+  <div class="browser-warning">
+    <span>This app is designed for Google Chrome. You may experience issues in other browsers.</span>
+    <button onclick={() => showBrowserWarning = false}>DISMISS</button>
+  </div>
+{/if}
+
 {#if currentScreen === 'deck-select'}
   <DeckSelect onStartGame={handleStartGame} />
 {:else if currentScreen === 'game' && selectedGame}
@@ -57,3 +67,37 @@
     onBackToMenu={handleBackToMenu}
   />
 {/if}
+
+<style>
+  .browser-warning {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    padding: 0.625rem 1rem;
+    background: #b91c1c;
+    color: #fff;
+    font-family: var(--font-retro, monospace);
+    font-size: 0.75rem;
+    text-align: center;
+  }
+
+  .browser-warning button {
+    background: transparent;
+    border: 1px solid #fff;
+    color: #fff;
+    font-family: var(--font-retro, monospace);
+    font-size: 0.625rem;
+    padding: 0.25rem 0.75rem;
+    cursor: pointer;
+  }
+
+  .browser-warning button:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+</style>

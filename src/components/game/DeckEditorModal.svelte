@@ -196,7 +196,7 @@
         <input
           type="text"
           bind:value={deckName}
-          placeholder="My Deck"
+          placeholder="deck name here"
           class="gbc-input"
         />
       </div>
@@ -360,16 +360,23 @@
 
   .gbc-input {
     @apply w-full text-sm font-retro px-3 py-2.5 rounded-none outline-none;
-    background: var(--color-gbc-cream);
+    background: transparent;
     border: 2px solid var(--color-gbc-border);
-    color: var(--color-gbc-dark);
+    color: var(--color-gbc-light);
+    caret-color: var(--color-gbc-yellow);
   }
 
   .gbc-input:focus {
-    border-color: var(--color-gbc-green);
+    border-color: var(--color-gbc-yellow);
+    background: rgba(255, 255, 255, 0.05);
   }
 
   .gbc-input::placeholder {
-    color: var(--color-gbc-border);
+    color: var(--color-gbc-light);
+    opacity: 0.35;
+  }
+
+  .gbc-input:focus::placeholder {
+    opacity: 0;
   }
 </style>
