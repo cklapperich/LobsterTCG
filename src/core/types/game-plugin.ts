@@ -13,6 +13,7 @@ export interface MarkerState {
   sublabel: string;    // "You" / "Opp"
   used: boolean;
   clickable: boolean;
+  usedLabel?: string;  // overlay text when used (default: "USED")
 }
 
 /**
@@ -29,9 +30,6 @@ export interface GamePlugin<T extends CardTemplate = CardTemplate> {
 
   /** Get card info string for modals/tooltips */
   getCardName(template: T): string;
-
-  /** Get card back image URL (optional) */
-  getCardBack?(): string;
 
   /** Get counter definitions for this game (optional) */
   getCounterDefinitions?(): CounterDefinition[];

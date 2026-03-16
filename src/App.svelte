@@ -16,6 +16,7 @@
     decks?: DeckSelection[];
     testFlags: Record<string, boolean>;
     playmatImage: string;
+    cardBack: string;
     aiModel: string;
     aiMode: string;
     plannerModel?: string;
@@ -28,6 +29,7 @@
     decks?: DeckSelection[];
     testFlags: Record<string, boolean>;
     playmatImage: string;
+    cardBack: string;
     aiModel: string;
     aiMode: string;
     plannerModel?: string;
@@ -59,6 +61,7 @@
     decks={selectedGame.decks}
     testFlags={selectedGame.testFlags}
     playmatImage={selectedGame.playmatImage}
+    cardBack={selectedGame.cardBack}
     aiModel={selectedGame.aiModel}
     aiMode={selectedGame.aiMode}
     plannerModel={selectedGame.plannerModel}

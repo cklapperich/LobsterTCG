@@ -31,6 +31,7 @@
   import { loadDecksFromSupabase } from '../../lib/deckSync';
   import { settings } from '../../lib/settings.svelte';
   import { P2PChannel } from '../../lib/p2p.svelte';
+  import { customImages, addCardback, addPlaymat, removeCardback, removePlaymat, getSelectedCardbackUrl, getSelectedPlaymatUrl } from '../../lib/customImages.svelte';
 
   interface DeckOption {
     id: string;
@@ -53,6 +54,7 @@
       decks?: DeckSelection[];
       testFlags: Record<string, boolean>;
       playmatImage: string;
+      cardBack: string;
       aiModel: string;
       aiMode: string;
       plannerModel?: string;
@@ -71,6 +73,7 @@
     player1Deck?: string;
     player2Deck?: string;
     playmatImage?: string;
+    cardbackImage?: string;
     aiModel?: string;
     aiMode?: string;
     plannerModel?: string;
@@ -96,10 +99,20 @@
   let player2Deck = $state<string>(saved.player2Deck ?? '7-18 relentless-flame');
   let testFlags = $state<Record<string, boolean>>({});
   let playmatImage = $state<string>(saved.playmatImage ?? '');
+  let cardbackImage = $state<string>(saved.cardbackImage ?? 'greatwave_back');
   let aiModel = $state<string>(saved.aiModel ?? 'moonshotai/kimi-k2.5');
   let aiMode = $state<string>(saved.aiMode ?? 'pipeline');
   let plannerModel = $state<string>(saved.plannerModel ?? DEFAULT_PLANNER.modelId);
   let showSettings = $state(false);
+
+  // File input refs for uploads
+  let cardbackFileInput: HTMLInputElement | undefined = $state();
+  let playmatFileInput: HTMLInputElement | undefined = $state();
+
+  // Sync cardback selection to customImages store
+  $effect(() => {
+    customImages.selectedCardback = cardbackImage.startsWith('custom-') ? cardbackImage.replace('custom-', '') : '';
+  });
 
   // Deck editor modal state
   let showDeckEditor = $state(false);
@@ -122,13 +135,33 @@
     label: g.name,
   }));
 
-  // Discover playmat images from src/assets/playmat-images/
-  const playmatModules = import.meta.glob('/src/assets/playmat-images/*.png', { eager: true, import: 'default' }) as Record<string, string>;
-  const playmatOptions: PlaymatOption[] = Object.entries(playmatModules).map(([path, url]) => {
-    const filename = path.split('/').pop()?.replace('.png', '') ?? 'Unknown';
+  // Discover bundled playmat images from src/assets/playmat-images/
+  const playmatModules = import.meta.glob('/src/assets/playmat-images/*.{png,webp,jpg}', { eager: true, import: 'default' }) as Record<string, string>;
+  const bundledPlaymats: PlaymatOption[] = Object.entries(playmatModules).map(([path, url]) => {
+    const filename = path.split('/').pop()?.replace(/\.[^.]+$/, '') ?? 'Unknown';
     const name = filename.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
     return { id: filename, name, url };
   });
+
+  // Discover bundled cardback images from src/assets/cardback-images/
+  const cardbackModules = import.meta.glob('/src/assets/cardback-images/*.{png,webp,jpg}', { eager: true, import: 'default' }) as Record<string, string>;
+  const bundledCardbacks: PlaymatOption[] = Object.entries(cardbackModules).map(([path, url]) => {
+    const filename = path.split('/').pop()?.replace(/\.[^.]+$/, '') ?? 'Unknown';
+    const name = filename.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    return { id: filename, name, url };
+  });
+
+  // Combined playmat options: bundled + user uploads
+  const playmatOptions = $derived([
+    ...bundledPlaymats,
+    ...customImages.playmats.map(p => ({ id: `custom-${p.id}`, name: p.name, url: p.dataUrl })),
+  ]);
+
+  // Combined cardback options: bundled + user uploads
+  const cardbackOptions = $derived([
+    ...bundledCardbacks,
+    ...customImages.cardbacks.map(c => ({ id: `custom-${c.id}`, name: c.name, url: c.dataUrl })),
+  ]);
 
   let fileDecks = $state<DeckOption[]>([]);
   let supabaseDecks = $state<DeckOption[]>([]);
@@ -170,7 +203,8 @@
         const strategy = stratIsText ? await stratRes.text() : '';
         const displayName = deckName.charAt(0).toUpperCase() + deckName.slice(1);
 
-        const { deckList, warnings } = parsePTCGODeck(content, displayName);
+        const parser = gameConfig?.parseDeckText ?? parsePTCGODeck;
+        const { deckList, warnings } = parser(content, displayName);
         const cardCount = deckList.cards.reduce((sum, c) => sum + c.count, 0);
 
         if (warnings.length > 0) {
@@ -233,7 +267,7 @@
   $effect(() => {
     savePrefs({
       vsMode, gameType, player1Deck, player2Deck,
-      playmatImage, aiModel, aiMode, plannerModel,
+      playmatImage, cardbackImage, aiModel, aiMode, plannerModel,
     });
   });
 
@@ -270,10 +304,12 @@
       channel.sendMessage({ type: 'deck', deck: deck1.deckList });
       playSfx('confirm');
       const selectedPlaymat = playmatOptions.find(p => p.id === playmatImage);
+      const selectedCardback = cardbackOptions.find(c => c.id === cardbackImage);
       onStartGame({
         gameType,
         testFlags: {},
         playmatImage: selectedPlaymat?.url ?? '',
+        cardBack: selectedCardback?.url ?? '',
         aiModel: '',
         aiMode: 'autonomous',
         playerConfig: { player0: 'remote', player1: 'local' },
@@ -319,10 +355,12 @@
         unsub();
         playSfx('confirm');
         const selectedPlaymat = playmatOptions.find(p => p.id === playmatImage);
+        const selectedCardback = cardbackOptions.find(c => c.id === cardbackImage);
         onStartGame({
           gameType,
           testFlags: {},
           playmatImage: selectedPlaymat?.url ?? '',
+          cardBack: selectedCardback?.url ?? '',
           aiModel: '',
           aiMode: 'autonomous',
           playerConfig: { player0: 'local', player1: 'remote' },
@@ -386,6 +424,7 @@
 
       playSfx('confirm');
       const selectedPlaymat = playmatOptions.find(p => p.id === playmatImage);
+      const selectedCardback = cardbackOptions.find(c => c.id === cardbackImage);
       onStartGame({
         gameType,
         decks: [
@@ -394,6 +433,7 @@
         ],
         testFlags,
         playmatImage: selectedPlaymat?.url ?? '',
+        cardBack: selectedCardback?.url ?? '',
         aiModel,
         aiMode,
         plannerModel: aiMode === 'pipeline' ? plannerModel : undefined,
@@ -402,10 +442,12 @@
     } else {
       playSfx('confirm');
       const selectedPlaymat = playmatOptions.find(p => p.id === playmatImage);
+      const selectedCardback = cardbackOptions.find(c => c.id === cardbackImage);
       onStartGame({
         gameType,
         testFlags: {},
         playmatImage: selectedPlaymat?.url ?? '',
+        cardBack: selectedCardback?.url ?? '',
         aiModel,
         aiMode,
         plannerModel: aiMode === 'pipeline' ? plannerModel : undefined,
@@ -455,6 +497,40 @@
   function handleDeckDeleted() {
     showDeckEditor = false;
     loadSupabaseDecks();
+  }
+
+  async function handleCardbackUpload(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    const img = await addCardback(file);
+    cardbackImage = `custom-${img.id}`;
+    input.value = '';
+    playSfx('confirm');
+  }
+
+  async function handlePlaymatUpload(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    const img = await addPlaymat(file);
+    playmatImage = `custom-${img.id}`;
+    input.value = '';
+    playSfx('confirm');
+  }
+
+  function handleRemoveCardback(id: string) {
+    const realId = id.replace('custom-', '');
+    removeCardback(realId);
+    if (cardbackImage === id) cardbackImage = '';
+    playSfx('cancel');
+  }
+
+  function handleRemovePlaymat(id: string) {
+    const realId = id.replace('custom-', '');
+    removePlaymat(realId);
+    if (playmatImage === id) playmatImage = '';
+    playSfx('cancel');
   }
 </script>
 
@@ -594,16 +670,74 @@
         </div>
       {/if}
 
+      <!-- Cardback Selection -->
+      {#if gameConfig?.needsDeckSelection}
+        <div class="cardback-select mb-6">
+          <div class="player-label text-gbc-green text-sm mb-3 flex items-center gap-2">
+            <span class="player-badge bg-gbc-blue text-gbc-cream px-2 py-1">BACK</span>
+            CARD BACK
+          </div>
+          <div class="flex gap-2 items-start">
+            <div class="flex-1">
+              <GbcDropdown
+                options={[{ value: '', label: 'Default' }, ...cardbackOptions.map(c => ({ value: c.id, label: c.name }))]}
+                bind:value={cardbackImage}
+              />
+            </div>
+            <button
+              class="gbc-btn text-xs py-2 px-3"
+              onclick={() => cardbackFileInput?.click()}
+            >UPLOAD</button>
+            {#if cardbackImage.startsWith('custom-')}
+              <button
+                class="gbc-btn text-xs py-2 px-3"
+                onclick={() => handleRemoveCardback(cardbackImage)}
+                title="Remove this cardback"
+              >DEL</button>
+            {/if}
+          </div>
+          <input
+            bind:this={cardbackFileInput}
+            type="file"
+            accept="image/*"
+            class="hidden"
+            onchange={handleCardbackUpload}
+          />
+        </div>
+      {/if}
+
       <!-- Playmat Selection -->
-      {#if playmatOptions.length > 0 && gameConfig?.needsDeckSelection}
+      {#if gameConfig?.needsDeckSelection}
         <div class="playmat-select mb-6">
           <div class="player-label text-gbc-green text-sm mb-3 flex items-center gap-2">
             <span class="player-badge bg-gbc-green text-gbc-cream px-2 py-1">MAT</span>
             PLAYMAT
           </div>
-          <GbcDropdown
-            options={[{ value: '', label: 'None' }, ...playmatOptions.map(m => ({ value: m.id, label: m.name }))]}
-            bind:value={playmatImage}
+          <div class="flex gap-2 items-start">
+            <div class="flex-1">
+              <GbcDropdown
+                options={[{ value: '', label: 'None' }, ...playmatOptions.map(m => ({ value: m.id, label: m.name }))]}
+                bind:value={playmatImage}
+              />
+            </div>
+            <button
+              class="gbc-btn text-xs py-2 px-3"
+              onclick={() => playmatFileInput?.click()}
+            >UPLOAD</button>
+            {#if playmatImage.startsWith('custom-')}
+              <button
+                class="gbc-btn text-xs py-2 px-3"
+                onclick={() => handleRemovePlaymat(playmatImage)}
+                title="Remove this playmat"
+              >DEL</button>
+            {/if}
+          </div>
+          <input
+            bind:this={playmatFileInput}
+            type="file"
+            accept="image/*"
+            class="hidden"
+            onchange={handlePlaymatUpload}
           />
         </div>
       {/if}

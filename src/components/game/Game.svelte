@@ -88,6 +88,7 @@
     decks?: DeckSelection[];
     testFlags?: Record<string, boolean>;
     playmatImage?: string;
+    cardBack?: string;
     aiModel?: string;
     aiMode?: 'autonomous' | 'pipeline';
     plannerModel?: string;
@@ -96,7 +97,7 @@
     onBackToMenu?: () => void;
   }
 
-  let { gameType, decks, testFlags = {}, playmatImage, aiModel, aiMode = 'autonomous', plannerModel, playerConfig = DEFAULT_CONFIG, p2pChannel, onBackToMenu }: Props = $props();
+  let { gameType, decks, testFlags = {}, playmatImage, cardBack = '', aiModel, aiMode = 'autonomous', plannerModel, playerConfig = DEFAULT_CONFIG, p2pChannel, onBackToMenu }: Props = $props();
 
   // Convenience accessors for player decks
   const player1Deck = $derived(decks?.[0]?.deckList);
@@ -343,8 +344,7 @@
   // PlaymatGrid ref for shuffle
   let playmatGridRef: PlaymatGrid | undefined = $state();
 
-  // Card back from plugin
-  const cardBack = plugin.getCardBack?.() ?? '';
+  // Card back is passed as a prop from DeckSelect
 
   // renderFace from game config (for playing cards without images)
   const renderFace = gameConfig.renderFace;

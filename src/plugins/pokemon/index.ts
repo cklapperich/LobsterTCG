@@ -38,7 +38,6 @@ import type { ActionExecutor } from '../../core/action-executor';
 import { ZONE_IDS } from './zones';
 import type { PokemonCardTemplate } from './cards';
 import {
-  getCardBack,
   getTemplate as getCardTemplate,
 } from './cards';
 import { isBasicPokemon, isFieldZone, isLegendPokemon, isVUnionPokemon } from './helpers';
@@ -497,7 +496,6 @@ export const plugin: GamePlugin<PokemonCardTemplate> = {
   getPlaymat: getPokemonPlaymat,
   startGame: startPokemonGame,
   getCardName,
-  getCardBack,
   getCounterDefinitions,
   getCoinFront,
   getCoinBack,
@@ -540,7 +538,6 @@ export type { PokemonCardTemplate } from './cards';
 export {
   POKEMON_TEMPLATE_MAP,
   getTemplate,
-  getCardBack,
   parsePTCGODeck,
   getWesternCard,
   getAllWesternCards,

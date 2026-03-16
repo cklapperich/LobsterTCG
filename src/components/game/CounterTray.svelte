@@ -8,6 +8,7 @@
     endCounterDrag,
     counterDragStore,
   } from './counterDragState.svelte';
+  import { playSfx } from '../../lib/audio.svelte';
 
   interface Props {
     counters: CounterDefinition[];
@@ -118,13 +119,13 @@
           class:marker-used={marker.used}
           class:marker-clickable={marker.clickable && !marker.used}
           disabled={!marker.clickable || marker.used}
-          onclick={() => onMarkerClick?.(marker.id)}
+          onclick={() => { playSfx('confirm'); onMarkerClick?.(marker.id); }}
           title="{marker.sublabel} {marker.label}: {marker.used ? 'Used' : 'Available'}"
         >
           <span class="marker-label">{marker.label}</span>
           <span class="marker-sublabel">{marker.sublabel}</span>
           {#if marker.used}
-            <span class="marker-used-overlay">USED</span>
+            <span class="marker-used-overlay">{marker.usedLabel ?? 'USED'}</span>
           {/if}
         </button>
       {/each}

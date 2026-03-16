@@ -1,7 +1,7 @@
 import type { CardTemplate } from '../../core/types/card';
 import type { DeckList } from '../../core/types/deck';
 import cardsData from './cards-western.json';
-import cardbackImg from './cardback.png';
+
 import type { WesternCard, Supertype, Subtype, EnergyType, AbilityType } from './pokemon-shared/types';
 import { parsePTCGO } from './pokemon-shared/ptcgoParser';
 
@@ -76,7 +76,7 @@ function toHighRes(url: string): string {
  */
 function getWesternCardImageUrl(card: WesternCard): string {
   if (!card.images || card.images.length === 0) {
-    return cardbackImg;
+    return '';
   }
   const url = card.images[0].url;
   if (url.includes('tcgdex.net')) {
@@ -160,7 +160,7 @@ function createTemplate(setId: string, number: number, name: string): PokemonCar
   ensureWesternCardsLoaded();
   const cardId = `${setId}-${number}`;
   const westernCard = westernCardMap!.get(cardId);
-  const imageUrl = westernCard ? getWesternCardImageUrl(westernCard) : cardbackImg;
+  const imageUrl = westernCard ? getWesternCardImageUrl(westernCard) : '';
   const subtypes = westernCard?.subtypes || [];
   const displayRotation = getDisplayRotation(name, subtypes);
 
@@ -212,13 +212,6 @@ export function getTemplate(id: string): PokemonCardTemplate | undefined {
     types: card.types || [],
     ...extractGameFields(card),
   };
-}
-
-/**
- * Get the card back image URL.
- */
-export function getCardBack(): string {
-  return cardbackImg;
 }
 
 /**
