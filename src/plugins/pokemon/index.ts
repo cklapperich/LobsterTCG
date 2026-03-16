@@ -394,7 +394,7 @@ function onActionPanelClick(state: GameState<PokemonCardTemplate>, player: Playe
     const cardName = stadiumCard?.template?.name ?? 'Stadium Card';
     const cardText = (stadiumCard?.template as PokemonCardTemplate)?.rules?.join(' ') ?? '';
     const message = cardText ? `Activated stadium: ${cardName}. ${cardText}` : `Activated stadium: ${cardName}.`;
-    return declareAction(player, POKEMON_DECLARATION_TYPES.STADIUM, buttonId, undefined, message);
+    return declareAction(player, POKEMON_DECLARATION_TYPES.STADIUM, cardName, undefined, message);
   }
   return undefined;
 }

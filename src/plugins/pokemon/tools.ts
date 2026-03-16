@@ -217,7 +217,7 @@ export function createPokemonCustomTools(ctx: ToolContext): ToolSet {
     attach_energy: createAttachEnergyTool(ctx),
 
     discard_pokemon_cards: aiTool({
-      description: 'Discard all cards in a zone. Moves every card from the specified zone to your discard pile. ALWAYS Use this when your pokemon get knocked out.',
+      description: 'Discard all cards in a zone. Moves every card to that zone owner\'s discard pile. Use this when any pokemon gets knocked out.',
       inputSchema: z.object({
         zone: z.string().describe('Zone key to discard all cards from (e.g. "your_active", "your_bench_1")'),
       }),
@@ -228,7 +228,9 @@ export function createPokemonCustomTools(ctx: ToolContext): ToolSet {
           if (!zone) throw new Error(`Zone "${input.zone}" not found`);
           if (zone.cards.length === 0) throw new Error(`Zone "${input.zone}" is empty`);
           const cardIds = zone.cards.map(c => c.instanceId);
-          const discardKey = `player${p + 1}_${ZONE_IDS.DISCARD}`;
+          // Derive discard pile from the zone's owner, not the AI player
+          const ownerPrefix = zoneKey.split('_')[0]; // "player1" or "player2"
+          const discardKey = `${ownerPrefix}_${ZONE_IDS.DISCARD}`;
           return moveCardStack(p, cardIds, zoneKey, discardKey);
         });
       },

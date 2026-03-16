@@ -388,7 +388,11 @@
   }
 
   const hasApiKey = $derived(!!settings.openRouterApiKey);
-  const aiModelLabel = $derived(MODEL_OPTIONS.find(m => m.modelId === aiModel)?.label ?? aiModel);
+  const aiModelLabel = $derived(
+    aiMode === 'pipeline'
+      ? MODEL_OPTIONS.find(m => m.modelId === plannerModel)?.label ?? plannerModel
+      : MODEL_OPTIONS.find(m => m.modelId === aiModel)?.label ?? aiModel
+  );
   const aiModeLabel = $derived(aiMode === 'pipeline' ? 'Pipeline' : 'Autonomous');
 
   const canStart = $derived(

@@ -412,9 +412,6 @@
     // Splash announcements for notable actions
     if (action.type === ACTION_TYPES.DECLARE_ACTION) {
       showSplash(action.name.toUpperCase());
-    } else if (action.type === ACTION_TYPES.MOVE_CARD && action.toZone === 'stadium') {
-      const stadiumCard = gameState.zones['stadium']?.cards.find(c => c.instanceId === action.cardInstanceId);
-      if (stadiumCard) showSplash(stadiumCard.template.name.toUpperCase());
     }
 
     // Auto-feedback (SFX + log) for local actions
@@ -664,7 +661,8 @@
     const fromZone = cardModal.zoneKey;
     const shouldShuffle = cardModal.shuffleOnConfirm;
     const playerIndex = playerFromZoneKey(fromZone);
-    const destZone = settings.searchToHand
+    const isOwnDeck = isLocalZone(playerConfig, fromZone) && fromZone.endsWith('_deck');
+    const destZone = settings.searchToHand && isOwnDeck
       ? `player${playerIndex + 1}_hand`
       : 'staging';
 
