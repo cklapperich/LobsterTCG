@@ -27,7 +27,7 @@ import type { GamePlugin, MarkerState } from '../../core/types/game-plugin';
 import type { CounterDefinition } from '../../core/types/counter';
 import type { ActionPanel } from '../../core/types/action-panel';
 import type { Action } from '../../core/types/action';
-import { createGameState, createCardInstance, generateInstanceId, loadDeck, executeAction, zoneVisibility } from '../../core/engine';
+import { createGameState, loadDeck, executeAction } from '../../core/engine';
 import { loadPlaymat } from '../../core/playmat-loader';
 import { shuffle as shuffleAction, moveCard, draw as drawAction, concede as concedeAction, declareAction, coinFlip as coinFlipAction, setOrientation } from '../../core/action';
 import { gameLog, systemLog } from '../../core/game-log';
@@ -68,8 +68,6 @@ import damage100Img from './counters/damage-100.png';
 import coinFrontImg from './coinfront.png';
 import coinBackImg from './coinback.png';
 
-export type PokemonGameState = GameState<PokemonCardTemplate>;
-
 // Pokemon TCG Counter Definitions
 const POKEMON_COUNTERS: CounterDefinition[] = [
   // Status conditions
@@ -107,13 +105,6 @@ export async function getPokemonPlaymat(): Promise<Playmat> {
 }
 
 /**
- * Clear playmat cache (useful for testing).
- */
-export function clearPlaymatCache(): void {
-  cachedPlaymat = null;
-}
-
-/**
  * Derive GameConfig from playmat.
  */
 function getGameConfig(playmat: Playmat): GameConfig {
@@ -131,7 +122,7 @@ function getGameConfig(playmat: Playmat): GameConfig {
 export async function startPokemonGame(
   player1Id: string = 'player1',
   player2Id: string = 'player2'
-): Promise<PokemonGameState> {
+): Promise<GameState<PokemonCardTemplate>> {
   const playmat = await getPokemonPlaymat();
   return startPokemonGameWithPlaymat(playmat, player1Id, player2Id);
 }
@@ -144,7 +135,7 @@ export function startPokemonGameWithPlaymat(
   playmat: Playmat,
   player1Id: string = 'player1',
   player2Id: string = 'player2'
-): PokemonGameState {
+): GameState<PokemonCardTemplate> {
   const config = getGameConfig(playmat);
   const state = createGameState<PokemonCardTemplate>(config, player1Id, player2Id);
   initPluginState(state);
@@ -155,7 +146,7 @@ export function startPokemonGameWithPlaymat(
  * Load a deck for a player into their deck zone.
  */
 export function loadPlayerDeck(
-  state: PokemonGameState,
+  state: GameState<PokemonCardTemplate>,
   playerIndex: PlayerIndex,
   deckList: DeckList,
   getTemplate: (id: string) => CardTemplate | undefined,
@@ -225,24 +216,6 @@ export function autoMulligan(state: GameState<CardTemplate>, playerIndex: Player
   return count;
 }
 
-
-/**
- * Conjure a card into a player's hand (debug/test helper).
- * Creates a fresh card instance with correct hand visibility and pushes it in.
- * @param templateId - Card template ID (e.g. "base1-75" for Lass)
- */
-export function ensureCardInHand(state: GameState<CardTemplate>, playerIndex: PlayerIndex, templateId: string): void {
-  const handKey = `player${playerIndex + 1}_${ZONE_IDS.HAND}`;
-  const hand = state.zones[handKey];
-  const template = getCardTemplate(templateId);
-  if (!template) {
-    console.warn(`ensureCardInHand: template "${templateId}" not found`);
-    return;
-  }
-  const visibility = zoneVisibility(handKey, hand.config);
-  const card = createCardInstance(template, generateInstanceId(), visibility);
-  hand.cards.push(card);
-}
 
 /**
  * Flip all field Pokemon face-up (PUBLIC visibility).
@@ -576,25 +549,3 @@ export {
 export { formatCardReference } from './narrative';
 export { buildPrompt } from './prompt-builder';
 
-// Deckbuilder API
-export {
-  getAllCards as getDeckbuilderCards,
-  queryCards,
-  getFilterDescriptors,
-  getSortOptions,
-  getSearchableFields,
-  getDisplayHints,
-  validateDeck,
-  exportToPTCGO,
-  type DeckbuilderCard,
-  type FilterDescriptor,
-  type FilterValue,
-  type ActiveFilters,
-  type SortOption,
-  type DeckValidationResult,
-  type DeckValidationError,
-  type CardQuery,
-  type CardQueryResult,
-  type DeckbuilderDisplayHints,
-  type DeckEntry,
-} from './deckbuilder';
