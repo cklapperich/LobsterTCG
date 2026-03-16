@@ -63,19 +63,42 @@
 
   let { onStartGame }: Props = $props();
 
-  type VsMode = 'ai' | 'friend';
-  let vsMode = $state<VsMode>('ai');
+  // --- localStorage persistence ---
+  const STORAGE_KEY = 'lobster-deck-select';
+  interface SavedPrefs {
+    vsMode?: string;
+    gameType?: string;
+    player1Deck?: string;
+    player2Deck?: string;
+    playmatImage?: string;
+    aiModel?: string;
+    aiMode?: string;
+    plannerModel?: string;
+  }
+  function loadPrefs(): SavedPrefs {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch { return {}; }
+  }
+  function savePrefs(p: SavedPrefs) {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(p)); } catch {}
+  }
+  const saved = loadPrefs();
 
-  let gameType = $state<string>(DEFAULT_GAME_TYPE);
+  type VsMode = 'ai' | 'friend';
+  let vsMode = $state<VsMode>((saved.vsMode as VsMode) ?? 'ai');
+
+  let gameType = $state<string>(saved.gameType ?? DEFAULT_GAME_TYPE);
   let loading = $state(true);
   let deckOptions = $state<DeckOption[]>([]);
-  let player1Deck = $state<string>('7-19 torrential-cannon');
-  let player2Deck = $state<string>('7-18 relentless-flame');
+  let player1Deck = $state<string>(saved.player1Deck ?? '7-19 torrential-cannon');
+  let player2Deck = $state<string>(saved.player2Deck ?? '7-18 relentless-flame');
   let testFlags = $state<Record<string, boolean>>({});
-  let playmatImage = $state<string>('');
-  let aiModel = $state<string>('moonshotai/kimi-k2.5');
-  let aiMode = $state<string>('pipeline');
-  let plannerModel = $state<string>(DEFAULT_PLANNER.modelId);
+  let playmatImage = $state<string>(saved.playmatImage ?? '');
+  let aiModel = $state<string>(saved.aiModel ?? 'moonshotai/kimi-k2.5');
+  let aiMode = $state<string>(saved.aiMode ?? 'pipeline');
+  let plannerModel = $state<string>(saved.plannerModel ?? DEFAULT_PLANNER.modelId);
   let showSettings = $state(false);
 
   // Deck editor modal state
@@ -204,6 +227,14 @@
     if (!player2Deck || !merged.find(d => d.id === player2Deck)) {
       player2Deck = merged[0]?.id ?? '';
     }
+  });
+
+  // Persist preferences to localStorage
+  $effect(() => {
+    savePrefs({
+      vsMode, gameType, player1Deck, player2Deck,
+      playmatImage, aiModel, aiMode, plannerModel,
+    });
   });
 
   // Re-load file decks when game type changes
