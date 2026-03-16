@@ -190,9 +190,9 @@
       return;
     }
 
-    if (isLocal(playerConfig, gs.activePlayer)) return; // human's turn, UI handles it
-
     // Setup→playing transition: coin flip (fires exactly once)
+    // Must run before the isLocal early return — the coin flip determines
+    // who actually goes first, regardless of which player the engine defaults to.
     if (gs.phase === PHASES.PLAYING && gs.turnNumber === 1 && !setupTransitionComplete) {
       setupTransitionComplete = true;
       turnFlow = { tag: 'transition' };
@@ -202,6 +202,8 @@
       advance();
       return;
     }
+
+    if (isLocal(playerConfig, gs.activePlayer)) return; // human's turn, UI handles it
 
     // Non-local controller's turn (AI or remote no-op)
     const playerBefore = gs.activePlayer;
