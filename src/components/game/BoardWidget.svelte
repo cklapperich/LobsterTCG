@@ -67,8 +67,8 @@
     @apply relative flex items-center justify-center;
     @apply rounded-full overflow-hidden;
     @apply transition-all;
-    width: 1.6rem;
-    height: 1.6rem;
+    width: 4rem;
+    height: 4rem;
   }
 
   .widget-item.draggable {

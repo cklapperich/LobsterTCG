@@ -376,7 +376,7 @@
   }
 
   .grid-slot.has-widgets {
-    @apply flex-col items-center;
+    @apply flex-col items-center justify-start;
   }
 
   .grid-slot.stack-up {

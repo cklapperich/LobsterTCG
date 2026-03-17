@@ -484,7 +484,7 @@ function getBoardWidgets(state: GameState<PocketCardTemplate>, playerIndex: Play
     // p1_deck slot = bottom (local player's deck after perspective flip)
     // p2_deck slot = top (opponent's deck after perspective flip)
     const slotId = isLocal ? 'p1_deck' : 'p2_deck';
-    const position = isLocal ? 'above' : 'below';
+    const position = 'above';
 
     const items: BoardWidget['items'] = [];
 
