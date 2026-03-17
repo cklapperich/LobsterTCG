@@ -1045,6 +1045,17 @@ export function executeAction<T extends CardTemplate>(
     }
   }
 
+  // Block end_turn if any cards remain in staging
+  if (action.type === ACTION_TYPES.END_TURN) {
+    const staging = state.zones['staging'];
+    if (staging && staging.cards.length > 0) {
+      const names = staging.cards.map(c => c.template.name).join(', ');
+      const msg = `Cannot end turn with cards in staging (${names}). Move them to the appropriate zone first.`;
+      gameLog(state, msg);
+      return msg;
+    }
+  }
+
   state.lastActionAt = Date.now();
   state.currentTurn.actions.push(action);
 

@@ -253,7 +253,8 @@
 
   // Merge supabase decks (top) + file decks (bottom)
   $effect(() => {
-    const merged = [...supabaseDecks, ...fileDecks];
+    const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
+    const merged = [...[...supabaseDecks].sort(byName), ...[...fileDecks].sort(byName)];
     deckOptions = merged;
     if (!player1Deck || !merged.find(d => d.id === player1Deck)) {
       player1Deck = merged[0]?.id ?? '';

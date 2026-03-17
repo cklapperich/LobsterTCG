@@ -58,15 +58,6 @@ export function createToolContext(
           : actionOrFactory;
         action.source = ACTION_SOURCES.AI;
 
-        // Block AI from ending turn with cards in staging
-        if (action.type === ACTION_TYPES.END_TURN) {
-          const staging = currentState.zones['staging'];
-          if (staging && staging.cards.length > 0) {
-            const names = staging.cards.map(c => c.template.name).join(', ');
-            return `Action blocked: Cannot end turn with cards in staging (${names}). Move them to the appropriate zone first.`;
-          }
-        }
-
         // Special case: coin_flip uses visual CoinFlip animation
         if (action.type === ACTION_TYPES.COIN_FLIP) {
           const results: boolean[] = [];

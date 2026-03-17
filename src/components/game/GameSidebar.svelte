@@ -8,6 +8,7 @@
   import { toggleMute, audioSettings } from '../../lib/audio.svelte';
   import { playSfx } from '../../lib/audio.svelte';
   import CounterTray from './CounterTray.svelte';
+  import LogModal from './LogModal.svelte';
 
   interface Props {
     gameState: GameState<CardTemplate>;
@@ -43,6 +44,7 @@
 
   let logInput = $state('');
   let logEntriesEl = $state<HTMLDivElement | null>(null);
+  let logModal = $state<LogModal | undefined>();
 
   $effect(() => {
     logEntries.length;
@@ -172,7 +174,7 @@
   {/if}
 
   <div class="gbc-panel log-panel">
-    <div class="log-header-btn">LOG</div>
+    <button class="log-header-btn" onclick={() => logModal?.show()}>LOG</button>
     <div class="log-entries" bind:this={logEntriesEl}>
       {#each logEntries as entry}
         <div class="log-entry-inline" class:text-gbc-yellow={entry.startsWith('Warning:')} class:text-gbc-light={!entry.startsWith('Warning:')}>{entry}</div>
@@ -193,6 +195,8 @@
     </form>
   </div>
 </div>
+
+<LogModal bind:this={logModal} {logEntries} {onLogSubmit} />
 
 <style>
   @reference "../../app.css";
@@ -248,7 +252,8 @@
   }
 
   .log-header-btn {
-    @apply w-full text-gbc-yellow text-[0.9rem] text-center mb-2 py-1 px-2 bg-gbc-border font-retro;
+    @apply w-full text-gbc-yellow text-[0.9rem] text-center mb-2 py-1 px-2 bg-gbc-border font-retro cursor-pointer border-none;
+    @apply hover:text-gbc-light transition-colors;
   }
 
   .log-entries {
