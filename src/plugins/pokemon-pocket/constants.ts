@@ -101,6 +101,7 @@ export const POCKET_DECLARATION_TYPES = {
   ABILITY: 'ability',
   RETREAT: 'retreat',
   STADIUM: 'stadium',
+  AWARD_POINTS: 'award_points',
 } as const;
 
 // Narrative display limits

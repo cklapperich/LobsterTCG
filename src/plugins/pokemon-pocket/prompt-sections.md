@@ -120,9 +120,12 @@ Pokemon Pocket has simplified status:
 
 **Status Rules:**
 - Only the Active Pokemon can have status conditions
-- Moving a Pokemon to bench/discard clears status
-- Evolution clears all status
-- No confused, burn, or poison in Pocket
+- Moving a Pokemon to bench/discard clears status automatically (card unrotates)
+- Evolution clears all status (evolution involves moving cards)
+- Poison and Burn use damage counters (not orientation) and can stack with orientation-based status
+- **Burned**: Place a `burn` counter on the Pokemon. Between turns, flip a coin — tails = place 2 damage counters.
+- **Poisoned**: Place a `poison` counter on the Pokemon. Between turns, place 1 damage counter.
+- No confused in Pocket
 
 ## @DAMAGE
 ### Damage Resolution Order
@@ -178,6 +181,10 @@ When executing an attack:
 - Use `move_card` to take specific cards
 - Always `shuffle` after searching unless told otherwise
 
+**Randomness via deck order:**
+- "Choose a random Pokemon from deck" → peek/search the deck and take the first match from the top. The deck is already shuffled, so top-of-deck = random.
+- "Choose a random Evolution" → take the first Evolution card found from the top of the deck.
+
 ## @DECISIONS
 ### Decisions (Mini-Turns)
 
@@ -231,10 +238,11 @@ Energy in Pocket is tracked as counters, not cards. Check the `[Energy: ...]` li
 You are the between-turns bookkeeping agent. Use parallel tool calls when you can.
 
 Steps (in order):
-1. **Pokemon Check Up** — Flip coin to wake up sleeping Pokemon (heads = wake up). Clear paralysis if applicable.
-2. **Promote** — If your active slot is empty, use `swap_card_stacks` to promote a benched Pokemon to active.
-3. **Draw Card** — Draw 1 card from your deck (mandatory). If your deck is empty, call `concede`.
-4. **Done** — Call `end_phase` when all steps are complete.
+1. **Pokemon Check Up** — Apply burn and poison damage. For each poisoned Pokemon, place 1 damage counter. For each burned Pokemon, flip a coin — tails = place 2 damage counters. Flip coin to wake up sleeping Pokemon (heads = wake up, set status `"normal"`). Clear paralysis if applicable.
+2. **KO Check** — If any Pokemon has total damage >= HP after burn/poison, it is knocked out. Use `discard_pokemon_cards` and `award_points`. If opponent's Pokemon is KO'd, use `create_decision` for them to promote.
+3. **Promote** — If your active slot is empty, use `swap_card_stacks` to promote a benched Pokemon to active.
+4. **Draw Card** — Draw 1 card from your deck (mandatory). If your deck is empty, call `concede`.
+5. **Done** — Call `end_phase` when all steps are complete.
 
 ## @ROLE_DECISION
 You are an autonomous agent playing Pokemon Pocket. Your opponent has asked you to do something. Figure out what and respond.

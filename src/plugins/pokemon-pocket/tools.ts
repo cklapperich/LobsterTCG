@@ -7,7 +7,7 @@ import { tool as aiTool } from 'ai';
 import { z } from 'zod';
 import { INSTANCE_ID_PREFIX, ACTION_TYPES } from '../../core/types/constants';
 import { resolveCardName } from '../../core/readable';
-import { declareAction, setOrientation, moveCardStack } from '../../core/action';
+import { declareAction, setOrientation, moveCardStack, addCounter } from '../../core/action';
 import { type ToolContext } from '../../core/ai-tools';
 import { ZONE_IDS } from './zones';
 import {
@@ -19,7 +19,7 @@ import {
 } from './constants';
 import type { EnergyType } from './types';
 import { getPluginState, advanceEnergyZone } from './plugin-state';
-import { gameLog } from '../../core/game-log';
+
 
 function tzp(ctx: ToolContext, key: string): string {
   return ctx.translateZoneKey ? ctx.translateZoneKey(key) : key;
@@ -110,18 +110,18 @@ export function createAttachEnergyTool(ctx: ToolContext): ToolSet[string] {
       const counterType = ENERGY_COUNTER_TYPES[energyType as EnergyType];
       const toZone = tzp(ctx, input.toZone);
 
-      // Consume current and advance queue
+      const result = await ctx.execute((state) => {
+        const zoneObj = state.zones[toZone];
+        if (!zoneObj) throw new Error(`Zone "${input.toZone}" not found`);
+        if (zoneObj.cards.length === 0) throw new Error(`Zone "${input.toZone}" is empty`);
+        const topCard = zoneObj.cards[zoneObj.cards.length - 1];
+        return addCounter(p, topCard.instanceId, counterType, 1);
+      });
+
+      // Only consume energy after successful attachment
       advanceEnergyZone(ps, p);
 
-      gameLog(state, `Player ${p + 1} attached ${energyType} energy from the energy zone.`);
-
-      return ctx.execute({
-        type: ACTION_TYPES.ADD_COUNTER,
-        player: p,
-        zoneId: toZone,
-        counterType,
-        amount: 1,
-      } as any);
+      return result;
     },
   });
 
@@ -130,10 +130,10 @@ export function createAttachEnergyTool(ctx: ToolContext): ToolSet[string] {
       const state = ctx.getState();
       const ps = getPluginState(state);
       const zone = ps.energyZone[p];
+      const next = zone.next ? ` (next turn: ${zone.next})` : '';
       if (!zone.current) {
-        return '[EMPTY] Energy zone is empty — no energy to attach.';
+        return `[ALREADY USED] Energy already attached this turn.${next}`;
       }
-      const next = zone.next ? ` (next: ${zone.next})` : '';
       return `Attach ${zone.current} energy from energy zone to a Pokemon${next}. Consumes current and advances queue.`;
     },
     enumerable: true,
@@ -147,8 +147,11 @@ export function createAttachEnergyTool(ctx: ToolContext): ToolSet[string] {
  * Award points to a player. Used after KO'ing an opponent's Pokemon.
  * Points can only be added, never removed.
  * Basic KO = 1 point, ex KO = 2 points.
+ * Dispatches a DeclareAction so it syncs via P2P and triggers a splash banner.
+ * The actual point mutation happens in a post-hook (see hooks.ts).
  */
 export function createAwardPointsTool(ctx: ToolContext): ToolSet[string] {
+  const p = ctx.playerIndex;
   return aiTool({
     description: `Award points after KO'ing a Pokemon. Basic KO = 1 point, ex KO = 2 points. First to ${POINTS_TO_WIN} wins.`,
     inputSchema: z.object({
@@ -156,12 +159,14 @@ export function createAwardPointsTool(ctx: ToolContext): ToolSet[string] {
       amount: z.number().min(1).max(2).describe('Points to award (1 for basic KO, 2 for ex KO)'),
     }),
     async execute(input) {
-      const state = ctx.getState();
-      const ps = getPluginState(state);
-      const playerIdx = input.targetPlayer === 'you' ? ctx.playerIndex : (ctx.playerIndex === 0 ? 1 : 0);
-      ps.points[playerIdx] += input.amount;
-      gameLog(state, `Player ${playerIdx + 1} earned ${input.amount} point${input.amount > 1 ? 's' : ''}! (Total: ${ps.points[playerIdx]}/${POINTS_TO_WIN})`);
-      return `Player ${playerIdx + 1} now has ${ps.points[playerIdx]}/${POINTS_TO_WIN} points.`;
+      const playerIdx = input.targetPlayer === 'you' ? p : (p === 0 ? 1 : 0);
+      const msg = `Player ${playerIdx + 1} earned ${input.amount} point${input.amount > 1 ? 's' : ''}!`;
+      return ctx.execute(
+        declareAction(p, POCKET_DECLARATION_TYPES.AWARD_POINTS, msg, {
+          targetPlayer: playerIdx,
+          amount: input.amount,
+        }, msg),
+      );
     },
   });
 }

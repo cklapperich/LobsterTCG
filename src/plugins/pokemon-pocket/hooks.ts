@@ -19,6 +19,8 @@ import {
   SUPERTYPES,
   DAMAGE_COUNTER_VALUES,
   DEGREES_TO_STATUS,
+  POCKET_DECLARATION_TYPES,
+  POINTS_TO_WIN,
 } from './constants';
 import { getPluginState, advanceEnergyZone } from './plugin-state';
 
@@ -133,6 +135,24 @@ function advanceEnergyOnStartTurn(state: PocketState, action: Action): PostHookR
   return {};
 }
 
+// ── Post-Hooks: Declare Action ──────────────────────────────────────
+
+/** Post-hook: apply point mutation when award_points is declared. */
+function applyAwardPoints(state: PocketState, action: Action): PostHookResult {
+  if (action.type !== ACTION_TYPES.DECLARE_ACTION) return {};
+  if ((action as any).declarationType !== POCKET_DECLARATION_TYPES.AWARD_POINTS) return {};
+
+  const meta = (action as any).metadata as { targetPlayer: number; amount: number } | undefined;
+  if (!meta) return {};
+
+  const mutableState = state as GameState<PocketCardTemplate>;
+  const ps = getPluginState(mutableState);
+  ps.points[meta.targetPlayer] += meta.amount;
+  systemLog(state, `Player ${meta.targetPlayer + 1} now has ${ps.points[meta.targetPlayer]}/${POINTS_TO_WIN} points.`);
+
+  return {};
+}
+
 // ── Post-Hooks: End Turn ────────────────────────────────────────────
 
 /** Post-hook: when setup transitions to playing, flip all field Pokemon face-up. */
@@ -213,6 +233,9 @@ export const pocketHooksPlugin: Plugin<PocketCardTemplate> = {
     [ACTION_TYPES.MOVE_CARD_STACK]: MOVE_POST_HOOKS,
     [ACTION_TYPES.START_TURN]: [
       { hook: advanceEnergyOnStartTurn, priority: 100 },
+    ],
+    [ACTION_TYPES.DECLARE_ACTION]: [
+      { hook: applyAwardPoints, priority: 100 },
     ],
     [ACTION_TYPES.END_TURN]: [
       { hook: flipFieldFaceUpOnSetupComplete, priority: 100 },

@@ -808,7 +808,7 @@
 
     const currentPlayer = phase === 'decision'
       ? (gameState.pendingDecision?.targetPlayer ?? gameState.activePlayer)
-      : gameState.activePlayer;
+      : (playerOverride ?? gameState.activePlayer);
 
     addLog(phase === 'decision' ? 'Responding to decision...' : phase === 'setup' ? 'Setting up...' : 'Thinking...');
 
@@ -841,11 +841,16 @@
         addLog('Decision auto-resolved (AI did not call resolve_decision)');
       }
     } else {
-      const expectedPhase = phase === 'setup' ? PHASES.SETUP : PHASES.PLAYING;
-      if (gameState?.activePlayer === currentPlayer && gameState.phase === expectedPhase) {
+      if (phase === 'setup') {
+        if (gameState?.phase === PHASES.SETUP && !gameState.setupComplete[currentPlayer]) {
+          executeAction(gameState, endTurn(currentPlayer));
+          gameState = { ...gameState };
+          addLog('Setup auto-ended (AI did not call end_turn)');
+        }
+      } else if (gameState?.activePlayer === currentPlayer && gameState.phase === PHASES.PLAYING) {
         executeAction(gameState, endTurn(currentPlayer));
         gameState = { ...gameState };
-        addLog(`${phase === 'setup' ? 'Setup' : 'Turn'} auto-ended (AI did not call end_turn)`);
+        addLog('Turn auto-ended (AI did not call end_turn)');
       }
     }
     // advance() in the caller (via controllers[n].takeTurn) handles what comes next

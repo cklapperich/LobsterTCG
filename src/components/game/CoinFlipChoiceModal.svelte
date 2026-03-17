@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { playSfx } from '../../lib/audio.svelte';
+
   let visible = $state(false);
   let flipWinner = $state<0 | 1>(0);
   let resolveCallback: ((p: 0 | 1) => void) | null = null;
@@ -10,6 +12,7 @@
   }
 
   function handleChoose(choice: 0 | 1) {
+    playSfx('confirm');
     visible = false;
     resolveCallback?.(choice);
     resolveCallback = null;

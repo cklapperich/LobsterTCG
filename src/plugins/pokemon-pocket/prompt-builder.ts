@@ -9,6 +9,7 @@ import {
   createPocketCustomTools,
   createSetStatusTool,
   createEndPhaseTool,
+  createAwardPointsTool,
   HIDDEN_DEFAULT_TOOLS,
 } from './tools';
 
@@ -70,14 +71,6 @@ const MODE_CONFIGS: Record<AgentMode, ModeConfig> = {
       ACTION_TYPES.MULLIGAN,
     ],
     addCustomTools: false,
-    extras: (ctx) => {
-      const tools = createDefaultTools(ctx);
-      const endTurnTool = tools[ACTION_TYPES.END_TURN];
-      if (!endTurnTool) {
-        return { end_phase: createEndPhaseTool('End the setup phase.') };
-      }
-      return { end_phase: { ...endTurnTool, description: 'End the setup phase' } };
-    },
   },
 
   betweenTurns: {
@@ -94,11 +87,15 @@ const MODE_CONFIGS: Record<AgentMode, ModeConfig> = {
       ACTION_TYPES.COIN_FLIP,
       ACTION_TYPES.DRAW,
       ACTION_TYPES.SWAP_CARD_STACKS,
+      ACTION_TYPES.MOVE_CARD,
+      ACTION_TYPES.CREATE_DECISION,
       ACTION_TYPES.CONCEDE,
     ],
     addCustomTools: false,
     extras: (ctx) => ({
       set_status: createSetStatusTool(ctx),
+      discard_pokemon_cards: createPocketCustomTools(ctx).discard_pokemon_cards,
+      award_points: createAwardPointsTool(ctx),
       end_phase: createEndPhaseTool('Signal that between-turns phase is complete.'),
     }),
   },
@@ -129,7 +126,6 @@ const MODE_CONFIGS: Record<AgentMode, ModeConfig> = {
     coreTools: [
       ACTION_TYPES.END_TURN,
       ACTION_TYPES.CREATE_DECISION,
-      ACTION_TYPES.SEARCH_ZONE,
       ACTION_TYPES.MULLIGAN,
       ...HIDDEN_DEFAULT_TOOLS,
     ],

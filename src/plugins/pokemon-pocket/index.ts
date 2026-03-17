@@ -511,20 +511,19 @@ function getBoardWidgets(state: GameState<PocketCardTemplate>, playerIndex: Play
     }
 
     // Current energy (right) — draggable only for local player and if not yet attached
-    if (zone.current) {
+    if (zone.current && !zone.attached) {
       const counterId = ENERGY_COUNTER_TYPES[zone.current];
       items.push({
         id: `energy-current-${p}`,
         imageUrl: ENERGY_IMAGES[zone.current] ?? null,
         label: `${zone.current} Energy (current)`,
         counterId: isLocal ? counterId : undefined,
-        disabled: zone.attached,
       });
     } else {
       items.push({
         id: `energy-current-${p}`,
         imageUrl: null,
-        label: 'No energy',
+        label: zone.attached ? 'Energy attached' : 'No energy',
       });
     }
 
