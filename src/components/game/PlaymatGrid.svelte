@@ -104,7 +104,7 @@
   // Dynamic grid template from columnScales
   const gridTemplateColumns = $derived.by(() => {
     const scales = layout.columnScales ?? Array(layout.cols).fill(1.0);
-    return scales.map(s => `calc((var(--spacing-card-w) + 1.5rem) * ${s})`).join(' ');
+    return scales.map(s => `calc(var(--spacing-card-w) * ${s} + 1.5rem)`).join(' ');
   });
 
   const gridTemplateRows = $derived.by(() => {
