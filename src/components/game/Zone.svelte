@@ -206,6 +206,7 @@
 
 <div
   class="zone"
+  class:zone-counter={isZoneCounterZone}
   class:drag-over={isDragOver || isCounterDragOver}
   class:top-drop-pad={slot.topDropPad}
   role="region"

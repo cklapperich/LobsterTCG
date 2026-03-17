@@ -349,6 +349,9 @@
   let lastAnnouncedKey = '';
   $effect(() => {
     if (!gameState || gameState.pendingDecision) return;
+    // Suppress splash during setup→play transition (coin flip animation playing)
+    if (turnFlow.tag === 'transition') return;
+    if (gameState.phase === PHASES.PLAYING && gameState.turnNumber === 1 && !setupTransitionComplete) return;
     const key = `${gameState.phase}-${gameState.turnNumber}-${gameState.activePlayer}`;
     if (key !== lastAnnouncedKey) {
       lastAnnouncedKey = key;

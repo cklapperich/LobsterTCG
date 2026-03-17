@@ -454,9 +454,14 @@ function onMarkerClick(state: GameState<PocketCardTemplate>, _playerIndex: Playe
   const targetPlayer = parseInt(match[1], 10);
   if (targetPlayer !== 0 && targetPlayer !== 1) return;
 
-  // Increment points (never decrement)
-  ps.points[targetPlayer] += 1;
-  gameLog(state, `Player ${targetPlayer + 1} earned 1 point! (Total: ${ps.points[targetPlayer]}/${POINTS_TO_WIN})`);
+  const newTotal = ps.points[targetPlayer] + 1;
+  return declareAction(
+    _playerIndex,
+    POCKET_DECLARATION_TYPES.AWARD_POINTS,
+    `Point Awarded! (${newTotal}/${POINTS_TO_WIN})`,
+    { targetPlayer, amount: 1 },
+    `Player ${targetPlayer + 1} earned 1 point! (Total: ${newTotal}/${POINTS_TO_WIN})`
+  );
 }
 
 // ── Energy image lookup ──────────────────────────────────────────
@@ -543,7 +548,7 @@ export const plugin: GamePlugin<PocketCardTemplate> = {
   getCoinFront,
   getCoinBack,
   formatCardForSearch: (template) => formatCardReference(template as any).join('\n'),
-  getAICounterTypes: () => Object.values(AI_COUNTER_TYPES),
+  getAICounterTypes: () => [...Object.values(AI_COUNTER_TYPES), ...Object.values(ENERGY_COUNTER_TYPES)],
   shouldSkipBetweenTurns,
   onAfterTurn,
   getAgentConfig,

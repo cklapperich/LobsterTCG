@@ -332,8 +332,10 @@
               </button>
             </div>
           {:else}
+            {@const isZoneCounter = !!zone.config.zoneCounters && zone.config.maxCards === 0}
             <div
               class="zone-group-item"
+              class:zone-counter-item={isZoneCounter}
               style="{hasPlacement ? `grid-row: ${(slot.groupRow ?? 0) + 1}; grid-column: ${(slot.groupCol ?? 0) + 1};` : ''}"
             >
               <Zone
@@ -424,6 +426,11 @@
     align-items: center;
     justify-items: center;
     min-width: 0;
+  }
+
+  /* Zone-counter zones stretch to fill their group column */
+  .zone-group-item.zone-counter-item {
+    justify-self: stretch;
   }
 
   .zone-group.button-group {

@@ -95,9 +95,8 @@ Shared zones:
 
 ## @KEY_RULES
 ### Key Rules — Pokemon Pocket
-- **Energy Zone**: Each turn, the energy zone provides one energy (random type from your deck's Pokemon types). Use `attach_energy` to consume it from the zone and attach as a counter to a Pokemon. The zone shows current (attachable) and next (preview). Consuming advances the queue.
-- **No Energy Cards**: There are no energy cards in your deck or hand. Normal energy comes from the energy zone.
-- **Energy Acceleration**: Some card effects (e.g. Misty, Gardevoir, Moltres ex) attach energy directly without consuming from the zone. Use `add_counter` with the energy type for these effects.
+- **Energy Zone**: Each turn, the energy zone provides one energy (random type from your deck's Pokemon types). Use `attach_energy` to consume it from the zone and attach as a counter to a Pokemon. The zone shows current (attachable) and next (preview). Queue advances at start of turn if empty. NEVER use energy zone for card effects like trainers or abilities.
+- **Energy Acceleration**: Some card effects (e.g. Misty, Gardevoir, Moltres ex) attach energy directly without consuming from the zone. Use `add_counter` with the energy type for these effects. Ignore the fact these cards reference "energy_zone" and use add_counter instead
 - **Weakness**: +20 damage (not x2 like standard TCG)
 - **No Resistance**: Pokemon Pocket has no resistance mechanic
 - **First Turn**: The player who goes first cannot attack on turn 1
@@ -140,9 +139,11 @@ When executing an attack:
 ### Tool Usage
 
 **Energy:**
-- **`attach_energy`**: Consume current energy from the energy zone and attach it as a counter to a Pokemon. Queue auto-advances.
-- **`add_counter`**: For energy acceleration effects (Misty, Gardevoir, etc.), use `add_counter` with the specific energy counter type (e.g. `fire_energy`, `water_energy`) to attach energy outside the zone.
+- **`attach_energy`**: Once per turn, manually attach energy from the energy zone and attach to a Pokemon. Queue auto-advances every turn. 
+- **`add_counter`**: For energy acceleration trainer cards and abilities (Misty, Gardevoir, etc.), use `add_counter` with the specific energy counter type (e.g. `fire_energy`, `water_energy`). Ignore the fact some cards reference "energy zone" and use add_counter instead
 - **`award_points`**: Award points after KO'ing a Pokemon. Specify target ('you' or 'opponent') and amount (1 for basic, 2 for ex). NOT for card-effect discards.
+
+
 
 **Card Movement:**
 - **`move_card`**: Universal movement. Play basics to bench, trainers to staging, etc.

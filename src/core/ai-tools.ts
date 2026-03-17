@@ -279,7 +279,7 @@ export function createDefaultTools(ctx: ToolContext): ToolSet {
       z.object({
         cardName: z.string().describe('Name of the card'),
         zone: z.string().describe('Zone key the card is in (e.g. "opponent_active")'),
-        counterType: z.string().refine((type) => !ctx.counterTypes || ctx.counterTypes.includes(type), { message: "Invalid counter type" }).describe('Counter type'),
+        counterType: z.string().refine((type) => !ctx.counterTypes || ctx.counterTypes.includes(type), { message: `Invalid counter type. Valid types: ${ctx.counterTypes?.join(', ') ?? 'any'}` }).describe(`Counter type${ctx.counterTypes ? ` (valid: ${ctx.counterTypes.join(', ')})` : ''}`),
         amount: z.number().optional().describe('Number of counters to add (default 1)'),
       }),
       async ({ cardName, zone, counterType, amount }) => {
@@ -294,7 +294,7 @@ export function createDefaultTools(ctx: ToolContext): ToolSet {
       z.object({
         cardName: z.string().describe('Name of the card'),
         zone: z.string().describe('Zone key the card is in'),
-        counterType: z.string().refine((type) => !ctx.counterTypes || ctx.counterTypes.includes(type), { message: "Invalid counter type" }).describe('Counter type to remove'),
+        counterType: z.string().refine((type) => !ctx.counterTypes || ctx.counterTypes.includes(type), { message: `Invalid counter type. Valid types: ${ctx.counterTypes?.join(', ') ?? 'any'}` }).describe(`Counter type to remove${ctx.counterTypes ? ` (valid: ${ctx.counterTypes.join(', ')})` : ''}`),
         amount: z.number().optional().describe('Number of counters to remove (default 1)'),
       }),
       async ({ cardName, zone, counterType, amount }) => {
