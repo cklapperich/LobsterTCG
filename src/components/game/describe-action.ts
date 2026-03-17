@@ -43,6 +43,8 @@ export function describeAction(
       return `Set ${counterName(action.counterType)} on ${cardName(action.cardInstanceId)} to ${action.value}`;
     case ACTION_TYPES.DICE_ROLL:
       return `Rolled ${action.count}d${action.sides}`;
+    case ACTION_TYPES.START_TURN:
+      return null; // silent — splash announcement handles this
     case ACTION_TYPES.END_TURN:
       return `Ended turn`;
     case ACTION_TYPES.CONCEDE:

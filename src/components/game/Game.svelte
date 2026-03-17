@@ -21,11 +21,12 @@
   import type { Playmat } from '../../core/types/playmat';
   import type { GameState } from '../../core/types/game';
   import type { CounterDefinition } from '../../core/types/counter';
+  import type { BoardWidget } from '../../core/types/board-widget';
   import type { DeckSelection } from '../../core/types/deck';
   import type { Action } from '../../core/types/action';
   import type { ActionExecutor } from '../../core/action-executor';
   import { executeAction, loadDeck, findCardInZones, checkOpponentZone } from '../../core/engine';
-  import { moveCard, moveCardStack, flipCard, endTurn, setOrientation, createDecision, resolveDecision, revealHand, mulligan as mulliganAction, draw, coinFlip, addCounter, removeCounter, setCounter } from '../../core/action';
+  import { moveCard, moveCardStack, flipCard, startTurn, endTurn, setOrientation, createDecision, resolveDecision, revealHand, mulligan as mulliganAction, draw, coinFlip, addCounter, removeCounter, setCounter } from '../../core/action';
   import { toReadableState } from '../../core/readable';
   import { PluginManager } from '../../core/plugin/plugin-manager';
   import { VISIBILITY } from '../../core/types/card';
@@ -129,6 +130,7 @@
   let error = $state<string | null>(null);
   let turnFlow = $state<{ tag: 'local' | 'waiting' | 'transition' }>({ tag: 'local' });
   let setupTransitionComplete = $state(false);
+  let lastStartTurnKey = '';
   let pendingDecisionResolve: (() => void) | null = $state(null);
   // P2P adapter — wraps P2PChannel with all sync logic. No-ops when no channel.
   // Declared early but initialized after tryAction is defined (see below).
@@ -195,12 +197,24 @@
     // who actually goes first, regardless of which player the engine defaults to.
     if (gs.phase === PHASES.PLAYING && gs.turnNumber === 1 && !setupTransitionComplete) {
       setupTransitionComplete = true;
-      turnFlow = { tag: 'transition' };
-      await gameConfig.onSetupComplete?.(gs, createExecutor());
-      gameState = { ...gs };
-      turnFlow = { tag: 'local' };
+      // P2P guest: skip onSetupComplete — the host runs it and broadcasts
+      // all actions (coin flip, first-player choice) via P2P.
+      if (p2p.role !== 'guest') {
+        turnFlow = { tag: 'transition' };
+        await gameConfig.onSetupComplete?.(gs, createExecutor());
+        if (!gameState) return;
+        gameState = { ...gameState };
+        turnFlow = { tag: 'local' };
+      }
       advance();
       return;
+    }
+
+    // Fire START_TURN marker so plugin hooks can run turn-start logic (once per turn)
+    const stKey = `${gs.turnNumber}-${gs.activePlayer}`;
+    if (gs.phase === PHASES.PLAYING && stKey !== lastStartTurnKey) {
+      lastStartTurnKey = stKey;
+      tryAction(startTurn(gs.activePlayer));
     }
 
     if (isLocal(playerConfig, gs.activePlayer)) return; // human's turn, UI handles it
@@ -242,6 +256,14 @@
   const markers = $derived(
     gameState && plugin.getMarkers ? plugin.getMarkers(gameState, local) : []
   );
+
+  // Board widgets from plugin (energy zone, etc.)
+  // Must snapshot gameState to unwrap Svelte 5 proxy before plugin reads pluginState
+  const boardWidgets = $derived.by<BoardWidget[]>(() => {
+    if (!gameState || !plugin.getBoardWidgets) return [];
+    const snap = $state.snapshot(gameState) as GameState<CardTemplate>;
+    return plugin.getBoardWidgets(snap, local);
+  });
 
   function handleMarkerClick(markerId: string) {
     if (!gameState) return;
@@ -426,7 +448,10 @@
     gameState = { ...gameState };
 
     // P2P: broadcast local actions to the remote peer
-    p2p.broadcastAction(action);
+    // START_TURN is a local-only marker — each side fires it independently in advance()
+    if (action.type !== ACTION_TYPES.START_TURN) {
+      p2p.broadcastAction(action);
+    }
 
     // P2P: after remote action, check if local machine needs to act
     if (p2p.isRemoteAction) advance();
@@ -487,10 +512,18 @@
   function initializeGameState(state: GameState<CardTemplate>) {
     const deck1 = player1Deck ?? gameConfig.getDeck?.();
     if (deck1 && gameConfig.getTemplate) {
-      loadDeck(state, 0, `player1_${gameConfig.deckZoneId}`, deck1, gameConfig.getTemplate, false);
+      if (gameConfig.loadDeck) {
+        gameConfig.loadDeck(state, 0, deck1);
+      } else {
+        loadDeck(state, 0, `player1_${gameConfig.deckZoneId}`, deck1, gameConfig.getTemplate, false);
+      }
     }
     if (gameConfig.playerCount === 2 && player2Deck && gameConfig.getTemplate) {
-      loadDeck(state, 1, `player2_${gameConfig.deckZoneId}`, player2Deck, gameConfig.getTemplate, false);
+      if (gameConfig.loadDeck) {
+        gameConfig.loadDeck(state, 1, player2Deck);
+      } else {
+        loadDeck(state, 1, `player2_${gameConfig.deckZoneId}`, player2Deck, gameConfig.getTemplate, false);
+      }
     }
 
     gameConfig.executeSetup(state, 0);
@@ -697,6 +730,7 @@
       initializeGameState(state);
       gameState = state;
       setupTransitionComplete = false;
+      lastStartTurnKey = '';
       previewCards = [];
       closeContextMenuStore();
       closeCardModalStore();
@@ -844,13 +878,23 @@
     if (!gameState || !canLocalAct) return;
     const drag = counterDragStore.current;
     if (!drag) return;
-    const sourceCardId = drag.source !== 'tray' ? drag.source : null;
+    const isWidgetSource = drag.source.startsWith('widget:');
+    const sourceCardId = !isWidgetSource && drag.source !== 'tray' ? drag.source : null;
     endCounterDrag();
 
     if (sourceCardId) {
       tryAction(removeCounter(local, sourceCardId, counterId, 1));
     }
     tryAction(addCounter(local, cardInstanceId, counterId, 1));
+
+    // If dropped from energy zone widget, mark energy as attached
+    if (isWidgetSource && gameState.pluginState) {
+      const ps = gameState.pluginState as any;
+      const zone = ps.energyZone?.[local];
+      if (zone && !zone.attached) {
+        zone.attached = true;
+      }
+    }
   }
 
   function handleCounterReturn() {
@@ -994,6 +1038,7 @@
           localPlayer={local}
           {cardBack}
           {counterDefinitions}
+          {boardWidgets}
           {playmatImage}
           {renderFace}
           onDrop={handleDrop}

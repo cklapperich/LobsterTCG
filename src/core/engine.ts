@@ -1096,6 +1096,10 @@ export function executeAction<T extends CardTemplate>(
     case ACTION_TYPES.DICE_ROLL:
       executeDiceRoll(state, action);
       break;
+    case ACTION_TYPES.START_TURN:
+      // Marker action — no state mutation. Exists so plugins can register
+      // pre/post hooks on START_TURN for turn-start logic.
+      break;
     case ACTION_TYPES.END_TURN:
       executeEndTurn(state, action);
       break;

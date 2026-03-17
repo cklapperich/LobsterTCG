@@ -13,6 +13,7 @@ export const ACTION_TYPES = {
   SET_COUNTER: 'set_counter',
   COIN_FLIP: 'coin_flip',
   DICE_ROLL: 'dice_roll',
+  START_TURN: 'start_turn',
   END_TURN: 'end_turn',
   CONCEDE: 'concede',
   DECLARE_VICTORY: 'declare_victory',

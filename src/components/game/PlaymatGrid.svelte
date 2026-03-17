@@ -6,8 +6,10 @@
   import type { Playmat, PlaymatSlot } from '../../core/types/playmat';
   import type { GameState } from '../../core/types/game';
   import type { CounterDefinition } from '../../core/types/counter';
+  import type { BoardWidget } from '../../core/types/board-widget';
   import { VISIBILITY } from '../../core/types/card';
   import Zone from './Zone.svelte';
+  import BoardWidgetComponent from './BoardWidget.svelte';
 
   interface Props {
     playmat: Playmat;
@@ -22,6 +24,7 @@
     onZoneContextMenu?: (zoneKey: string, zoneName: string, cardCount: number, zoneConfig: ZoneConfig, x: number, y: number) => void;
     onCounterDrop?: (counterId: string, cardInstanceId: string) => void;
     onBrowse?: (zoneKey: string, zoneName: string) => void;
+    boardWidgets?: BoardWidget[];
     playmatImage?: string;
     children?: Snippet;
   }
@@ -39,9 +42,20 @@
     onZoneContextMenu,
     onCounterDrop,
     onBrowse,
+    boardWidgets = [],
     playmatImage,
     children,
   }: Props = $props();
+
+  // Index board widgets by slotId for quick lookup
+  const widgetsBySlot = $derived.by(() => {
+    const map: Record<string, { above: BoardWidget[]; below: BoardWidget[] }> = {};
+    for (const w of boardWidgets) {
+      if (!map[w.slotId]) map[w.slotId] = { above: [], below: [] };
+      map[w.slotId][w.position].push(w);
+    }
+    return map;
+  });
 
   // Track Zone refs by zoneKey for shuffle access
   let zoneRefs: Record<string, Zone> = $state({});
@@ -232,6 +246,7 @@
           </button>
         </div>
       {:else}
+        {@const slotWidgets = widgetsBySlot[slot.id]}
         <div
           class="grid-slot"
           class:hand-zone={isHandZone}
@@ -241,6 +256,7 @@
           class:active-zone={isActiveZone}
           class:mid-zone={isMidZone}
           class:p1-field={isP1Field}
+          class:has-widgets={!!slotWidgets}
           style="
             grid-column: {slot.position.col + 1} / span {slot.position.colSpan ?? 1};
             grid-row: {slot.position.row + 1} / span {slot.position.rowSpan ?? 1};
@@ -248,6 +264,11 @@
             {slot.align ? `align-self: ${slot.align};` : ''}
           "
         >
+          {#if slotWidgets?.above}
+            {#each slotWidgets.above as w (w.id)}
+              <BoardWidgetComponent widget={w} />
+            {/each}
+          {/if}
           <Zone
             bind:this={zoneRefs[zone.key]}
             {zone}
@@ -263,6 +284,11 @@
             {onCounterDrop}
             onBrowse={isBrowsable ? onBrowse : undefined}
           />
+          {#if slotWidgets?.below}
+            {#each slotWidgets.below as w (w.id)}
+              <BoardWidgetComponent widget={w} />
+            {/each}
+          {/if}
         </div>
       {/if}
     {/if}
@@ -347,6 +373,10 @@
     position: relative;
     z-index: 1;
     min-width: 0;
+  }
+
+  .grid-slot.has-widgets {
+    @apply flex-col items-center;
   }
 
   .grid-slot.stack-up {

@@ -104,6 +104,10 @@ export interface DiceRollAction extends BaseAction {
 }
 
 // Game Flow Actions
+export interface StartTurnAction extends BaseAction {
+  type: typeof ACTION_TYPES.START_TURN;
+}
+
 export interface EndTurnAction extends BaseAction {
   type: typeof ACTION_TYPES.END_TURN;
 }
@@ -195,6 +199,7 @@ export type Action =
   | SetCounterAction
   | CoinFlipAction
   | DiceRollAction
+  | StartTurnAction
   | EndTurnAction
   | ConcedeAction
   | DeclareVictoryAction

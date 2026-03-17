@@ -46,7 +46,7 @@ import {
   POINTS_TO_WIN,
   ENERGY_COUNTER_TYPES,
 } from './constants';
-import { getPluginState, initPluginState, rollEnergy } from './plugin-state';
+import { getPluginState, initPluginState } from './plugin-state';
 
 // Reuse standard Pokemon TCG counter images for damage
 import damage10Img from '../pokemon/counters/damage-10.png';
@@ -450,6 +450,81 @@ function onMarkerClick(state: GameState<PocketCardTemplate>, _playerIndex: Playe
   gameLog(state, `Player ${targetPlayer + 1} earned 1 point! (Total: ${ps.points[targetPlayer]}/${POINTS_TO_WIN})`);
 }
 
+// ── Energy image lookup ──────────────────────────────────────────
+
+const ENERGY_IMAGES: Record<string, string> = {
+  fire: fireEnergyImg,
+  water: waterEnergyImg,
+  grass: grassEnergyImg,
+  lightning: lightningEnergyImg,
+  psychic: psychicEnergyImg,
+  fighting: fightingEnergyImg,
+  darkness: darknessEnergyImg,
+  metal: metalEnergyImg,
+};
+
+// ── Board Widgets (energy zone display) ─────────────────────────
+
+import type { BoardWidget } from '../../core/types/board-widget';
+
+function getBoardWidgets(state: GameState<PocketCardTemplate>, playerIndex: PlayerIndex): BoardWidget[] {
+  const ps = getPluginState(state);
+  const widgets: BoardWidget[] = [];
+  const opponent: PlayerIndex = playerIndex === 0 ? 1 : 0;
+
+  // Render order: local player first (bottom of board), then opponent (top)
+  for (const p of [playerIndex, opponent] as const) {
+    const zone = ps.energyZone[p];
+    const isLocal = p === playerIndex;
+
+    // p1_deck slot = bottom (local player's deck after perspective flip)
+    // p2_deck slot = top (opponent's deck after perspective flip)
+    const slotId = isLocal ? 'p1_deck' : 'p2_deck';
+    const position = isLocal ? 'above' : 'below';
+
+    const items: BoardWidget['items'] = [];
+
+    // Next energy (left) — dimmed preview, not draggable
+    if (zone.next) {
+      items.push({
+        id: `energy-next-${p}`,
+        imageUrl: ENERGY_IMAGES[zone.next] ?? null,
+        label: `${zone.next} Energy (next)`,
+        dimmed: true,
+      });
+    } else {
+      items.push({
+        id: `energy-next-${p}`,
+        imageUrl: null,
+        label: 'No next energy',
+        dimmed: true,
+      });
+    }
+
+    // Current energy (right) — draggable only for local player and if not yet attached
+    if (zone.current) {
+      const counterId = ENERGY_COUNTER_TYPES[zone.current];
+      items.push({
+        id: `energy-current-${p}`,
+        imageUrl: ENERGY_IMAGES[zone.current] ?? null,
+        label: `${zone.current} Energy (current)`,
+        counterId: isLocal ? counterId : undefined,
+        disabled: zone.attached,
+      });
+    } else {
+      items.push({
+        id: `energy-current-${p}`,
+        imageUrl: null,
+        label: 'No energy',
+      });
+    }
+
+    widgets.push({ id: `energy-zone-${p}`, slotId, position, items });
+  }
+
+  return widgets;
+}
+
 // ── Plugin object ────────────────────────────────────────────────
 
 export const plugin: GamePlugin<PocketCardTemplate> = {
@@ -468,6 +543,7 @@ export const plugin: GamePlugin<PocketCardTemplate> = {
   onActionPanelClick,
   getMarkers,
   onMarkerClick,
+  getBoardWidgets,
 };
 
 /**
@@ -476,7 +552,7 @@ export const plugin: GamePlugin<PocketCardTemplate> = {
  * First player: no current energy on turn 1 (Pocket rule), only next.
  * Second player: current + next both filled.
  */
-export async function onSetupComplete(state: GameState<CardTemplate>, executor: ActionExecutor): Promise<void> {
+export async function onSetupComplete(_state: GameState<CardTemplate>, executor: ActionExecutor): Promise<void> {
   const isHeads = await executor.flipCoin();
   const winner: PlayerIndex = isHeads ? 0 : 1;
   executor.addLog(`Coin flip: ${isHeads ? 'HEADS' : 'TAILS'} — Player ${winner + 1} wins the flip!`);
@@ -484,19 +560,8 @@ export async function onSetupComplete(state: GameState<CardTemplate>, executor: 
   executor.addLog(`Player ${firstPlayer + 1} goes first!`);
   executor.tryAction(coinFlipAction(0, 1, [isHeads], firstPlayer));
 
-  // Initialize energy zones
-  const ps = getPluginState(state as GameState<PocketCardTemplate>);
-  const secondPlayer = firstPlayer === 0 ? 1 : 0;
-
-  // First player: no current (turn 1 restriction), only next preview
-  ps.energyZone[firstPlayer].current = null;
-  ps.energyZone[firstPlayer].next = rollEnergy(ps.energyTypePool);
-
-  // Second player: current + next both filled
-  ps.energyZone[secondPlayer].current = rollEnergy(ps.energyTypePool);
-  ps.energyZone[secondPlayer].next = rollEnergy(ps.energyTypePool);
-
-  executor.addLog(`Energy zones initialized.`);
+  // Energy zones are initialized by the START_TURN post-hook on turn 1.
+  // This ensures both P2P peers compute identical initial energy deterministically.
 }
 
 // Re-exports

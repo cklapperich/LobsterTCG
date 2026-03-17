@@ -20,7 +20,7 @@ import {
   DAMAGE_COUNTER_VALUES,
   DEGREES_TO_STATUS,
 } from './constants';
-import { getPluginState, advanceEnergyZone } from './plugin-state';
+import { getPluginState, advanceEnergyZone, seedEnergyZone } from './plugin-state';
 
 type PocketState = Readonly<GameState<PocketCardTemplate>>;
 
@@ -103,24 +103,41 @@ function consolidateCountersAfterReorder(state: PocketState, action: Action): Po
   return {};
 }
 
-// ── Post-Hooks: End Turn ────────────────────────────────────────────
+// ── Post-Hooks: Start Turn ───────────────────────────────────────────
 
 /**
- * Advance the energy zone queue for the next player at turn end.
- * next → current, generate new next, reset attached flag.
+ * Manage the energy zone at the start of each turn.
+ * - Turn 1: seed both players' "next" preview (no current energy on turn 1 per Pocket rules)
+ * - Turn 2+: advance the active player's zone (next → current, roll new next)
+ * Uses deterministic seeds so both P2P peers compute identical results.
  */
-function advanceEnergyOnTurnEnd(state: PocketState, action: Action): PostHookResult {
-  if (action.type !== ACTION_TYPES.END_TURN) return {};
+function advanceEnergyOnStartTurn(state: PocketState, action: Action): PostHookResult {
+  if (action.type !== ACTION_TYPES.START_TURN) return {};
+  console.log('[advanceEnergy] phase:', state.phase, 'turnNumber:', state.turnNumber, 'activePlayer:', state.activePlayer);
+  if (state.phase !== PHASES.PLAYING) return {};
 
   const mutableState = state as GameState<PocketCardTemplate>;
   const ps = getPluginState(mutableState);
 
-  // Advance energy for the player whose turn is starting next
-  const nextPlayer = state.activePlayer === 0 ? 1 : 0;
-  advanceEnergyZone(ps, nextPlayer);
+  if (state.turnNumber === 1) {
+    // Turn 1: seed both players with a "next" preview only (no current)
+    console.log('[advanceEnergy] SEEDING both players');
+    seedEnergyZone(ps, 0, 100);
+    seedEnergyZone(ps, 1, 101);
+    console.log('[advanceEnergy] AFTER seed', JSON.stringify(ps.energyZone));
+    return {};
+  }
+
+  // Turn 2+: advance active player's zone
+  const seed = state.turnNumber * 100 + state.activePlayer;
+  console.log('[advanceEnergy] BEFORE advance P' + state.activePlayer, JSON.stringify(ps.energyZone));
+  advanceEnergyZone(ps, state.activePlayer, seed);
+  console.log('[advanceEnergy] AFTER advance P' + state.activePlayer, JSON.stringify(ps.energyZone));
 
   return {};
 }
+
+// ── Post-Hooks: End Turn ────────────────────────────────────────────
 
 /** Post-hook: when setup transitions to playing, flip all field Pokemon face-up. */
 function flipFieldFaceUpOnSetupComplete(state: PocketState, action: Action): PostHookResult {
@@ -198,9 +215,11 @@ export const pocketHooksPlugin: Plugin<PocketCardTemplate> = {
   postHooks: {
     [ACTION_TYPES.MOVE_CARD]: MOVE_POST_HOOKS,
     [ACTION_TYPES.MOVE_CARD_STACK]: MOVE_POST_HOOKS,
+    [ACTION_TYPES.START_TURN]: [
+      { hook: advanceEnergyOnStartTurn, priority: 100 },
+    ],
     [ACTION_TYPES.END_TURN]: [
       { hook: flipFieldFaceUpOnSetupComplete, priority: 100 },
-      { hook: advanceEnergyOnTurnEnd, priority: 200 },
     ],
   },
   preHooks: {},

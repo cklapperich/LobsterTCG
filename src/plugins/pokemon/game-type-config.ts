@@ -1,5 +1,5 @@
 import type { GameTypeConfig } from '../../core/types/game-type-config';
-import { plugin, executeSetup, onSetupComplete, pokemonHooksPlugin, parsePTCGODeck } from './index';
+import { plugin, executeSetup, onSetupComplete, loadPlayerDeck, pokemonHooksPlugin, parsePTCGODeck } from './index';
 import { getTemplate, getWesternCard } from './cards';
 
 function exportToPTCGO(deck: { cardId: string; count: number }[]): string {
@@ -41,6 +41,7 @@ export const pokemonConfig: GameTypeConfig = {
   plugin,
   hooksPlugin: pokemonHooksPlugin as any,
   getTemplate,
+  loadDeck: (state, playerIndex, deckList) => loadPlayerDeck(state as any, playerIndex, deckList, getTemplate, false),
   deckZoneId: 'deck',
   playerCount: 2,
   needsDeckSelection: true,

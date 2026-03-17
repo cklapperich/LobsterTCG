@@ -19,6 +19,8 @@ export interface GameTypeConfig {
   getTemplate?: (id: string) => CardTemplate | undefined;
   renderFace?: (t: CardTemplate) => { rank?: string; suit?: string; color?: string };
   executeSetup: (state: GameState, playerIndex: PlayerIndex) => void;
+  /** Plugin-specific deck loading (e.g. derives energy pool from metadata). Falls back to core loadDeck if omitted. */
+  loadDeck?: (state: GameState, playerIndex: PlayerIndex, deckList: DeckList) => void;
   deckZoneId: string;              // 'deck' for Pokemon, 'stock' for solitaire
   getDeck?: () => DeckList;        // Fixed-deck games (solitaire)
   playerCount: 1 | 2;

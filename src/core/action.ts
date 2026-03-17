@@ -13,6 +13,7 @@ import type {
   SetCounterAction,
   CoinFlipAction,
   DiceRollAction,
+  StartTurnAction,
   EndTurnAction,
   ConcedeAction,
   DeclareVictoryAction,
@@ -173,6 +174,10 @@ export function diceRoll(
   results?: number[]
 ): DiceRollAction {
   return { type: ACTION_TYPES.DICE_ROLL, player, count, sides, results };
+}
+
+export function startTurn(player: PlayerIndex): StartTurnAction {
+  return { type: ACTION_TYPES.START_TURN, player };
 }
 
 export function endTurn(player: PlayerIndex): EndTurnAction {

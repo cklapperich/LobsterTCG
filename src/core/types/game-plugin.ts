@@ -2,6 +2,7 @@ import type { Playmat } from './playmat';
 import type { GameState } from './game';
 import type { CardTemplate, CardInstance, PlayerIndex } from './card';
 import type { CounterDefinition } from './counter';
+import type { BoardWidget } from './board-widget';
 import type { ToolContext } from '../ai-tools';
 import type { ActionPanel } from './action-panel';
 import type { Action } from './action';
@@ -89,4 +90,7 @@ export interface GamePlugin<T extends CardTemplate = CardTemplate> {
 
   /** Return multiple cards for composite preview (LEGEND 2-card, V-UNION 4-card). */
   getCompositePreview?(card: CardInstance<T>, state: GameState<T>): CardInstance<T>[] | undefined;
+
+  /** Return board widgets anchored to playmat slots (e.g. energy zone display). */
+  getBoardWidgets?(state: GameState<T>, playerIndex: PlayerIndex): BoardWidget[];
 }

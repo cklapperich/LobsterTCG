@@ -46,19 +46,44 @@ export function initPluginState(state: GameState<any>, energyTypePool: EnergyTyp
 }
 
 /**
- * Roll a random energy type from the pool.
+ * Mulberry32 seeded RNG — produces a deterministic float in [0, 1).
  */
-export function rollEnergy(pool: EnergyType[]): EnergyType | null {
+function seededRandom(seed: number): number {
+  let s = seed >>> 0;
+  s = (s + 0x6D2B79F5) >>> 0;
+  let t = Math.imul(s ^ (s >>> 15), 1 | s);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 0x100000000;
+}
+
+/**
+ * Roll a random energy type from the pool.
+ * If seed is provided, uses deterministic RNG (for P2P sync).
+ */
+export function rollEnergy(pool: EnergyType[], seed?: number): EnergyType | null {
   if (pool.length === 0) return null;
-  return pool[Math.floor(Math.random() * pool.length)];
+  const r = seed !== undefined ? seededRandom(seed) : Math.random();
+  return pool[Math.floor(r * pool.length)];
 }
 
 /**
  * Advance the energy zone for a player: next → current, generate new next.
+ * Pass a seed for deterministic rolls (P2P sync).
  */
-export function advanceEnergyZone(ps: PocketPluginState, playerIndex: number): void {
+export function advanceEnergyZone(ps: PocketPluginState, playerIndex: number, seed?: number): void {
   const zone = ps.energyZone[playerIndex];
   zone.current = zone.next;
-  zone.next = rollEnergy(ps.energyTypePool);
+  zone.next = rollEnergy(ps.energyTypePool, seed);
+  zone.attached = false;
+}
+
+/**
+ * Seed a player's energy zone with an initial "next" preview (no current).
+ * Used on turn 1 so both P2P peers initialize identically.
+ */
+export function seedEnergyZone(ps: PocketPluginState, playerIndex: number, seed: number): void {
+  const zone = ps.energyZone[playerIndex];
+  zone.current = null;
+  zone.next = rollEnergy(ps.energyTypePool, seed);
   zone.attached = false;
 }
