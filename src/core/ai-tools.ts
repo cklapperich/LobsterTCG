@@ -65,7 +65,8 @@ export function wrapToolsWithContext(tools: ToolSet, context: ToolExecutionConte
         }
         try {
           const res = await originalExecute(args, options);
-          if (context.terminalTools.has(name) && context.abort) {
+          const wasBlocked = typeof res === 'string' && (res.startsWith('Action blocked:') || res.startsWith('Error:'));
+          if (context.terminalTools.has(name) && context.abort && !wasBlocked) {
             context.abort.abort();
             if (context.stepState) {
               context.stepState.blocked = true;
