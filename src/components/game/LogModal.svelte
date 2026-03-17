@@ -66,7 +66,7 @@
   }
 
   .log-modal {
-    @apply flex flex-col w-[90vw] max-w-[40rem] h-[70vh] max-h-[40rem];
+    @apply flex flex-col w-[95vw] max-w-[56rem] h-[85vh] max-h-[52rem];
   }
 
   .log-modal-header {
