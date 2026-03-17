@@ -4,7 +4,7 @@
   import type { CounterDefinition } from '../../core/types/counter';
   import type { MarkerState } from '../../core/types/game-plugin';
   import { PHASES } from '../../core/types/constants';
-  import { isLocal, isAI, type PlayerConfig } from './player-config';
+  import { isLocal, isAI, localPlayerIndex, type PlayerConfig } from './player-config';
   import { toggleMute, audioSettings } from '../../lib/audio.svelte';
   import { playSfx } from '../../lib/audio.svelte';
   import CounterTray from './CounterTray.svelte';
@@ -56,10 +56,10 @@
     <div class="phase-header">
       <h1 class="text-base max-sm:text-sm m-0 tracking-wide title-shadow font-retro phase-title text-center flex-1">
         {#if gameState.phase === PHASES.SETUP}
-          {#if isLocal(playerConfig, gameState.activePlayer)}
+          {#if !gameState.setupComplete[localPlayerIndex(playerConfig)]}
             <span class="text-gbc-green">YOUR SETUP</span>
           {:else}
-            <span class="text-gbc-blue">FRIEND'S SETUP</span>
+            <span class="text-gbc-blue animate-pulse">WAITING...</span>
           {/if}
         {:else if turnFlow.tag === 'waiting' || turnFlow.tag === 'transition'}
           <span class="text-gbc-red animate-pulse">THINKING...</span>

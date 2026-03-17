@@ -16,7 +16,7 @@
    *  - Manage setup flow: mulligan decisions, coin flip, first-player choice
    */
   import { onMount } from 'svelte';
-  import type { CardInstance, CardTemplate } from '../../core/types/card';
+  import type { CardInstance, CardTemplate, PlayerIndex } from '../../core/types/card';
   import type { ZoneConfig } from '../../core/types/zone';
   import type { Playmat } from '../../core/types/playmat';
   import type { GameState } from '../../core/types/game';
@@ -217,17 +217,29 @@
       tryAction(startTurn(gs.activePlayer, Math.floor(Math.random() * 0x7FFFFFFF)));
     }
 
+    // Setup phase: kick off all non-local, non-complete players concurrently
+    if (gs.phase === PHASES.SETUP) {
+      for (const pi of [0, 1] as PlayerIndex[]) {
+        if (!gs.setupComplete[pi] && !isLocal(playerConfig, pi)) {
+          turnFlow = { tag: 'waiting' };
+          await controllers[pi].takeSetupTurn();
+          turnFlow = { tag: 'local' };
+        }
+      }
+      // If both done after AI finished, recurse to hit the transition
+      if (gameState?.setupComplete[0] && gameState?.setupComplete[1]) {
+        advance();
+      }
+      return;
+    }
+
     if (isLocal(playerConfig, gs.activePlayer)) return; // human's turn, UI handles it
 
     // Non-local controller's turn (AI or remote no-op)
     const playerBefore = gs.activePlayer;
     const phaseBefore = gs.phase;
     turnFlow = { tag: 'waiting' };
-    if (gs.phase === PHASES.SETUP) {
-      await controllers[gs.activePlayer].takeSetupTurn();
-    } else {
-      await controllers[gs.activePlayer].takeTurn();
-    }
+    await controllers[gs.activePlayer].takeTurn();
     turnFlow = { tag: 'local' };
     // Only recurse if state changed — remote no-op controllers return immediately
     // with unchanged activePlayer, so they don't cause recursion
@@ -240,9 +252,18 @@
   );
 
   // True when the local player can perform state-mutating actions
-  // (it's their turn OR a decision mini-turn targets them)
+  // During setup: local can act until they've completed setup
+  // During play: it's their turn OR a decision mini-turn targets them
   const canLocalAct = $derived(
-    gameState != null && (isLocal(playerConfig, gameState.activePlayer) || decisionTargetsHuman)
+    gameState != null && (
+      (gameState.phase === PHASES.SETUP && !gameState.setupComplete[local])
+      || (gameState.phase !== PHASES.SETUP && (isLocal(playerConfig, gameState.activePlayer) || decisionTargetsHuman))
+    )
+  );
+
+  // During setup, actions should be attributed to the local player (not activePlayer)
+  const actingPlayer = $derived(
+    gameState?.phase === PHASES.SETUP ? local : (gameState?.activePlayer ?? 0)
   );
 
   // Reactive drag state from external module
@@ -829,7 +850,7 @@
 
   function handleMulligan() {
     if (!gameState || !canLocalAct) return;
-    tryAction(mulliganAction(gameState.activePlayer));
+    tryAction(mulliganAction(actingPlayer));
   }
 
   function handleEndTurn() {
@@ -837,15 +858,15 @@
 
     // Check if staging has cards — prompt human player for confirmation
     const staging = gameState.zones['staging'];
-    if (staging?.cards.length > 0 && isLocal(playerConfig, gameState.activePlayer)) {
+    if (staging?.cards.length > 0 && isLocal(playerConfig, actingPlayer)) {
       stagingModal?.show([...staging.cards], () => {
-        tryAction(endTurn(gameState!.activePlayer));
+        tryAction(endTurn(actingPlayer));
         advance();
       });
       return;
     }
 
-    tryAction(endTurn(gameState.activePlayer));
+    tryAction(endTurn(actingPlayer));
     advance();
   }
 

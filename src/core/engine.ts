@@ -611,7 +611,7 @@ function executeDiceRoll<T extends CardTemplate>(
 
 function executeEndTurn<T extends CardTemplate>(
   state: GameState<T>,
-  _action: EndTurnAction
+  action: EndTurnAction
 ): void {
   // Safety net: if a decision is pending, auto-resolve instead of ending turn
   if (state.pendingDecision) {
@@ -634,8 +634,7 @@ function executeEndTurn<T extends CardTemplate>(
 
   // Setup phase: track per-player completion, transition to playing when both done
   if (state.phase === PHASES.SETUP) {
-    state.setupComplete[state.activePlayer] = true;
-    state.currentTurn.ended = true;
+    state.setupComplete[action.player] = true;
 
     if (state.setupComplete[0] && state.setupComplete[1]) {
       // Both done → transition to playing phase
@@ -643,10 +642,6 @@ function executeEndTurn<T extends CardTemplate>(
       state.turnNumber = 1;
       state.activePlayer = 0;
       state.currentTurn = createTurn(1, 0);
-    } else {
-      // Switch to the other player's setup turn
-      state.activePlayer = state.activePlayer === 0 ? 1 : 0;
-      state.currentTurn = createTurn(0, state.activePlayer);
     }
     return;
   }
