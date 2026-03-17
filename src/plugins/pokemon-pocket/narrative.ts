@@ -180,6 +180,11 @@ export function formatCardReference(card: ReadableCard): string[] {
     const sub = subtypes && subtypes.length > 0 ? `, ${subtypes.join('/')}` : '';
     lines.push(`${card.name} \u2014 Trainer${sub}`);
 
+    const effect = card.effect as string | undefined;
+    if (effect) {
+      lines.push(`  ${effect}`);
+    }
+
     const rules = card.rules as string[] | undefined;
     if (rules && rules.length > 0) {
       for (const rule of rules) {
