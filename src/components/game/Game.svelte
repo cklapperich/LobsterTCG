@@ -908,26 +908,27 @@
     advance();
   }
 
-  // Counter handlers
+  // Counter helpers
+  function removeCounterFromSource(source: string, counterId: string) {
+    if (source.startsWith('zone:')) {
+      tryAction(removeZoneCounter(local, source.slice(5), counterId, 1));
+    } else if (!source.startsWith('widget:') && source !== 'tray') {
+      tryAction(removeCounter(local, source, counterId, 1));
+    }
+  }
+
   function handleCounterDrop(counterId: string, cardInstanceId: string) {
     if (!gameState || !canLocalAct) return;
     const drag = counterDragStore.current;
     if (!drag) return;
-    const isWidgetSource = drag.source.startsWith('widget:');
-    const isZoneSource = drag.source.startsWith('zone:');
-    const sourceCardId = !isWidgetSource && !isZoneSource && drag.source !== 'tray' ? drag.source : null;
+    const { source } = drag;
     endCounterDrag();
 
-    if (sourceCardId) {
-      tryAction(removeCounter(local, sourceCardId, counterId, 1));
-    } else if (isZoneSource) {
-      const sourceZoneKey = drag.source.slice(5); // strip "zone:"
-      tryAction(removeZoneCounter(local, sourceZoneKey, counterId, 1));
-    }
+    removeCounterFromSource(source, counterId);
     tryAction(addCounter(local, cardInstanceId, counterId, 1));
 
     // If dropped from energy zone widget, mark energy as attached
-    if (isWidgetSource && gameState.pluginState) {
+    if (source.startsWith('widget:') && gameState.pluginState) {
       const ps = gameState.pluginState as any;
       const zone = ps.energyZone?.[local];
       if (zone && !zone.attached) {
@@ -941,17 +942,10 @@
     if (!gameState || !canLocalAct) return;
     const drag = counterDragStore.current;
     if (!drag) return;
-    const isWidgetSource = drag.source.startsWith('widget:');
-    const isZoneSource = drag.source.startsWith('zone:');
-    const sourceCardId = !isWidgetSource && !isZoneSource && drag.source !== 'tray' ? drag.source : null;
+    const { source } = drag;
     endCounterDrag();
 
-    if (sourceCardId) {
-      tryAction(removeCounter(local, sourceCardId, counterId, 1));
-    } else if (isZoneSource) {
-      const sourceZoneKey = drag.source.slice(5);
-      tryAction(removeZoneCounter(local, sourceZoneKey, counterId, 1));
-    }
+    removeCounterFromSource(source, counterId);
     tryAction(addZoneCounter(local, zoneKey, counterId, 1));
   }
 
@@ -959,16 +953,10 @@
     if (!gameState || !canLocalAct) return;
     const drag = counterDragStore.current;
     if (!drag || drag.source === 'tray') { endCounterDrag(); return; }
-    const isZoneSource = drag.source.startsWith('zone:');
-    const { counterId } = drag;
+    const { counterId, source } = drag;
     endCounterDrag();
 
-    if (isZoneSource) {
-      const sourceZoneKey = drag.source.slice(5);
-      tryAction(removeZoneCounter(local, sourceZoneKey, counterId, 1));
-    } else {
-      tryAction(removeCounter(local, drag.source, counterId, 1));
-    }
+    removeCounterFromSource(source, counterId);
   }
 
   function handleClearCounters() {

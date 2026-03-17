@@ -4,7 +4,7 @@ import { VISIBILITY } from '../../core/types/card';
 import { ACTION_TYPES, PHASES, CARD_FLAGS } from '../../core/types/constants';
 import type { PostHookResult, PreHookResult, Plugin, PrioritizedPostHook } from '../../core/plugin/types';
 import type { PocketCardTemplate } from './types';
-import { consolidateCountersToTop } from '../../core/engine';
+import { consolidateCountersToTop, findCardInZones } from '../../core/engine';
 import { unpackMoveAction } from '../../core/action-utils';
 import { addZoneCounter } from '../../core/action';
 import { systemLog } from '../../core/game-log';
@@ -267,26 +267,22 @@ function tallyEnergyOnDiscard(_state: PocketState, action: Action, prevState: Po
  */
 function redirectEnergyOnDiscard(state: PocketState, action: Action): PreHookResult {
   if (action.type !== ACTION_TYPES.ADD_COUNTER) return { outcome: 'continue' as const };
-  const { counterType, cardInstanceId } = action as import('../../core/types/action').AddCounterAction;
+  const { counterType, cardInstanceId, amount } = action;
 
   if (!ENERGY_COUNTER_TYPE_SET.has(counterType)) return { outcome: 'continue' as const };
 
   // Find which zone the target card is in
-  for (const [zoneKey, zone] of Object.entries(state.zones)) {
-    if (!zoneKey.endsWith('_discard') || zoneKey.endsWith('_energy_discard')) continue;
-    const found = zone.cards.some(c => c.instanceId === cardInstanceId);
-    if (!found) continue;
-
-    // Redirect to energy_discard
-    const ownerPrefix = zoneKey.split('_')[0];
-    const energyDiscardKey = `${ownerPrefix}_${ZONE_IDS.ENERGY_DISCARD}`;
-    return {
-      outcome: 'replace' as const,
-      action: addZoneCounter(action.player, energyDiscardKey, counterType, (action as any).amount ?? 1),
-    };
+  const result = findCardInZones(state, cardInstanceId);
+  if (!result || !result.zone.key.endsWith('_discard') || result.zone.key.endsWith('_energy_discard')) {
+    return { outcome: 'continue' as const };
   }
 
-  return { outcome: 'continue' as const };
+  const ownerPrefix = result.zone.key.split('_')[0];
+  const energyDiscardKey = `${ownerPrefix}_${ZONE_IDS.ENERGY_DISCARD}`;
+  return {
+    outcome: 'replace' as const,
+    action: addZoneCounter(action.player, energyDiscardKey, counterType, amount),
+  };
 }
 
 /**
@@ -296,7 +292,7 @@ function redirectEnergyOnDiscard(state: PocketState, action: Action): PreHookRes
  */
 function redirectZoneCounterOnDiscard(_state: PocketState, action: Action): PreHookResult {
   if (action.type !== ACTION_TYPES.ADD_ZONE_COUNTER) return { outcome: 'continue' as const };
-  const { zoneKey, counterType, amount } = action as import('../../core/types/action').AddZoneCounterAction;
+  const { zoneKey, counterType, amount } = action;
 
   // Only redirect for regular discard zones, not energy_discard
   if (!zoneKey.endsWith('_discard') || zoneKey.endsWith('_energy_discard')) {

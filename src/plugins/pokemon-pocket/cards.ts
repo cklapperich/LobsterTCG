@@ -56,10 +56,9 @@ function convertAbilities(abilities?: TCGdexCard['abilities']): PocketAbility[] 
 }
 
 function getImageUrl(card: TCGdexCard): string {
-  if (card.image) {
-    return card.image + '/high.webp';
-  }
-  return `https://assets.tcgdex.net/en/tcgp/${card.set.id}/${card.localId}/high.webp`;
+  const setId = card.set.id;
+  const localId = card.localId;
+  return `https://limitlesstcg.nyc3.cdn.digitaloceanspaces.com/pocket/${setId}/${setId}_${localId}_EN.webp`;
 }
 
 function convertCard(card: TCGdexCard): PocketCardTemplate {
