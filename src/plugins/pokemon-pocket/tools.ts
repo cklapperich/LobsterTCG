@@ -7,7 +7,7 @@ import { tool as aiTool } from 'ai';
 import { z } from 'zod';
 import { INSTANCE_ID_PREFIX, ACTION_TYPES } from '../../core/types/constants';
 import { resolveCardName } from '../../core/readable';
-import { declareAction, setOrientation, moveCardStack, addCounter } from '../../core/action';
+import { declareAction, setOrientation, moveCardStack, addCounter, removeCounter, addZoneCounter, removeZoneCounter } from '../../core/action';
 import { type ToolContext } from '../../core/ai-tools';
 import { ZONE_IDS } from './zones';
 import {
@@ -171,6 +171,64 @@ export function createAwardPointsTool(ctx: ToolContext): ToolSet[string] {
   });
 }
 
+/**
+ * Transfer energy between cards and/or the energy_discard zone.
+ * Handles: card→card, card→energy_discard, energy_discard→card.
+ */
+export function createTransferEnergyTool(ctx: ToolContext): ToolSet[string] {
+  const p = ctx.playerIndex;
+  return aiTool({
+    description: 'Transfer energy counters between Pokemon or the energy discard zone. Use when recovering energy or manually discarding energy.',
+    inputSchema: z.object({
+      from: z.string().describe('Source: card name in a zone, or "your_energy_discard" / "opponent_energy_discard"'),
+      fromZone: z.string().optional().describe('Zone key of source card (required if from is a card name)'),
+      to: z.string().describe('Destination: card name in a zone, or "your_energy_discard" / "opponent_energy_discard"'),
+      toZone: z.string().optional().describe('Zone key of destination card (required if to is a card name)'),
+      energyType: z.string().describe('Energy counter type (e.g. "fire_energy", "water_energy")'),
+      amount: z.number().min(1).default(1).describe('Amount of energy to transfer'),
+    }),
+    async execute(input) {
+      const results: string[] = [];
+
+      // Resolve "from" — zone counter or card counter
+      const fromIsZone = input.from.endsWith('_energy_discard');
+      if (fromIsZone) {
+        const zoneKey = tzp(ctx, input.from);
+        const r = await ctx.execute(removeZoneCounter(p, zoneKey, input.energyType, input.amount));
+        results.push(typeof r === 'string' ? r : 'Removed from energy discard');
+      } else {
+        const fromZone = tzp(ctx, input.fromZone ?? '');
+        const r = await ctx.execute((state) => {
+          const cardId = input.from.startsWith(INSTANCE_ID_PREFIX)
+            ? input.from
+            : resolveCardName(state, input.from, fromZone);
+          return removeCounter(p, cardId, input.energyType, input.amount);
+        });
+        results.push(typeof r === 'string' ? r : 'Removed from card');
+      }
+
+      // Resolve "to" — zone counter or card counter
+      const toIsZone = input.to.endsWith('_energy_discard');
+      if (toIsZone) {
+        const zoneKey = tzp(ctx, input.to);
+        const r = await ctx.execute(addZoneCounter(p, zoneKey, input.energyType, input.amount));
+        results.push(typeof r === 'string' ? r : 'Added to energy discard');
+      } else {
+        const toZone = tzp(ctx, input.toZone ?? '');
+        const r = await ctx.execute((state) => {
+          const cardId = input.to.startsWith(INSTANCE_ID_PREFIX)
+            ? input.to
+            : resolveCardName(state, input.to, toZone);
+          return addCounter(p, cardId, input.energyType, input.amount);
+        });
+        results.push(typeof r === 'string' ? r : 'Added to card');
+      }
+
+      return results.join('; ');
+    },
+  });
+}
+
 export function createPocketCustomTools(ctx: ToolContext): ToolSet {
   const p = ctx.playerIndex;
 
@@ -231,9 +289,10 @@ export function createPocketCustomTools(ctx: ToolContext): ToolSet {
     set_status: createSetStatusTool(ctx),
     attach_energy: createAttachEnergyTool(ctx),
     award_points: createAwardPointsTool(ctx),
+    transfer_energy: createTransferEnergyTool(ctx),
 
     discard_pokemon_cards: aiTool({
-      description: 'Discard all cards in a zone. Moves every card to that zone owner\'s discard pile. Use this when any pokemon gets knocked out.',
+      description: 'Discard all cards in a zone. Moves every card to that zone owner\'s discard pile. Energy counters are auto-tallied to the energy discard readout. Use this when any pokemon gets knocked out.',
       inputSchema: z.object({
         zone: z.string().describe('Zone key to discard all cards from (e.g. "your_active", "your_bench_1")'),
       }),

@@ -30,6 +30,9 @@ import type {
   AddCounterAction,
   RemoveCounterAction,
   SetCounterAction,
+  AddZoneCounterAction,
+  RemoveZoneCounterAction,
+  SetZoneCounterAction,
   CoinFlipAction,
   DiceRollAction,
   EndTurnAction,
@@ -94,6 +97,7 @@ function createZone<T extends CardTemplate>(
     config,
     owner,
     cards: [],
+    ...(config.zoneCounters ? { counters: {} } : {}),
   };
 }
 
@@ -940,6 +944,60 @@ function executeRevealHand<T extends CardTemplate>(
 }
 
 // ============================================================================
+// Zone Counter Executors
+// ============================================================================
+
+function executeAddZoneCounter<T extends CardTemplate>(
+  state: GameState<T>,
+  action: AddZoneCounterAction
+): string | null {
+  const zone = getZone(state, action.zoneKey);
+  if (!zone) return `Zone not found: ${action.zoneKey}`;
+  if (!zone.config.zoneCounters) return `Zone "${action.zoneKey}" does not support zone counters`;
+  if (!zone.counters) zone.counters = {};
+
+  const current = zone.counters[action.counterType] ?? 0;
+  zone.counters[action.counterType] = current + action.amount;
+  return null;
+}
+
+function executeRemoveZoneCounter<T extends CardTemplate>(
+  state: GameState<T>,
+  action: RemoveZoneCounterAction
+): string | null {
+  const zone = getZone(state, action.zoneKey);
+  if (!zone) return `Zone not found: ${action.zoneKey}`;
+  if (!zone.config.zoneCounters) return `Zone "${action.zoneKey}" does not support zone counters`;
+  if (!zone.counters) return null;
+
+  const current = zone.counters[action.counterType] ?? 0;
+  const newValue = Math.max(0, current - action.amount);
+  if (newValue === 0) {
+    delete zone.counters[action.counterType];
+  } else {
+    zone.counters[action.counterType] = newValue;
+  }
+  return null;
+}
+
+function executeSetZoneCounter<T extends CardTemplate>(
+  state: GameState<T>,
+  action: SetZoneCounterAction
+): string | null {
+  const zone = getZone(state, action.zoneKey);
+  if (!zone) return `Zone not found: ${action.zoneKey}`;
+  if (!zone.config.zoneCounters) return `Zone "${action.zoneKey}" does not support zone counters`;
+  if (!zone.counters) zone.counters = {};
+
+  if (action.value <= 0) {
+    delete zone.counters[action.counterType];
+  } else {
+    zone.counters[action.counterType] = action.value;
+  }
+  return null;
+}
+
+// ============================================================================
 // Zone Capacity Checks
 // ============================================================================
 
@@ -1164,6 +1222,21 @@ export function executeAction<T extends CardTemplate>(
     case ACTION_TYPES.DECLARE_ACTION:
       gameLog(state, action.message ?? `${action.name} declared`);
       break;
+    case ACTION_TYPES.ADD_ZONE_COUNTER: {
+      const azcErr = executeAddZoneCounter(state, action);
+      if (azcErr) { gameLog(state, azcErr); return azcErr; }
+      break;
+    }
+    case ACTION_TYPES.REMOVE_ZONE_COUNTER: {
+      const rzcErr = executeRemoveZoneCounter(state, action);
+      if (rzcErr) { gameLog(state, rzcErr); return rzcErr; }
+      break;
+    }
+    case ACTION_TYPES.SET_ZONE_COUNTER: {
+      const szcErr = executeSetZoneCounter(state, action);
+      if (szcErr) { gameLog(state, szcErr); return szcErr; }
+      break;
+    }
   }
 
   return null;

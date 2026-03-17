@@ -26,7 +26,7 @@
   import type { Action } from '../../core/types/action';
   import type { ActionExecutor } from '../../core/action-executor';
   import { executeAction, loadDeck, findCardInZones, checkOpponentZone } from '../../core/engine';
-  import { moveCard, moveCardStack, flipCard, startTurn, endTurn, setOrientation, createDecision, resolveDecision, revealHand, mulligan as mulliganAction, draw, coinFlip, addCounter, removeCounter, setCounter } from '../../core/action';
+  import { moveCard, moveCardStack, flipCard, startTurn, endTurn, setOrientation, createDecision, resolveDecision, revealHand, mulligan as mulliganAction, draw, coinFlip, addCounter, removeCounter, setCounter, addZoneCounter, removeZoneCounter } from '../../core/action';
   import { toReadableState } from '../../core/readable';
   import { PluginManager } from '../../core/plugin/plugin-manager';
   import { VISIBILITY } from '../../core/types/card';
@@ -81,6 +81,9 @@
     [ACTION_TYPES.ADD_COUNTER]: 'cursor',
     [ACTION_TYPES.REMOVE_COUNTER]: 'cursor',
     [ACTION_TYPES.SET_COUNTER]: 'cursor',
+    [ACTION_TYPES.ADD_ZONE_COUNTER]: 'cursor',
+    [ACTION_TYPES.REMOVE_ZONE_COUNTER]: 'cursor',
+    [ACTION_TYPES.SET_ZONE_COUNTER]: 'cursor',
   };
 
   // Props
@@ -451,8 +454,11 @@
       return blocked;
     }
 
-    // Run post-hooks on the live state (they may mutate it)
-    pluginManager.runPostHooks(gameState, action, gameState);
+    // Run post-hooks on the live state — snapshot (taken before execute) serves as prevState
+    const followUpActions = pluginManager.runPostHooks(gameState, action, snapshot);
+    for (const followUp of followUpActions) {
+      executeAction(gameState, followUp);
+    }
 
     // Splash announcements for notable actions
     if (action.type === ACTION_TYPES.DECLARE_ACTION) {
@@ -908,11 +914,15 @@
     const drag = counterDragStore.current;
     if (!drag) return;
     const isWidgetSource = drag.source.startsWith('widget:');
-    const sourceCardId = !isWidgetSource && drag.source !== 'tray' ? drag.source : null;
+    const isZoneSource = drag.source.startsWith('zone:');
+    const sourceCardId = !isWidgetSource && !isZoneSource && drag.source !== 'tray' ? drag.source : null;
     endCounterDrag();
 
     if (sourceCardId) {
       tryAction(removeCounter(local, sourceCardId, counterId, 1));
+    } else if (isZoneSource) {
+      const sourceZoneKey = drag.source.slice(5); // strip "zone:"
+      tryAction(removeZoneCounter(local, sourceZoneKey, counterId, 1));
     }
     tryAction(addCounter(local, cardInstanceId, counterId, 1));
 
@@ -926,14 +936,39 @@
     }
   }
 
+  // Counter drop on a zone-counter zone (e.g. energy_discard)
+  function handleZoneCounterDrop(counterId: string, zoneKey: string) {
+    if (!gameState || !canLocalAct) return;
+    const drag = counterDragStore.current;
+    if (!drag) return;
+    const isWidgetSource = drag.source.startsWith('widget:');
+    const isZoneSource = drag.source.startsWith('zone:');
+    const sourceCardId = !isWidgetSource && !isZoneSource && drag.source !== 'tray' ? drag.source : null;
+    endCounterDrag();
+
+    if (sourceCardId) {
+      tryAction(removeCounter(local, sourceCardId, counterId, 1));
+    } else if (isZoneSource) {
+      const sourceZoneKey = drag.source.slice(5);
+      tryAction(removeZoneCounter(local, sourceZoneKey, counterId, 1));
+    }
+    tryAction(addZoneCounter(local, zoneKey, counterId, 1));
+  }
+
   function handleCounterReturn() {
     if (!gameState || !canLocalAct) return;
     const drag = counterDragStore.current;
     if (!drag || drag.source === 'tray') { endCounterDrag(); return; }
-    const { counterId, source: sourceCardId } = drag;
+    const isZoneSource = drag.source.startsWith('zone:');
+    const { counterId } = drag;
     endCounterDrag();
 
-    tryAction(removeCounter(local, sourceCardId, counterId, 1));
+    if (isZoneSource) {
+      const sourceZoneKey = drag.source.slice(5);
+      tryAction(removeZoneCounter(local, sourceZoneKey, counterId, 1));
+    } else {
+      tryAction(removeCounter(local, drag.source, counterId, 1));
+    }
   }
 
   function handleClearCounters() {
@@ -1075,6 +1110,7 @@
           onToggleVisibility={handleToggleVisibility}
           onZoneContextMenu={handleZoneContextMenu}
           onCounterDrop={handleCounterDrop}
+          onZoneCounterDrop={handleZoneCounterDrop}
           onBrowse={handleBrowseZone}
         >
           <SplashAnnouncement text={splashText} duration={settings.splashDuration} />

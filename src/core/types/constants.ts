@@ -25,7 +25,10 @@ export const ACTION_TYPES = {
   MULLIGAN: 'mulligan',
   SWAP_CARD_STACKS: 'swap_card_stacks',
   REARRANGE_ZONE: 'rearrange_zone',
-  DECLARE_ACTION:'declare_action'
+  DECLARE_ACTION:'declare_action',
+  ADD_ZONE_COUNTER: 'add_zone_counter',
+  REMOVE_ZONE_COUNTER: 'remove_zone_counter',
+  SET_ZONE_COUNTER: 'set_zone_counter',
 } as const;
 export type ActionType = typeof ACTION_TYPES[keyof typeof ACTION_TYPES];
 

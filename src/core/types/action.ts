@@ -176,6 +176,28 @@ export interface RearrangeZoneAction extends BaseAction {
   fromPosition: typeof POSITIONS.TOP | typeof POSITIONS.BOTTOM;
 }
 
+// Zone Counter Actions
+export interface AddZoneCounterAction extends BaseAction {
+  type: typeof ACTION_TYPES.ADD_ZONE_COUNTER;
+  zoneKey: string;
+  counterType: string;
+  amount: number;
+}
+
+export interface RemoveZoneCounterAction extends BaseAction {
+  type: typeof ACTION_TYPES.REMOVE_ZONE_COUNTER;
+  zoneKey: string;
+  counterType: string;
+  amount: number;
+}
+
+export interface SetZoneCounterAction extends BaseAction {
+  type: typeof ACTION_TYPES.SET_ZONE_COUNTER;
+  zoneKey: string;
+  counterType: string;
+  value: number;
+}
+
 // Generic Declaration Action (plugin-defined subtypes via declarationType)
 export interface DeclareAction extends BaseAction {
   type: typeof ACTION_TYPES.DECLARE_ACTION;
@@ -212,4 +234,7 @@ export type Action =
   | MulliganAction
   | SwapCardStacksAction
   | RearrangeZoneAction
-  | DeclareAction;
+  | DeclareAction
+  | AddZoneCounterAction
+  | RemoveZoneCounterAction
+  | SetZoneCounterAction;

@@ -23,6 +23,7 @@
     onToggleVisibility?: (cardInstanceId: string) => void;
     onZoneContextMenu?: (zoneKey: string, zoneName: string, cardCount: number, zoneConfig: ZoneConfig, x: number, y: number) => void;
     onCounterDrop?: (counterId: string, cardInstanceId: string) => void;
+    onZoneCounterDrop?: (counterId: string, zoneKey: string) => void;
     onBrowse?: (zoneKey: string, zoneName: string) => void;
     boardWidgets?: BoardWidget[];
     playmatImage?: string;
@@ -41,6 +42,7 @@
     onToggleVisibility,
     onZoneContextMenu,
     onCounterDrop,
+    onZoneCounterDrop,
     onBrowse,
     boardWidgets = [],
     playmatImage,
@@ -282,6 +284,7 @@
             {onToggleVisibility}
             {onZoneContextMenu}
             {onCounterDrop}
+            {onZoneCounterDrop}
             onBrowse={isBrowsable ? onBrowse : undefined}
           />
           {#if slotWidgets?.below}
@@ -345,6 +348,7 @@
                 {onToggleVisibility}
                 {onZoneContextMenu}
                 {onCounterDrop}
+                {onZoneCounterDrop}
                 onBrowse={isBrowsable ? onBrowse : undefined}
               />
             </div>

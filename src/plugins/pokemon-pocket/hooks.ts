@@ -2,10 +2,11 @@ import type { Action } from '../../core/types/action';
 import type { GameState } from '../../core/types/game';
 import { VISIBILITY } from '../../core/types/card';
 import { ACTION_TYPES, PHASES, CARD_FLAGS } from '../../core/types/constants';
-import type { PostHookResult, Plugin, PrioritizedPostHook } from '../../core/plugin/types';
+import type { PostHookResult, PreHookResult, Plugin, PrioritizedPostHook } from '../../core/plugin/types';
 import type { PocketCardTemplate } from './types';
 import { consolidateCountersToTop } from '../../core/engine';
 import { unpackMoveAction } from '../../core/action-utils';
+import { addZoneCounter } from '../../core/action';
 import { systemLog } from '../../core/game-log';
 import {
   isBasicPokemon,
@@ -21,7 +22,9 @@ import {
   DEGREES_TO_STATUS,
   POCKET_DECLARATION_TYPES,
   POINTS_TO_WIN,
+  ENERGY_COUNTER_TYPES,
 } from './constants';
+import { ZONE_IDS } from './zones';
 import { getPluginState, advanceEnergyZone } from './plugin-state';
 
 type PocketState = Readonly<GameState<PocketCardTemplate>>;
@@ -213,6 +216,101 @@ export function modifyReadableState(
   return readable;
 }
 
+// Set of all energy counter type strings for quick lookup
+const ENERGY_COUNTER_TYPE_SET = new Set(Object.values(ENERGY_COUNTER_TYPES));
+
+// ── Post-Hooks: Auto-Tally Energy on KO/Discard ─────────────────
+
+/**
+ * When Pokemon are moved from field zones to discard, tally their energy
+ * counters into the owner's energy_discard zone. Uses prevState to read
+ * counters before transferCountersOnRemoval clears them.
+ */
+function tallyEnergyOnDiscard(_state: PocketState, action: Action, prevState: PocketState): PostHookResult {
+  const move = unpackMoveAction(action);
+  if (!move) return {};
+  if (!move.toZone.endsWith('_discard') || move.toZone.endsWith('_energy_discard')) return {};
+  if (!isFieldZone(move.fromZone)) return {};
+
+  const followUpActions: Action[] = [];
+  const ownerPrefix = move.toZone.split('_')[0]; // "player1" or "player2"
+  const energyDiscardKey = `${ownerPrefix}_${ZONE_IDS.ENERGY_DISCARD}`;
+  const ownerIndex = ownerPrefix === 'player1' ? 0 : 1;
+
+  // Read counters from ALL cards in the source zone in prevState (before move)
+  const prevFromZone = prevState.zones[move.fromZone];
+  if (!prevFromZone) return {};
+
+  for (const cardId of move.allCardIds) {
+    const prevCard = prevFromZone.cards.find(c => c.instanceId === cardId);
+    if (!prevCard) continue;
+
+    for (const [counterType, amount] of Object.entries(prevCard.counters)) {
+      if (!ENERGY_COUNTER_TYPE_SET.has(counterType) || amount <= 0) continue;
+      followUpActions.push(addZoneCounter(ownerIndex as 0 | 1, energyDiscardKey, counterType, amount));
+    }
+  }
+
+  // Also check if counters were consolidated to the top card (transferCountersOnRemoval)
+  // If the moved card was the top card, counters from below would have been transferred to it
+  // before this hook runs. prevState captures the state before the move, so we already
+  // have the correct counter values.
+
+  return followUpActions.length > 0 ? { followUpActions } : {};
+}
+
+// ── Pre-Hooks: Redirect Energy Counters on Discard Pile ─────────
+
+/**
+ * If an energy counter is added to a card in the discard pile,
+ * redirect it to the owner's energy_discard zone instead.
+ */
+function redirectEnergyOnDiscard(state: PocketState, action: Action): PreHookResult {
+  if (action.type !== ACTION_TYPES.ADD_COUNTER) return { outcome: 'continue' as const };
+  const { counterType, cardInstanceId } = action as import('../../core/types/action').AddCounterAction;
+
+  if (!ENERGY_COUNTER_TYPE_SET.has(counterType)) return { outcome: 'continue' as const };
+
+  // Find which zone the target card is in
+  for (const [zoneKey, zone] of Object.entries(state.zones)) {
+    if (!zoneKey.endsWith('_discard') || zoneKey.endsWith('_energy_discard')) continue;
+    const found = zone.cards.some(c => c.instanceId === cardInstanceId);
+    if (!found) continue;
+
+    // Redirect to energy_discard
+    const ownerPrefix = zoneKey.split('_')[0];
+    const energyDiscardKey = `${ownerPrefix}_${ZONE_IDS.ENERGY_DISCARD}`;
+    return {
+      outcome: 'replace' as const,
+      action: addZoneCounter(action.player, energyDiscardKey, counterType, (action as any).amount ?? 1),
+    };
+  }
+
+  return { outcome: 'continue' as const };
+}
+
+/**
+ * If a zone counter is added to a regular discard zone (not energy_discard),
+ * redirect it to the owner's energy_discard zone.
+ * This handles the case where a user drags a counter onto the discard pile background.
+ */
+function redirectZoneCounterOnDiscard(_state: PocketState, action: Action): PreHookResult {
+  if (action.type !== ACTION_TYPES.ADD_ZONE_COUNTER) return { outcome: 'continue' as const };
+  const { zoneKey, counterType, amount } = action as import('../../core/types/action').AddZoneCounterAction;
+
+  // Only redirect for regular discard zones, not energy_discard
+  if (!zoneKey.endsWith('_discard') || zoneKey.endsWith('_energy_discard')) {
+    return { outcome: 'continue' as const };
+  }
+
+  const ownerPrefix = zoneKey.split('_')[0];
+  const energyDiscardKey = `${ownerPrefix}_${ZONE_IDS.ENERGY_DISCARD}`;
+  return {
+    outcome: 'replace' as const,
+    action: addZoneCounter(action.player, energyDiscardKey, counterType, amount),
+  };
+}
+
 // ── Hook Registration ────────────────────────────────────────────
 
 const MOVE_POST_HOOKS: PrioritizedPostHook<PocketCardTemplate>[] = [
@@ -220,6 +318,7 @@ const MOVE_POST_HOOKS: PrioritizedPostHook<PocketCardTemplate>[] = [
   { hook: stampPlayedThisTurn, priority: 60 },
   { hook: reorderFieldZone, priority: 200 },
   { hook: consolidateCountersAfterReorder, priority: 250 },
+  { hook: tallyEnergyOnDiscard, priority: 300 },
 ];
 
 export const pocketHooksPlugin: Plugin<PocketCardTemplate> = {
@@ -241,5 +340,12 @@ export const pocketHooksPlugin: Plugin<PocketCardTemplate> = {
       { hook: flipFieldFaceUpOnSetupComplete, priority: 100 },
     ],
   },
-  preHooks: {},
+  preHooks: {
+    [ACTION_TYPES.ADD_COUNTER]: [
+      { hook: redirectEnergyOnDiscard, priority: 100 },
+    ],
+    [ACTION_TYPES.ADD_ZONE_COUNTER]: [
+      { hook: redirectZoneCounterOnDiscard, priority: 100 },
+    ],
+  },
 };

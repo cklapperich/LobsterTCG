@@ -11,6 +11,9 @@ import type {
   AddCounterAction,
   RemoveCounterAction,
   SetCounterAction,
+  AddZoneCounterAction,
+  RemoveZoneCounterAction,
+  SetZoneCounterAction,
   CoinFlipAction,
   DiceRollAction,
   StartTurnAction,
@@ -260,4 +263,31 @@ export function declareAction(
     ...(metadata ? { metadata } : {}),
     ...(message ? { message } : {}),
   };
+}
+
+export function addZoneCounter(
+  player: PlayerIndex,
+  zoneKey: string,
+  counterType: string,
+  amount: number = 1
+): AddZoneCounterAction {
+  return { type: ACTION_TYPES.ADD_ZONE_COUNTER, player, zoneKey, counterType, amount };
+}
+
+export function removeZoneCounter(
+  player: PlayerIndex,
+  zoneKey: string,
+  counterType: string,
+  amount: number = 1
+): RemoveZoneCounterAction {
+  return { type: ACTION_TYPES.REMOVE_ZONE_COUNTER, player, zoneKey, counterType, amount };
+}
+
+export function setZoneCounter(
+  player: PlayerIndex,
+  zoneKey: string,
+  counterType: string,
+  value: number
+): SetZoneCounterAction {
+  return { type: ACTION_TYPES.SET_ZONE_COUNTER, player, zoneKey, counterType, value };
 }

@@ -26,6 +26,7 @@ export type ReadableCard = {
 export interface ReadableZone {
   count: number;
   cards: ReadableCard[];
+  counters?: Record<string, number>;
 }
 
 /**
@@ -226,10 +227,14 @@ function convertZone<T extends CardTemplate>(
     readableCards.push(convertCard(card, displayName));
   }
 
-  return {
+  const result: ReadableZone = {
     count: zone.cards.length,
     cards: condenseCards(readableCards),
   };
+  if (zone.counters && Object.keys(zone.counters).length > 0) {
+    result.counters = { ...zone.counters };
+  }
+  return result;
 }
 
 /**

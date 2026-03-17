@@ -5,6 +5,7 @@ export const ZONE_IDS = {
   ACTIVE: 'active',
   BENCH: ['bench_1', 'bench_2', 'bench_3'] as const,
   DISCARD: 'discard',
+  ENERGY_DISCARD: 'energy_discard',
   STADIUM: 'stadium',
 } as const;
 
@@ -18,5 +19,6 @@ export const ALL_ZONE_IDS = [
   ZONE_IDS.ACTIVE,
   ...ZONE_IDS.BENCH,
   ZONE_IDS.DISCARD,
+  ZONE_IDS.ENERGY_DISCARD,
   ZONE_IDS.STADIUM,
 ] as const;
