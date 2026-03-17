@@ -419,7 +419,6 @@
     align-self: start;
     align-items: center;
     justify-items: center;
-    overflow: hidden;
     min-width: 0;
   }
 
