@@ -106,6 +106,7 @@ export interface DiceRollAction extends BaseAction {
 // Game Flow Actions
 export interface StartTurnAction extends BaseAction {
   type: typeof ACTION_TYPES.START_TURN;
+  seed?: number;     // Optional RNG seed for deterministic energy rolls (P2P games)
 }
 
 export interface EndTurnAction extends BaseAction {

@@ -46,7 +46,7 @@ import {
   POINTS_TO_WIN,
   ENERGY_COUNTER_TYPES,
 } from './constants';
-import { getPluginState, initPluginState } from './plugin-state';
+import { getPluginState, initPluginState, rollEnergy } from './plugin-state';
 
 // Reuse standard Pokemon TCG counter images for damage
 import damage10Img from '../pokemon/counters/damage-10.png';
@@ -142,8 +142,8 @@ export function loadPlayerDeck(
   const deckKey = `player${playerIndex + 1}_${ZONE_IDS.DECK}`;
   loadDeck(state, playerIndex, deckKey, deckList, getTemplate, shuffleDeck);
 
-  // Derive energy type pool from deck metadata or Pokemon types
-  deriveEnergyPool(state, deckList);
+  // Derive energy type pool from deck metadata or Pokemon types, and seed initial next energy
+  deriveEnergyPool(state, deckList, playerIndex);
 }
 
 /**
@@ -151,32 +151,36 @@ export function loadPlayerDeck(
  * Prefers deck metadata (energy_types key) if available,
  * falls back to scanning Pokemon types in the deck.
  */
-function deriveEnergyPool(state: GameState<PocketCardTemplate>, deckList: DeckList): void {
+function deriveEnergyPool(state: GameState<PocketCardTemplate>, deckList: DeckList, playerIndex: PlayerIndex): void {
   const ps = getPluginState(state);
   const meta = deckList.metadata as PocketDeckMetadata | undefined;
 
   if (meta?.energy_types && meta.energy_types.length > 0) {
     ps.energyTypePool = [...meta.energy_types];
-    return;
-  }
-
-  // Fallback: scan deck cards for Pokemon types
-  const typeSet = new Set<EnergyType>();
-  for (const zone of Object.values(state.zones)) {
-    for (const card of zone.cards) {
-      const template = card.template as PocketCardTemplate;
-      if (template.supertype === SUPERTYPES.POKEMON && template.types) {
-        for (const t of template.types) {
-          typeSet.add(t);
+  } else {
+    // Fallback: scan deck cards for Pokemon types
+    const typeSet = new Set<EnergyType>();
+    for (const zone of Object.values(state.zones)) {
+      for (const card of zone.cards) {
+        const template = card.template as PocketCardTemplate;
+        if (template.supertype === SUPERTYPES.POKEMON && template.types) {
+          for (const t of template.types) {
+            typeSet.add(t);
+          }
         }
       }
     }
+
+    ps.energyTypePool = Array.from(typeSet);
+    if (ps.energyTypePool.length === 0) {
+      ps.energyTypePool = ['colorless'];
+    }
   }
 
-  ps.energyTypePool = Array.from(typeSet);
-  if (ps.energyTypePool.length === 0) {
-    ps.energyTypePool = ['colorless'];
-  }
+  // Seed initial "next" energy preview for this player.
+  // Random seed is fine here — deck loading runs on the host before state_sync,
+  // so the guest receives the already-rolled value.
+  ps.energyZone[playerIndex].next = rollEnergy(ps.energyTypePool);
 }
 
 /**
@@ -560,8 +564,8 @@ export async function onSetupComplete(_state: GameState<CardTemplate>, executor:
   executor.addLog(`Player ${firstPlayer + 1} goes first!`);
   executor.tryAction(coinFlipAction(0, 1, [isHeads], firstPlayer));
 
-  // Energy zones are initialized by the START_TURN post-hook on turn 1.
-  // This ensures both P2P peers compute identical initial energy deterministically.
+  // Energy zones are pre-seeded during loadPlayerDeck → deriveEnergyPool,
+  // so both P2P peers have identical initial "next" values before state_sync.
 }
 
 // Re-exports

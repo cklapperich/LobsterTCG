@@ -77,13 +77,3 @@ export function advanceEnergyZone(ps: PocketPluginState, playerIndex: number, se
   zone.attached = false;
 }
 
-/**
- * Seed a player's energy zone with an initial "next" preview (no current).
- * Used on turn 1 so both P2P peers initialize identically.
- */
-export function seedEnergyZone(ps: PocketPluginState, playerIndex: number, seed: number): void {
-  const zone = ps.energyZone[playerIndex];
-  zone.current = null;
-  zone.next = rollEnergy(ps.energyTypePool, seed);
-  zone.attached = false;
-}

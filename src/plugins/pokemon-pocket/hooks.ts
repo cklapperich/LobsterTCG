@@ -20,7 +20,7 @@ import {
   DAMAGE_COUNTER_VALUES,
   DEGREES_TO_STATUS,
 } from './constants';
-import { getPluginState, advanceEnergyZone, seedEnergyZone } from './plugin-state';
+import { getPluginState, advanceEnergyZone } from './plugin-state';
 
 type PocketState = Readonly<GameState<PocketCardTemplate>>;
 
@@ -107,29 +107,25 @@ function consolidateCountersAfterReorder(state: PocketState, action: Action): Po
 
 /**
  * Manage the energy zone at the start of each turn.
- * - Turn 1: seed both players' "next" preview (no current energy on turn 1 per Pocket rules)
+ * - Turn 1: skip (both players' "next" already seeded at deck load)
  * - Turn 2+: advance the active player's zone (next → current, roll new next)
- * Uses deterministic seeds so both P2P peers compute identical results.
+ * Uses the random seed from the StartTurnAction so both P2P peers produce identical results.
  */
 function advanceEnergyOnStartTurn(state: PocketState, action: Action): PostHookResult {
   if (action.type !== ACTION_TYPES.START_TURN) return {};
   console.log('[advanceEnergy] phase:', state.phase, 'turnNumber:', state.turnNumber, 'activePlayer:', state.activePlayer);
   if (state.phase !== PHASES.PLAYING) return {};
 
-  const mutableState = state as GameState<PocketCardTemplate>;
-  const ps = getPluginState(mutableState);
-
+  // Turn 1: no advance — both players already have "next" seeded from deck load
   if (state.turnNumber === 1) {
-    // Turn 1: seed both players with a "next" preview only (no current)
-    console.log('[advanceEnergy] SEEDING both players');
-    seedEnergyZone(ps, 0, 100);
-    seedEnergyZone(ps, 1, 101);
-    console.log('[advanceEnergy] AFTER seed', JSON.stringify(ps.energyZone));
+    console.log('[advanceEnergy] Turn 1 — skipping (next already seeded at deck load)');
     return {};
   }
 
-  // Turn 2+: advance active player's zone
-  const seed = state.turnNumber * 100 + state.activePlayer;
+  // Turn 2+: advance active player's zone (next → current, roll new next)
+  const mutableState = state as GameState<PocketCardTemplate>;
+  const ps = getPluginState(mutableState);
+  const seed = (action as import('../../core/types/action').StartTurnAction).seed;
   console.log('[advanceEnergy] BEFORE advance P' + state.activePlayer, JSON.stringify(ps.energyZone));
   advanceEnergyZone(ps, state.activePlayer, seed);
   console.log('[advanceEnergy] AFTER advance P' + state.activePlayer, JSON.stringify(ps.energyZone));

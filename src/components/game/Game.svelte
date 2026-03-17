@@ -214,7 +214,7 @@
     const stKey = `${gs.turnNumber}-${gs.activePlayer}`;
     if (gs.phase === PHASES.PLAYING && stKey !== lastStartTurnKey) {
       lastStartTurnKey = stKey;
-      tryAction(startTurn(gs.activePlayer));
+      tryAction(startTurn(gs.activePlayer, Math.floor(Math.random() * 0x7FFFFFFF)));
     }
 
     if (isLocal(playerConfig, gs.activePlayer)) return; // human's turn, UI handles it

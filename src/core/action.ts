@@ -176,8 +176,8 @@ export function diceRoll(
   return { type: ACTION_TYPES.DICE_ROLL, player, count, sides, results };
 }
 
-export function startTurn(player: PlayerIndex): StartTurnAction {
-  return { type: ACTION_TYPES.START_TURN, player };
+export function startTurn(player: PlayerIndex, seed?: number): StartTurnAction {
+  return { type: ACTION_TYPES.START_TURN, player, seed };
 }
 
 export function endTurn(player: PlayerIndex): EndTurnAction {
