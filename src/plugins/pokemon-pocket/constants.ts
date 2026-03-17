@@ -40,15 +40,17 @@ export const DEGREES_TO_STATUS: Record<string, string> = {
   [ORIENTATIONS.COUNTER_TAPPED]: STATUS_CONDITIONS.ASLEEP,
 };
 
-// Counter IDs — damage only (no burn/poison counters in Pocket)
+// Counter IDs — damage + status
 export const COUNTER_IDS = {
   DAMAGE_10: '10',
   DAMAGE_50: '50',
   DAMAGE_100: '100',
+  BURN: 'burn',
+  POISON: 'poison',
 } as const;
 
 // Counter Categories
-export const COUNTER_CATEGORIES = { DAMAGE: 'damage' } as const;
+export const COUNTER_CATEGORIES = { DAMAGE: 'damage', STATUS: 'status' } as const;
 
 // Damage counter numeric values
 export const DAMAGE_COUNTER_VALUES: Record<string, number> = {
@@ -60,6 +62,8 @@ export const DAMAGE_COUNTER_VALUES: Record<string, number> = {
 // AI-friendly counter type names → internal counter IDs
 export const AI_COUNTER_TYPES: Record<string, string> = {
   damage: COUNTER_IDS.DAMAGE_10,
+  burn: COUNTER_IDS.BURN,
+  poison: COUNTER_IDS.POISON,
 } as const;
 
 // All possible energy types

@@ -160,7 +160,7 @@
     };
     const aiCtrl: PlayerController = {
       takeTurn: () => runAIPhase('turn'),
-      takeSetupTurn: () => runAIPhase('setup'),
+      takeSetupTurn: (po) => runAIPhase('setup', po),
       handleDecision: () => runAIPhase('decision'),
       awaitDecisionResolution: async () => {},
     };
@@ -222,7 +222,7 @@
       for (const pi of [0, 1] as PlayerIndex[]) {
         if (!gs.setupComplete[pi] && !isLocal(playerConfig, pi)) {
           turnFlow = { tag: 'waiting' };
-          await controllers[pi].takeSetupTurn();
+          await controllers[pi].takeSetupTurn(pi);
           turnFlow = { tag: 'local' };
         }
       }
@@ -803,7 +803,7 @@
 
   type AIPhase = 'turn' | 'setup' | 'decision';
 
-  async function runAIPhase(phase: AIPhase) {
+  async function runAIPhase(phase: AIPhase, playerOverride?: 0 | 1) {
     if (!gameState || !hasAI) return;
 
     const currentPlayer = phase === 'decision'
@@ -814,7 +814,10 @@
 
     const { ctx } = createToolContext(
       getToolContextDeps(),
-      phase === 'decision' ? { isDecisionResponse: true } : undefined
+      {
+        isDecisionResponse: phase === 'decision' ? true : undefined,
+        playerOverride,
+      }
     );
 
     try {

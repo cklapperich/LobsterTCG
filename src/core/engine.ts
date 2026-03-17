@@ -1009,6 +1009,8 @@ export function checkOpponentZone<T extends CardTemplate>(
   }
 
   if (!zoneKey) return null;
+  // During setup both players act independently on their own zones
+  if (state.phase === PHASES.SETUP) return null;
   if (action.player === state.activePlayer) return null;
 
   // Moving cards to opponent's discard is normal gameplay (e.g., knockout)

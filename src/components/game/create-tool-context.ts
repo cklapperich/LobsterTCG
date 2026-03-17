@@ -33,12 +33,12 @@ export interface ToolContextDeps {
  */
 export function createToolContext(
   deps: ToolContextDeps,
-  options?: { isDecisionResponse?: boolean }
+  options?: { isDecisionResponse?: boolean; playerOverride?: 0 | 1 }
 ): { ctx: ToolContext; waitForQueue: () => Promise<void> } {
   let queue: Promise<void> = Promise.resolve();
 
   const state = deps.getState();
-  const aiPlayer = state.activePlayer;
+  const aiPlayer = options?.playerOverride ?? state.activePlayer;
   const executor = deps.createExecutor();
   const ctx: ToolContext = {
     playerIndex: aiPlayer,

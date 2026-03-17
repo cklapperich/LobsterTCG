@@ -48,10 +48,12 @@ import {
 } from './constants';
 import { getPluginState, initPluginState, rollEnergy } from './plugin-state';
 
-// Reuse standard Pokemon TCG counter images for damage
+// Reuse standard Pokemon TCG counter images for damage and status
 import damage10Img from '../pokemon/counters/damage-10.png';
 import damage50Img from '../pokemon/counters/damage-50.png';
 import damage100Img from '../pokemon/counters/damage-100.png';
+import burnImg from '../pokemon/counters/burn.png';
+import poisonImg from '../pokemon/counters/poison.png';
 
 // Reuse standard Pokemon coin images
 import coinFrontImg from '../pokemon/coinfront.png';
@@ -72,6 +74,9 @@ const POCKET_COUNTERS: CounterDefinition[] = [
   { id: COUNTER_IDS.DAMAGE_10, name: '10 Damage', imageUrl: damage10Img, category: COUNTER_CATEGORIES.DAMAGE, sortOrder: 1 },
   { id: COUNTER_IDS.DAMAGE_50, name: '50 Damage', imageUrl: damage50Img, category: COUNTER_CATEGORIES.DAMAGE, sortOrder: 2 },
   { id: COUNTER_IDS.DAMAGE_100, name: '100 Damage', imageUrl: damage100Img, category: COUNTER_CATEGORIES.DAMAGE, sortOrder: 3 },
+  // Status counters
+  { id: COUNTER_IDS.BURN, name: 'Burned', imageUrl: burnImg, category: COUNTER_CATEGORIES.STATUS, sortOrder: 1 },
+  { id: COUNTER_IDS.POISON, name: 'Poisoned', imageUrl: poisonImg, category: COUNTER_CATEGORIES.STATUS, sortOrder: 2 },
   // Energy counters
   { id: ENERGY_COUNTER_TYPES.fire, name: 'Fire Energy', imageUrl: fireEnergyImg, category: 'energy', sortOrder: 10 },
   { id: ENERGY_COUNTER_TYPES.water, name: 'Water Energy', imageUrl: waterEnergyImg, category: 'energy', sortOrder: 11 },

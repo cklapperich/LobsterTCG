@@ -45,7 +45,7 @@ export function isLocalZone(cfg: PlayerConfig, zoneKey: string): boolean {
 
 export interface PlayerController {
   takeTurn(): Promise<void>;
-  takeSetupTurn(): Promise<void>;
+  takeSetupTurn(playerOverride?: 0 | 1): Promise<void>;
   handleDecision(): Promise<void>;
   awaitDecisionResolution(): Promise<void>;
 }
