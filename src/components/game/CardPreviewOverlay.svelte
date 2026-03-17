@@ -7,6 +7,11 @@
   }
 
   let { cards, onClose }: Props = $props();
+
+  function imgFallback(e: Event) {
+    const img = e.currentTarget as HTMLImageElement;
+    if (img.src.endsWith('.png')) img.src = img.src.replace(/\.png$/, '.webp');
+  }
 </script>
 
 {#if cards.length > 0}
@@ -21,7 +26,7 @@
       {@const card = cards[0]}
       {#if card.template.imageUrl}
         <div class="preview-overlay-card" style="transform: rotate({card.template.displayRotation ?? 0}deg)">
-          <img src={card.template.imageUrl} alt={card.template.name} />
+          <img src={card.template.imageUrl} alt={card.template.name} onerror={imgFallback} />
         </div>
       {/if}
     {:else if cards.length === 2}
@@ -33,6 +38,7 @@
               src={card.template.imageUrl}
               alt={card.template.name}
               style="transform: rotate({card.template.displayRotation ?? 0}deg)"
+              onerror={imgFallback}
             />
           {/if}
         {/each}
@@ -42,7 +48,7 @@
       <div class="preview-composite-vunion">
         {#each cards.slice(0, 4) as card}
           {#if card.template.imageUrl}
-            <img src={card.template.imageUrl} alt={card.template.name} />
+            <img src={card.template.imageUrl} alt={card.template.name} onerror={imgFallback} />
           {/if}
         {/each}
       </div>

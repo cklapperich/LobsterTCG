@@ -332,10 +332,16 @@
     @apply rounded-lg border-2 border-dashed border-gbc-light opacity-30;
   }
 
+  /* Zone-counter zone: stretch to fill parent column */
+  .zone.zone-counter {
+    width: 100%;
+  }
+
   /* Zone-counter zone styles */
   .zone-counter-content {
     @apply flex flex-row items-center justify-center gap-1 px-1 py-1;
     min-height: 2.5rem;
+    width: 100%;
   }
 
   .zone-counter-label {

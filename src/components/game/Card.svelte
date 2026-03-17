@@ -221,7 +221,7 @@
     {#if hasImage}
       <!-- Image-based card face -->
       <div class="card-face card-image">
-        <img src={template.imageUrl} alt={template.name} />
+        <img src={template.imageUrl} alt={template.name} onerror={(e) => { const img = e.currentTarget as HTMLImageElement; if (img.src.endsWith('.png')) img.src = img.src.replace(/\.png$/, '.webp'); }} />
       </div>
     {:else if faceData}
       <!-- Text-based card face (playing cards) -->
