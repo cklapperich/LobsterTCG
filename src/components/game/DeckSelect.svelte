@@ -243,7 +243,7 @@
       return {
         id: `sb-${row.id}`,
         name: row.name,
-        deckList: { id: row.id, name: row.name, cards },
+        deckList: { id: row.id, name: row.name, cards, ...(row.metadata ? { metadata: row.metadata } : {}) },
         cardCount,
         strategy: row.strategy,
         source: 'supabase' as const,

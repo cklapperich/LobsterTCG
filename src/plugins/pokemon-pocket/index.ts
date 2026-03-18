@@ -27,7 +27,6 @@ import type { ToolContext } from '../../core/ai-tools';
 import type { ActionExecutor } from '../../core/action-executor';
 import { ZONE_IDS } from './zones';
 import type { PocketCardTemplate, PocketDeckMetadata } from './types';
-import type { EnergyType } from './types';
 import {
   getTemplate as getCardTemplate,
 } from './cards';
@@ -40,7 +39,6 @@ import {
   SETUP,
   POCKET_DECLARATION_TYPES,
   AI_COUNTER_TYPES,
-  SUPERTYPES,
   STATUS_CONDITIONS,
   STATUS_TO_DEGREES,
   POINTS_TO_WIN,
@@ -153,9 +151,8 @@ export function loadPlayerDeck(
 }
 
 /**
- * Build the energy type pool for the energy zone.
- * Prefers deck metadata (energy_types key) if available,
- * falls back to scanning Pokemon types in the deck.
+ * Build the energy type pool for the energy zone from deck metadata.
+ * The deck editor requires energy_types to be set before saving.
  */
 function deriveEnergyPool(state: GameState<PocketCardTemplate>, deckList: DeckList, playerIndex: PlayerIndex): void {
   const ps = getPluginState(state);
@@ -164,23 +161,7 @@ function deriveEnergyPool(state: GameState<PocketCardTemplate>, deckList: DeckLi
   if (meta?.energy_types && meta.energy_types.length > 0) {
     ps.energyTypePool = [...meta.energy_types];
   } else {
-    // Fallback: scan deck cards for Pokemon types
-    const typeSet = new Set<EnergyType>();
-    for (const zone of Object.values(state.zones)) {
-      for (const card of zone.cards) {
-        const template = card.template as PocketCardTemplate;
-        if (template.supertype === SUPERTYPES.POKEMON && template.types) {
-          for (const t of template.types) {
-            typeSet.add(t);
-          }
-        }
-      }
-    }
-
-    ps.energyTypePool = Array.from(typeSet);
-    if (ps.energyTypePool.length === 0) {
-      ps.energyTypePool = ['colorless'];
-    }
+    console.warn('[deriveEnergyPool] No energy_types in deck metadata — energy zone will be empty');
   }
 
   // Seed initial "next" energy preview for this player.
@@ -329,7 +310,7 @@ function getActionPanels(state: GameState<PocketCardTemplate>, player: PlayerInd
       id: 'attach-energy',
       label: `${label} Energy`,
       tooltip: 'Attach this energy to a Pokemon on your field (consumes from zone)',
-      disabled: zone.attached,
+      disabled: false,
     });
   }
 
@@ -517,7 +498,7 @@ function getBoardWidgets(state: GameState<PocketCardTemplate>, playerIndex: Play
     }
 
     // Current energy (right) — draggable only for local player and if not yet attached
-    if (zone.current && !zone.attached) {
+    if (zone.current) {
       const counterId = ENERGY_COUNTER_TYPES[zone.current];
       items.push({
         id: `energy-current-${p}`,
@@ -529,7 +510,7 @@ function getBoardWidgets(state: GameState<PocketCardTemplate>, playerIndex: Play
       items.push({
         id: `energy-current-${p}`,
         imageUrl: null,
-        label: zone.attached ? 'Energy attached' : 'No energy',
+        label: 'No energy',
       });
     }
 

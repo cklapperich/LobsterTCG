@@ -41,6 +41,11 @@
   let savingStrategy = $state(false);
   let strategyError = $state('');
 
+  // Metadata fields — initialized from existing deck metadata
+  let metadataValues = $state<Record<string, unknown>>(
+    deck?.deckList.metadata ? { ...deck.deckList.metadata } : {}
+  );
+
   const hasApiKey = $derived(!!settings.openRouterApiKey);
 
   // Pre-populate textarea when editing
@@ -79,10 +84,26 @@
       return;
     }
 
+    // Validate required metadata fields
+    const requiredFields = gameConfig.deckMetadataFields?.filter(f => f.required) ?? [];
+    for (const field of requiredFields) {
+      const val = metadataValues[field.key];
+      if (!val || (Array.isArray(val) && val.length === 0)) {
+        errors = [`${field.label} is required.`];
+        saving = false;
+        return;
+      }
+    }
+
     const cardsRecord: Record<string, number> = {};
     for (const c of deckList.cards) {
       cardsRecord[c.templateId] = (cardsRecord[c.templateId] ?? 0) + c.count;
     }
+
+    // Merge metadata from form fields into the deck list
+    const hasMetadata = Object.keys(metadataValues).length > 0;
+    const metadata = hasMetadata ? { ...metadataValues } : undefined;
+    if (metadata) deckList.metadata = metadata;
 
     const cardCount = deckList.cards.reduce((sum, c) => sum + c.count, 0);
     const tcg = gameConfig?.tcgFilter ?? 'Pokemon';
@@ -91,7 +112,7 @@
       if (isEditing && deck) {
         // Extract raw Supabase ID from the sb- prefixed id
         const rawId = deck.id.startsWith('sb-') ? deck.id.slice(3) : deck.deckList.id;
-        const ok = await updateDeckCards(rawId, deckName.trim(), cardsRecord);
+        const ok = await updateDeckCards(rawId, deckName.trim(), cardsRecord, metadata);
         if (!ok) {
           errors = ['Failed to update deck in database.'];
           saving = false;
@@ -107,7 +128,7 @@
           source: 'supabase',
         });
       } else {
-        const newId = await saveDeckToSupabase(user.id, tcg, deckName.trim(), cardsRecord);
+        const newId = await saveDeckToSupabase(user.id, tcg, deckName.trim(), cardsRecord, metadata);
         if (!newId) {
           errors = ['Failed to save deck to database.'];
           saving = false;
@@ -224,6 +245,36 @@
           bind:value={pasteText}
         ></textarea>
       </div>
+
+      <!-- Plugin metadata fields (e.g. energy types) -->
+      {#if gameConfig?.deckMetadataFields?.length}
+        {#each gameConfig.deckMetadataFields as field}
+          <div class="flex flex-col gap-2">
+            <div class="text-gbc-green text-sm font-retro">{field.label.toUpperCase()}</div>
+            {#if field.type === 'multi-select'}
+              <div class="flex flex-wrap gap-2">
+                {#each field.options as opt}
+                  {@const selected = Array.isArray(metadataValues[field.key]) && (metadataValues[field.key] as string[]).includes(opt.value)}
+                  <button
+                    class="gbc-btn text-xs py-1.5 px-3 {selected ? '' : 'opacity-40'}"
+                    onclick={() => {
+                      const current = Array.isArray(metadataValues[field.key]) ? [...(metadataValues[field.key] as string[])] : [];
+                      if (current.includes(opt.value)) {
+                        metadataValues[field.key] = current.filter(v => v !== opt.value);
+                      } else {
+                        metadataValues[field.key] = [...current, opt.value];
+                      }
+                      playSfx('cursor');
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {/each}
+      {/if}
 
       <!-- AI Strategy (only when editing) -->
       {#if isEditing}

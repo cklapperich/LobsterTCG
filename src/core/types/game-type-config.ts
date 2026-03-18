@@ -11,6 +11,15 @@ export interface DeckParseResult {
   warnings: string[];
 }
 
+/** A metadata field that the deck editor should render for this game type. */
+export interface DeckMetadataField {
+  key: string;
+  label: string;
+  type: 'multi-select';
+  options: { value: string; label: string }[];
+  required?: boolean;
+}
+
 export interface GameTypeConfig {
   id: string;
   name: string;
@@ -40,4 +49,6 @@ export interface GameTypeConfig {
   parseDeckText?: (text: string, name: string) => DeckParseResult;
   /** Export a DeckList's cards back to text format. */
   exportDeckText?: (cards: DeckEntry[]) => string;
+  /** Metadata fields the deck editor should render for this game type. */
+  deckMetadataFields?: DeckMetadataField[];
 }

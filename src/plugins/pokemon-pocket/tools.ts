@@ -18,7 +18,7 @@ import {
   POINTS_TO_WIN,
 } from './constants';
 import type { EnergyType } from './types';
-import { getPluginState, advanceEnergyZone } from './plugin-state';
+import { getPluginState } from './plugin-state';
 
 
 function tzp(ctx: ToolContext, key: string): string {
@@ -118,8 +118,9 @@ export function createAttachEnergyTool(ctx: ToolContext): ToolSet[string] {
         return addCounter(p, topCard.instanceId, counterType, 1);
       });
 
-      // Only consume energy after successful attachment
-      advanceEnergyZone(ps, p);
+      // Advance energy zone via a broadcast DECLARE_ACTION so both P2P peers stay in sync.
+      const seed = Math.floor(Math.random() * 0x7FFFFFFF);
+      await ctx.execute(() => declareAction(p, 'advance_energy', 'advance_energy', { playerIndex: p, seed }));
 
       return result;
     },

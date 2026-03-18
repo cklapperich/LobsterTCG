@@ -214,8 +214,9 @@
     }
 
     // Fire START_TURN marker so plugin hooks can run turn-start logic (once per turn)
+    // In P2P, only the host generates START_TURN (broadcast to guest for deterministic sync).
     const stKey = `${gs.turnNumber}-${gs.activePlayer}`;
-    if (gs.phase === PHASES.PLAYING && stKey !== lastStartTurnKey) {
+    if (gs.phase === PHASES.PLAYING && stKey !== lastStartTurnKey && p2p.role !== 'guest') {
       lastStartTurnKey = stKey;
       tryAction(startTurn(gs.activePlayer, Math.floor(Math.random() * 0x7FFFFFFF)));
     }
@@ -478,9 +479,12 @@
     gameState = { ...gameState };
 
     // P2P: broadcast local actions to the remote peer
-    // START_TURN is a local-only marker — each side fires it independently in advance()
-    if (action.type !== ACTION_TYPES.START_TURN) {
-      p2p.broadcastAction(action);
+    p2p.broadcastAction(action);
+
+    // P2P: when receiving a remote START_TURN, update the guard key so
+    // advance() doesn't fire a duplicate local START_TURN.
+    if (action.type === ACTION_TYPES.START_TURN && p2p.isRemoteAction) {
+      lastStartTurnKey = `${gameState.turnNumber}-${gameState.activePlayer}`;
     }
 
     // P2P: after remote action, check if local machine needs to act

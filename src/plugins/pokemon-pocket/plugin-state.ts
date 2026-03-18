@@ -4,7 +4,6 @@ import type { EnergyType } from './types';
 export interface EnergyZoneSlot {
   current: EnergyType | null;
   next: EnergyType | null;
-  attached: boolean;
 }
 
 export interface PocketPluginState {
@@ -17,8 +16,8 @@ const DEFAULTS: PocketPluginState = {
   points: [0, 0],
   energyTypePool: [],
   energyZone: [
-    { current: null, next: null, attached: false },
-    { current: null, next: null, attached: false },
+    { current: null, next: null },
+    { current: null, next: null },
   ],
 };
 
@@ -40,8 +39,8 @@ export function initPluginState(state: GameState<any>, energyTypePool: EnergyTyp
   if (!ps.points) ps.points = [0, 0];
   if (!ps.energyTypePool) ps.energyTypePool = energyTypePool;
   if (!ps.energyZone) ps.energyZone = [
-    { current: null, next: null, attached: false },
-    { current: null, next: null, attached: false },
+    { current: null, next: null },
+    { current: null, next: null },
   ];
 }
 
@@ -74,6 +73,5 @@ export function advanceEnergyZone(ps: PocketPluginState, playerIndex: number, se
   const zone = ps.energyZone[playerIndex];
   zone.current = zone.next;
   zone.next = rollEnergy(ps.energyTypePool, seed);
-  zone.attached = false;
 }
 

@@ -140,6 +140,20 @@ function advanceEnergyOnStartTurn(state: PocketState, action: Action): PostHookR
 
 // ── Post-Hooks: Declare Action ──────────────────────────────────────
 
+/** Post-hook: advance energy zone when attach_energy fires a DECLARE_ACTION. */
+function applyAdvanceEnergy(state: PocketState, action: Action): PostHookResult {
+  if (action.type !== ACTION_TYPES.DECLARE_ACTION) return {};
+  if ((action as any).declarationType !== 'advance_energy') return {};
+
+  const meta = (action as any).metadata as { playerIndex: number; seed: number } | undefined;
+  if (!meta) return {};
+
+  const mutableState = state as GameState<PocketCardTemplate>;
+  const ps = getPluginState(mutableState);
+  advanceEnergyZone(ps, meta.playerIndex, meta.seed);
+  return {};
+}
+
 /** Post-hook: apply point mutation when award_points is declared. */
 function applyAwardPoints(state: PocketState, action: Action): PostHookResult {
   if (action.type !== ACTION_TYPES.DECLARE_ACTION) return {};
@@ -330,6 +344,7 @@ export const pocketHooksPlugin: Plugin<PocketCardTemplate> = {
       { hook: advanceEnergyOnStartTurn, priority: 100 },
     ],
     [ACTION_TYPES.DECLARE_ACTION]: [
+      { hook: applyAdvanceEnergy, priority: 50 },
       { hook: applyAwardPoints, priority: 100 },
     ],
     [ACTION_TYPES.END_TURN]: [

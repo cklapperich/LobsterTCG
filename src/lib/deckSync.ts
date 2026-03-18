@@ -5,6 +5,7 @@ export interface SupabaseDeck {
   name: string;
   cards: Record<string, number>;
   strategy: string;
+  metadata: Record<string, unknown> | null;
 }
 
 export async function saveDeckStrategy(deckId: string, strategy: string): Promise<boolean> {
@@ -24,10 +25,11 @@ export async function saveDeckToSupabase(
   tcg: string,
   name: string,
   cards: Record<string, number>,
+  metadata?: Record<string, unknown>,
 ): Promise<string | null> {
   const { data, error } = await supabase
     .from('decks')
-    .insert({ id: crypto.randomUUID(), user_id: userId, TCG: tcg, name, cards, strategy: '' })
+    .insert({ id: crypto.randomUUID(), user_id: userId, TCG: tcg, name, cards, strategy: '', metadata: metadata ?? null })
     .select('id')
     .single();
   if (error) {
@@ -41,10 +43,11 @@ export async function updateDeckCards(
   deckId: string,
   name: string,
   cards: Record<string, number>,
+  metadata?: Record<string, unknown>,
 ): Promise<boolean> {
   const { error } = await supabase
     .from('decks')
-    .update({ name, cards })
+    .update({ name, cards, metadata: metadata ?? null })
     .eq('id', deckId);
   if (error) {
     console.error('Failed to update deck:', error);
@@ -68,7 +71,7 @@ export async function deleteDeck(deckId: string): Promise<boolean> {
 export async function loadDecksFromSupabase(userId: string, tcg: string): Promise<SupabaseDeck[]> {
   const { data, error } = await supabase
     .from('decks')
-    .select('id, name, cards, strategy')
+    .select('id, name, cards, strategy, metadata')
     .eq('user_id', userId)
     .eq('TCG', tcg);
 
@@ -82,5 +85,6 @@ export async function loadDecksFromSupabase(userId: string, tcg: string): Promis
     name: row.name,
     cards: row.cards as Record<string, number>,
     strategy: row.strategy ?? '',
+    metadata: (row.metadata as Record<string, unknown>) ?? null,
   }));
 }
