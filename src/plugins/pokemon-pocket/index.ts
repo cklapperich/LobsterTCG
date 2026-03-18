@@ -115,6 +115,7 @@ function getGameConfig(playmat: Playmat): GameConfig {
     gameType: playmat.gameType,
     zones: playmat.zones,
     playerCount: 2,
+    mulliganDrawCount: SETUP.HAND_SIZE,
   };
 }
 

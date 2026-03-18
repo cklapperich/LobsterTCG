@@ -424,8 +424,8 @@ export function createDefaultTools(ctx: ToolContext): ToolSet {
       async () => ctx.execute(resolveDecision(p))),
 
     mulligan: createTool('Shuffle your hand back into your deck and draw a new hand.',
-      z.object({ drawCount: z.number().optional().describe('Number of cards to draw (default 7)') }),
-      async ({ drawCount }) => ctx.execute(mulligan(p, drawCount ?? 7))),
+      z.object({ drawCount: z.number().optional().describe(`Number of cards to draw (default ${ctx.getState().config.mulliganDrawCount ?? 7})`) }),
+      async ({ drawCount }) => ctx.execute(mulligan(p, drawCount ?? ctx.getState().config.mulliganDrawCount ?? 7))),
 
     rewind: createTool('Undo ALL actions you have taken this turn and start over with a different approach. Use when you realize you made a strategic mistake or went down a wrong path.',
       z.object({

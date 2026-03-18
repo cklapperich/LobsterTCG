@@ -28,6 +28,7 @@ export interface GameConfig {
   gameType: string;
   zones: Record<string, ZoneConfig>;  // zone ID -> config
   playerCount: 1 | 2;
+  mulliganDrawCount?: number;  // cards to draw on mulligan (default 7)
 }
 
 export interface GameResult {
