@@ -40,7 +40,7 @@ function convertAttacks(attacks?: TCGdexCard['attacks']): PocketAttack[] | undef
   if (!attacks?.length) return undefined;
   return attacks.map(a => ({
     name: a.name,
-    cost: a.cost.map(tcgdexToEnergyType),
+    cost: (a.cost ?? []).map(tcgdexToEnergyType),
     damage: a.damage ?? '',
     effect: a.effect,
   }));
@@ -101,6 +101,8 @@ export const POCKET_TEMPLATE_MAP: Map<string, PocketCardTemplate> = new Map();
 
 /**
  * Look up a card template by ID.
+ * If the card isn't in the database (e.g. set not yet on TCGdex),
+ * builds a minimal stub template so the game can still load.
  */
 export function getTemplate(id: string): PocketCardTemplate | undefined {
   // Check cache first
@@ -110,9 +112,26 @@ export function getTemplate(id: string): PocketCardTemplate | undefined {
   // Try to convert on demand
   ensureLoaded();
   const raw = pocketCardMap!.get(id);
-  if (!raw) return undefined;
 
-  const template = convertCard(raw);
+  let template: PocketCardTemplate;
+  if (raw) {
+    template = convertCard(raw);
+  } else {
+    // Build a minimal stub from the ID (e.g. "A4b-247" → set "A4b", localId "247")
+    const dashIdx = id.lastIndexOf('-');
+    if (dashIdx < 0) return undefined;
+    const setId = id.slice(0, dashIdx);
+    const localId = id.slice(dashIdx + 1);
+    template = {
+      id,
+      name: id, // best we can do without data
+      imageUrl: `https://limitlesstcg.nyc3.cdn.digitaloceanspaces.com/pocket/${setId}/${setId}_${localId}_EN.png`,
+      supertype: 'Pokemon',
+      subtypes: ['Basic'],
+      types: [],
+    };
+  }
+
   POCKET_TEMPLATE_MAP.set(id, template);
   return template;
 }
@@ -130,5 +149,15 @@ export function getAllPocketCards(): TCGdexCard[] {
 export function getPocketCard(id: string): TCGdexCard | undefined {
   ensureLoaded();
   return pocketCardMap!.get(id);
+}
+
+/**
+ * Register a minimal stub card for IDs not yet in the TCGdex data.
+ * This lets decks reference cards from sets the API hasn't indexed yet —
+ * the image URL and basic metadata will still work.
+ */
+export function registerStubCard(stub: TCGdexCard): void {
+  ensureLoaded();
+  pocketCardMap!.set(stub.id, stub);
 }
 

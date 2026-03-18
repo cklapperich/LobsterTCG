@@ -13,7 +13,9 @@ export const POCKET_SETS: Record<string, string> = {
   'A4a': 'Secluded Springs',
   'B1': 'Mega Rising',
   'B1a': 'Crimson Blaze',
+  'A4b': 'Deluxe Pack: ex',
   'B2': 'Fantastical Parade',
+  'B2a': 'Paldean Wonders',
 };
 
 /** Rarity strings as returned by TCGdex for Pocket cards */

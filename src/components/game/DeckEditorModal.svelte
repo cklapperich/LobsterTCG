@@ -87,40 +87,46 @@
     const cardCount = deckList.cards.reduce((sum, c) => sum + c.count, 0);
     const tcg = gameConfig?.tcgFilter ?? 'Pokemon';
 
-    if (isEditing && deck) {
-      // Extract raw Supabase ID from the sb- prefixed id
-      const rawId = deck.id.startsWith('sb-') ? deck.id.slice(3) : deck.deckList.id;
-      const ok = await updateDeckCards(rawId, deckName.trim(), cardsRecord);
-      if (!ok) {
-        errors = ['Failed to update deck in database.'];
-        saving = false;
-        return;
+    try {
+      if (isEditing && deck) {
+        // Extract raw Supabase ID from the sb- prefixed id
+        const rawId = deck.id.startsWith('sb-') ? deck.id.slice(3) : deck.deckList.id;
+        const ok = await updateDeckCards(rawId, deckName.trim(), cardsRecord);
+        if (!ok) {
+          errors = ['Failed to update deck in database.'];
+          saving = false;
+          return;
+        }
+        playSfx('confirm');
+        onSave({
+          id: deck.id,
+          name: deckName.trim(),
+          deckList: { ...deckList, id: rawId, name: deckName.trim() },
+          cardCount,
+          strategy: strategyText,
+          source: 'supabase',
+        });
+      } else {
+        const newId = await saveDeckToSupabase(user.id, tcg, deckName.trim(), cardsRecord);
+        if (!newId) {
+          errors = ['Failed to save deck to database.'];
+          saving = false;
+          return;
+        }
+        playSfx('confirm');
+        onSave({
+          id: `sb-${newId}`,
+          name: deckName.trim(),
+          deckList: { ...deckList, id: newId, name: deckName.trim() },
+          cardCount,
+          strategy: strategyText,
+          source: 'supabase',
+        });
       }
-      playSfx('confirm');
-      onSave({
-        id: deck.id,
-        name: deckName.trim(),
-        deckList: { ...deckList, id: rawId, name: deckName.trim() },
-        cardCount,
-        strategy: strategyText,
-        source: 'supabase',
-      });
-    } else {
-      const newId = await saveDeckToSupabase(user.id, tcg, deckName.trim(), cardsRecord);
-      if (!newId) {
-        errors = ['Failed to save deck to database.'];
-        saving = false;
-        return;
-      }
-      playSfx('confirm');
-      onSave({
-        id: `sb-${newId}`,
-        name: deckName.trim(),
-        deckList: { ...deckList, id: newId, name: deckName.trim() },
-        cardCount,
-        strategy: strategyText,
-        source: 'supabase',
-      });
+    } catch (e: any) {
+      errors = [e.message ?? 'Failed to save deck.'];
+      saving = false;
+      return;
     }
 
     saving = false;

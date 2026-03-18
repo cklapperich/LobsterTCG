@@ -1,6 +1,7 @@
 import type { DeckEntry } from '../../../core/types/deck';
 import type { DeckParseResult } from '../../../core/types/game-type-config';
-import { getPocketCard } from '../cards';
+import type { TCGdexCard } from './types';
+import { getPocketCard, registerStubCard } from '../cards';
 
 /**
  * Parse a Pokemon Pocket deck text format into a DeckList.
@@ -23,12 +24,18 @@ export function parsePocketDeck(text: string, deckName?: string): DeckParseResul
   const entries: DeckEntry[] = [];
   const warnings: string[] = [];
 
+  let currentSection: 'Pokemon' | 'Trainer' = 'Pokemon';
+
   for (const rawLine of text.split('\n')) {
     const line = rawLine.trim();
     if (!line) continue;
 
-    // Skip section headers like "Pokémon: 10" or "Trainer: 5"
-    if (/^(Pok[eé]mon|Trainer|Energy)\s*:\s*\d+$/i.test(line)) continue;
+    // Track section headers like "Pokémon: 10" or "Trainer: 5"
+    const headerMatch = line.match(/^(Pok[eé]mon|Trainer|Energy)\s*:\s*\d+$/i);
+    if (headerMatch) {
+      currentSection = /^pok/i.test(headerMatch[1]) ? 'Pokemon' : 'Trainer';
+      continue;
+    }
     // Skip comment lines
     if (line.startsWith('#') || line.startsWith('//')) continue;
 
@@ -48,11 +55,19 @@ export function parsePocketDeck(text: string, deckName?: string): DeckParseResul
     // Build the card ID: "{setCode}-{cardNumber}"
     const templateId = `${setCode}-${cardNumber}`;
 
-    // Validate the card exists
-    const card = getPocketCard(templateId);
+    // Validate the card exists; create a stub if not in the database yet
+    let card = getPocketCard(templateId);
     if (!card) {
-      warnings.push(`Card not found: ${name} (${templateId})`);
-      continue;
+      const stub: TCGdexCard = {
+        id: templateId,
+        localId: cardNumber,
+        name,
+        category: currentSection,
+        set: { id: setCode, name: setCode },
+      };
+      registerStubCard(stub);
+      card = stub;
+      warnings.push(`Card not in database, using stub: ${name} (${templateId})`);
     }
 
     // Warn if name doesn't match (typo detection)
