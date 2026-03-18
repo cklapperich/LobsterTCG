@@ -934,14 +934,8 @@
     removeCounterFromSource(source, counterId);
     tryAction(addCounter(local, cardInstanceId, counterId, 1));
 
-    // If dropped from energy zone widget, mark energy as attached
-    if (source.startsWith('widget:') && gameState.pluginState) {
-      const ps = gameState.pluginState as any;
-      const zone = ps.energyZone?.[local];
-      if (zone && !zone.attached) {
-        zone.attached = true;
-      }
-    }
+    // consumeEnergyOnAttach post-hook on the ADD_COUNTER above handles
+    // clearing zone.current on both P2P peers — nothing else needed here.
   }
 
   // Counter drop on a zone-counter zone (e.g. energy_discard)

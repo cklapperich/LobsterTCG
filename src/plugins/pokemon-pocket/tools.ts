@@ -118,9 +118,8 @@ export function createAttachEnergyTool(ctx: ToolContext): ToolSet[string] {
         return addCounter(p, topCard.instanceId, counterType, 1);
       });
 
-      // Advance energy zone via a broadcast DECLARE_ACTION so both P2P peers stay in sync.
-      const seed = Math.floor(Math.random() * 0x7FFFFFFF);
-      await ctx.execute(() => declareAction(p, 'advance_energy', 'advance_energy', { playerIndex: p, seed }));
+      // consumeEnergyOnAttach post-hook on ADD_COUNTER clears zone.current
+      // automatically on both P2P peers — no separate action needed.
 
       return result;
     },

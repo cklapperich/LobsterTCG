@@ -15,7 +15,7 @@
    *  - P2P lobby: create/join room, exchange decks with remote peer before starting
    *  - Deck strategy: auto-generate and persist AI strategy text per deck
    */
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import type { DeckList } from '../../core/types/deck';
   import type { DeckSelection } from '../../core/types/deck';
   import { parsePTCGODeck } from '../../plugins/pokemon';
@@ -256,11 +256,13 @@
     const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
     const merged = [...[...supabaseDecks].sort(byName), ...[...fileDecks].sort(byName)];
     deckOptions = merged;
-    if (!player1Deck || !merged.find(d => d.id === player1Deck)) {
-      player1Deck = merged[0]?.id ?? '';
-    }
-    if (!player2Deck || !merged.find(d => d.id === player2Deck)) {
-      player2Deck = merged[0]?.id ?? '';
+    if (merged.length > 0) {
+      if (!player1Deck || !merged.find(d => d.id === player1Deck)) {
+        player1Deck = merged[0].id;
+      }
+      if (!player2Deck || !merged.find(d => d.id === player2Deck)) {
+        player2Deck = merged[0].id;
+      }
     }
   });
 
@@ -275,12 +277,14 @@
   // Re-load file decks when game type changes
   $effect(() => {
     gameType;
-    loading = true;
-    fileDecks = [];
-    supabaseDecks = [];
-    testFlags = {};
-    loadFileDecks();
-    loadSupabaseDecks();
+    untrack(() => {
+      loading = true;
+      fileDecks = [];
+      supabaseDecks = [];
+      testFlags = {};
+      loadFileDecks();
+      loadSupabaseDecks();
+    });
   });
 
   // Re-load supabase decks when auth state changes

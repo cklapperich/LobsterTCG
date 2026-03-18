@@ -138,21 +138,28 @@ function advanceEnergyOnStartTurn(state: PocketState, action: Action): PostHookR
   return {};
 }
 
-// ── Post-Hooks: Declare Action ──────────────────────────────────────
+// ── Post-Hooks: Consume Energy on Attach ────────────────────────────
 
-/** Post-hook: advance energy zone when attach_energy fires a DECLARE_ACTION. */
-function applyAdvanceEnergy(state: PocketState, action: Action): PostHookResult {
-  if (action.type !== ACTION_TYPES.DECLARE_ACTION) return {};
-  if ((action as any).declarationType !== 'advance_energy') return {};
-
-  const meta = (action as any).metadata as { playerIndex: number; seed: number } | undefined;
-  if (!meta) return {};
+/**
+ * When an energy counter is added to a card, consume zone.current for the
+ * owning player.  This fires on both P2P peers because the ADD_COUNTER action
+ * is broadcast through tryAction.  Queue advancement (next→current) only
+ * happens at START_TURN — this hook just nulls out the consumed slot.
+ */
+function consumeEnergyOnAttach(state: PocketState, action: Action): PostHookResult {
+  if (action.type !== ACTION_TYPES.ADD_COUNTER) return {};
+  if (!ENERGY_COUNTER_TYPE_SET.has(action.counterType)) return {};
 
   const mutableState = state as GameState<PocketCardTemplate>;
   const ps = getPluginState(mutableState);
-  advanceEnergyZone(ps, meta.playerIndex, meta.seed);
+  const zone = ps.energyZone[action.player];
+  if (zone?.current) {
+    zone.current = null;
+  }
   return {};
 }
+
+// ── Post-Hooks: Declare Action ──────────────────────────────────────
 
 /** Post-hook: apply point mutation when award_points is declared. */
 function applyAwardPoints(state: PocketState, action: Action): PostHookResult {
@@ -343,8 +350,10 @@ export const pocketHooksPlugin: Plugin<PocketCardTemplate> = {
     [ACTION_TYPES.START_TURN]: [
       { hook: advanceEnergyOnStartTurn, priority: 100 },
     ],
+    [ACTION_TYPES.ADD_COUNTER]: [
+      { hook: consumeEnergyOnAttach, priority: 50 },
+    ],
     [ACTION_TYPES.DECLARE_ACTION]: [
-      { hook: applyAdvanceEnergy, priority: 50 },
       { hook: applyAwardPoints, priority: 100 },
     ],
     [ACTION_TYPES.END_TURN]: [

@@ -159,7 +159,7 @@ function deriveEnergyPool(state: GameState<PocketCardTemplate>, deckList: DeckLi
   const meta = deckList.metadata as PocketDeckMetadata | undefined;
 
   if (meta?.energy_types && meta.energy_types.length > 0) {
-    ps.energyTypePool = [...meta.energy_types];
+    ps.energyTypePool[playerIndex] = [...meta.energy_types];
   } else {
     console.warn('[deriveEnergyPool] No energy_types in deck metadata — energy zone will be empty');
   }
@@ -167,7 +167,7 @@ function deriveEnergyPool(state: GameState<PocketCardTemplate>, deckList: DeckLi
   // Seed initial "next" energy preview for this player.
   // Random seed is fine here — deck loading runs on the host before state_sync,
   // so the guest receives the already-rolled value.
-  ps.energyZone[playerIndex].next = rollEnergy(ps.energyTypePool);
+  ps.energyZone[playerIndex].next = rollEnergy(ps.energyTypePool[playerIndex]);
 }
 
 /**
