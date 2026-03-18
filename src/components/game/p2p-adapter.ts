@@ -7,6 +7,7 @@ import { shuffle } from '../../core/action';
 
 export interface P2PAdapterCallbacks {
   tryAction: (action: Action) => string | null;
+  advance: () => void;
   getCoinFlipRef: () => { flip(isHeads: boolean): Promise<void> } | null;
   setGameState: (state: GameState<CardTemplate>) => void;
   showChoiceUI: (winner: 0 | 1, onChoice: (fp: 0 | 1) => void) => void;
@@ -89,6 +90,7 @@ export class P2PAdapter {
         this.executingRemoteAction = true;
         this.callbacks.tryAction(msg.action);
         this.executingRemoteAction = false;
+        this.callbacks.advance();
       } else if (msg.type === 'request_choice') {
         this.callbacks.showChoiceUI(msg.winner, (fp: 0 | 1) => {
           this.channel?.sendMessage({ type: 'choice_response', firstPlayer: fp });
@@ -114,6 +116,7 @@ export class P2PAdapter {
           this.executingRemoteAction = true;
           this.callbacks.tryAction(msg.action);
           this.executingRemoteAction = false;
+          this.callbacks.advance();
         }
       });
       // Store unsub so destroy() can clean up if needed

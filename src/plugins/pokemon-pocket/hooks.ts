@@ -153,8 +153,11 @@ function consumeEnergyOnAttach(state: PocketState, action: Action): PostHookResu
   const mutableState = state as GameState<PocketCardTemplate>;
   const ps = getPluginState(mutableState);
   const zone = ps.energyZone[action.player];
+  console.log('[consumeEnergy] P' + action.player, 'counter:', action.counterType,
+    'zone before:', JSON.stringify(zone));
   if (zone?.current) {
     zone.current = null;
+    console.log('[consumeEnergy] cleared P' + action.player + ' current');
   }
   return {};
 }

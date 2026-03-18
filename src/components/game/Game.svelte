@@ -464,6 +464,13 @@
       executeAction(gameState, followUp);
     }
 
+    // DEBUG: trace energy zone state after every action on both peers
+    if (gameState.pluginState && (gameState.pluginState as any).energyZone) {
+      const ez = (gameState.pluginState as any).energyZone;
+      console.log(`[tryAction] after ${action.type} (remote=${p2p.isRemoteAction})`,
+        'P0:', JSON.stringify(ez[0]), 'P1:', JSON.stringify(ez[1]));
+    }
+
     // Splash announcements for notable actions
     if (action.type === ACTION_TYPES.DECLARE_ACTION) {
       showSplash(action.name.toUpperCase());
@@ -486,9 +493,6 @@
     if (action.type === ACTION_TYPES.START_TURN && p2p.isRemoteAction) {
       lastStartTurnKey = `${gameState.turnNumber}-${gameState.activePlayer}`;
     }
-
-    // P2P: after remote action, check if local machine needs to act
-    if (p2p.isRemoteAction) advance();
 
     return null;
   }
@@ -582,6 +586,7 @@
   // Initialize P2P adapter — needs tryAction which is defined above
   p2p = new P2PAdapter(p2pChannel, {
     tryAction,
+    advance,
     getCoinFlipRef: () => coinFlipRef ?? null,
     setGameState: (s) => { gameState = s; loading = false; },
     showChoiceUI: (winner, onChoice) => {
