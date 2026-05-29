@@ -13,33 +13,41 @@ describe('Simplified AI Providers', () => {
     console.log('VITE_AI_GATEWAY_KEY loaded:', apiKey ? `${apiKey.slice(0, 10)}...` : 'NOT FOUND');
     expect(apiKey).toBeDefined(); // Should be defined from .env file
   });
-  it('MODEL_OPTIONS should have 3 models', () => {
-    expect(MODEL_OPTIONS).toHaveLength(3);
+  it('MODEL_OPTIONS should have 5 models', () => {
+    expect(MODEL_OPTIONS).toHaveLength(5);
     expect(MODEL_OPTIONS.map(m => m.label)).toContain('GLM-5');
     expect(MODEL_OPTIONS.map(m => m.label)).toContain('Kimi K2.5');
-    expect(MODEL_OPTIONS.map(m => m.label)).toContain('Claude Sonnet 4.5');
+    expect(MODEL_OPTIONS.map(m => m.label)).toContain('Claude Sonnet 4.6');
+    expect(MODEL_OPTIONS.map(m => m.label)).toContain('DeepSeek V4 Flash');
+    expect(MODEL_OPTIONS.map(m => m.label)).toContain('DeepSeek V4 Pro');
   });
 
   it('Should have correct model IDs', () => {
     const glm5 = MODEL_OPTIONS.find(m => m.label === 'GLM-5');
-    expect(glm5?.modelId).toBe('zai/glm-5');
+    expect(glm5?.modelId).toBe('z-ai/glm-5');
 
     const kimi = MODEL_OPTIONS.find(m => m.label === 'Kimi K2.5');
     expect(kimi?.modelId).toBe('moonshotai/kimi-k2.5');
 
-    const claude = MODEL_OPTIONS.find(m => m.label === 'Claude Sonnet 4.5');
-    expect(claude?.modelId).toBe('anthropic/claude-sonnet-4-5-20250929');
+    const claude = MODEL_OPTIONS.find(m => m.label === 'Claude Sonnet 4.6');
+    expect(claude?.modelId).toBe('anthropic/claude-sonnet-4-6');
+
+    const deepseekFlash = MODEL_OPTIONS.find(m => m.label === 'DeepSeek V4 Flash');
+    expect(deepseekFlash?.modelId).toBe('deepseek/deepseek-v4-flash');
+
+    const deepseekPro = MODEL_OPTIONS.find(m => m.label === 'DeepSeek V4 Pro');
+    expect(deepseekPro?.modelId).toBe('deepseek/deepseek-v4-pro');
   });
 
-  it('DEFAULT_PLANNER should be GLM-5', () => {
-    expect(DEFAULT_PLANNER.label).toBe('GLM-5');
-    expect(DEFAULT_PLANNER.modelId).toBe('zai/glm-5');
+  it('DEFAULT_PLANNER should be Claude Sonnet 4.6', () => {
+    expect(DEFAULT_PLANNER.label).toBe('Claude Sonnet 4.6');
+    expect(DEFAULT_PLANNER.modelId).toBe('anthropic/claude-sonnet-4-6');
   });
 
   it('getModelOptionByLabel should find models', () => {
     const glm5 = getModelOptionByLabel('GLM-5');
     expect(glm5).toBeDefined();
-    expect(glm5?.modelId).toBe('zai/glm-5');
+    expect(glm5?.modelId).toBe('z-ai/glm-5');
 
     const notFound = getModelOptionByLabel('Non-existent Model');
     expect(notFound).toBeUndefined();

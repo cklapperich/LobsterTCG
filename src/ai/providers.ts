@@ -31,6 +31,8 @@ export const MODEL_OPTIONS: ModelOption[] = [
   { label: 'GLM-5', modelId: 'z-ai/glm-5', costPerMTok: [1.00, 3.20] },
   { label: 'Kimi K2.5', modelId: 'moonshotai/kimi-k2.5', costPerMTok: [0.60, 3.00] },
   { label: 'Claude Sonnet 4.6', modelId: 'anthropic/claude-sonnet-4-6', costPerMTok: [3.00, 15.00] },
+  { label: 'DeepSeek V4 Flash', modelId: 'deepseek/deepseek-v4-flash', costPerMTok: [0.10, 0.20] },
+  { label: 'DeepSeek V4 Pro', modelId: 'deepseek/deepseek-v4-pro', costPerMTok: [0.44, 0.87] },
 ];
 
 export interface ModelOption {
