@@ -7,7 +7,7 @@ import { wrapToolsWithContext } from '../core/ai-tools';
 import { logStepFinish } from './logging';
 import { resolveModel, MODEL_OPTIONS } from './providers';
 import { AI_CONFIG, KEEP_LATEST_INFO_TOOL_NAMES, TERMINAL_TOOL_NAMES } from './constants';
-import { startActiveObservation } from '@langfuse/tracing';
+import { startSafeObservation } from '../telemetry/langfuse';
 
 export interface StepState {
   blocked: boolean;
@@ -73,7 +73,7 @@ function condenseToolResults(history: ModelMessage[], fromIndex: number): void {
 }
 
 async function runAgent(config: AgentConfig): Promise<AgentResult> {
-  return startActiveObservation(config.label, async (span) => {
+  return startSafeObservation(config.label, async (span) => {
     const { model, systemPrompt, getState, tools, label, logging, abort: configAbort, checkpoint } = config;
     const abort = configAbort ?? new AbortController();
     const stepState: StepState = { blocked: false };
@@ -118,7 +118,7 @@ async function runAgent(config: AgentConfig): Promise<AgentResult> {
         { role: 'user' as const, content: `[CURRENT GAME STATE]\n${freshState}` },
       ];
 
-      const result = await startActiveObservation(`${label}/step-${step}`, async (gen) => {
+      const result = await startSafeObservation(`${label}/step-${step}`, async (gen) => {
         gen.update({
           model,
           input: { systemPrompt: systemPrompt, messages: messagesWithState },
@@ -287,7 +287,7 @@ function resolveMode(ctx: ToolContext): 'setup' | 'main' | 'decision' {
 export async function runTurn(config: AIConfig): Promise<void> {
   const { context: ctx, plugin, model, plannerModel } = config;
 
-  await startActiveObservation('ai-autonomous', async () => {
+  await startSafeObservation('ai-autonomous', async () => {
     const mode = resolveMode(ctx);
     const isNormalTurn = mode === 'main';
     console.log(mode);
