@@ -9,7 +9,7 @@ games like Yu-Gi-Oh! and Magic: The Gathering are poorer fits for the current de
 Currently **Pokémon** and **Pokémon Pocket** are implemented. A plugin system lets other card
 games be added.
 
-**Where it sits:** LobsterTCG is a *tabletop card game simulator*. It sits halfway between
+**Comparison to Other Simulators** LobsterTCG is a *tabletop card game simulator*. It sits halfway between
 fully-automated clients like PTCGL or YGOPRO — which enforce every rule for you — and bare
 tabletop simulators like Untapped.in, where you do everything by hand. LobsterTCG enforces
 the things card effects can never negate and provides plenty of conveniences, but you stay in
