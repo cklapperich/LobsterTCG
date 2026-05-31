@@ -28,3 +28,10 @@ npm-debug.log*
 
 # Vercel
 .vercel
+
+# Local-only emulator ROM assets (large binaries, build input for SFX tooling)
+*.gb
+*.gbc
+*.gba
+*.gb.ram
+*.sav
