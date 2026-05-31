@@ -2,7 +2,7 @@
 
 A trading card game simulator for **netplay with friends** and **playing against AI agents**.
 
-LobsterTCG is built for low-interaction TCGs — games where turns are mostly self-contained
+LobsterTCG is built for low-interaction TCGs, where turns are mostly self-contained
 and players don't constantly interrupt each other. **Pokémon** fits this well. Fast-response-heavy
 games like Yu-Gi-Oh! and Magic: The Gathering are poorer fits for the current design.
 
@@ -21,22 +21,22 @@ environment for AI agents to play in.
 Two goals:
 
 1. **Have fun** playing TCGs with friends over the internet, or against AI opponents.
-2. **Research and learning** into building effective real-world AI agent systems — LobsterTCG
-   is a practical testbed for tool-using agents that take real actions in a stateful environment.
+2. **Research and learning** into building effective real-world AI agent systems. It's a
+   practical testbed for tool-using agents that take real actions in a stateful environment.
 
 It's fully open source. Anyone can contribute bug fixes or add new card games as plugins.
 
 ## Features
 
-- **Netplay** — peer-to-peer multiplayer over WebRTC. Free, no server-side game state.
-- **AI opponents** — play against LLM agents with configurable models and strategies.
-- **Plugin architecture** — each game (rules, board layout, card effects) is a self-contained plugin.
+- **Netplay**: peer-to-peer multiplayer over WebRTC. Free, no server-side game state.
+- **AI opponents**: play against LLM agents with configurable models and strategies.
+- **Plugin architecture**: each game (rules, board layout, card effects) is a self-contained plugin.
   Core systems never reference a specific TCG.
-- **Deck import/export** — export decks from [Limitless TCG](https://limitlesstcg.com) and import
+- **Deck import/export**: export decks from [Limitless TCG](https://limitlesstcg.com) and import
   them here. Theme decks are bundled so you can start playing immediately.
-- **Optional accounts** — log in with Google to save decks to the project's Supabase. We don't read
+- **Optional accounts**: log in with Google to save decks to the project's Supabase. We don't read
   your name or email.
-- **Optional [simpledex](https://simpledex-weld.vercel.app/) integration** — if you're logged into
+- **Optional [simpledex](https://simpledex-weld.vercel.app/) integration**: if you're logged into
   both, your simpledex decks show up in LobsterTCG automatically.
 
 ## Playing against AI
@@ -44,8 +44,8 @@ It's fully open source. Anyone can contribute bug fixes or add new card games as
 Playing against AI requires an **OpenRouter** or **Fireworks** API key, entered in the in-app
 AI settings. Netplay does not require any key.
 
-> **Cost:** AI games range roughly **$0.10–$3.00 per game** in API costs, depending on the model
-> and mode you choose. Netplay is free.
+**AI games cost roughly $0.10 to $3.00 per game in API costs**, depending on the model and mode
+you choose. Netplay is free.
 
 There are two AI modes:
 
@@ -71,15 +71,13 @@ When playing Trainer cards — or any card that resolves in several steps — us
 area**. It's a shared in-progress zone that keeps both you *and* the AI aware of what's
 currently being resolved, instead of cards teleporting around mid-effect.
 
-Example — playing **Ultra Ball**:
+Example, playing **Ultra Ball**:
 
 1. Play Ultra Ball to **staging**.
 2. Move 2 cards from hand to discard (its cost).
-3. Search your deck for a card — it goes to **staging** by default.
+3. Search your deck for a card; it goes to **staging** by default.
 4. Move the searched card from staging to hand.
 5. Move Ultra Ball from staging to discard.
-
-Resolving cards step-by-step through staging keeps the game state legible to both players.
 
 ## Getting started
 
@@ -117,7 +115,7 @@ Svelte 5 · TypeScript · Vite · Tailwind CSS · Supabase · WebRTC (P2P) ·
 
 ## Contributing
 
-Contributions are welcome — bug fixes and new game plugins especially.
+Contributions are welcome, bug fixes and new game plugins especially.
 
 - Game plugins live in `src/plugins/`. `pokemon` and `pokemon-pocket` are the reference
   implementations; the others are early scaffolds.
