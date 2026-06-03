@@ -8,7 +8,7 @@ export default defineConfig(({ mode }) => {
     plugins: [svelte(), tailwindcss()],
     server: {
       watch: {
-        ignored: ['**/tools/poketcg/**', '**/*.md'],
+        ignored: ['**/tools/poketcg/**', '**/*.md', '**/public/card-images/**'],
       },
       proxy: {
         '/api/anthropic': {
