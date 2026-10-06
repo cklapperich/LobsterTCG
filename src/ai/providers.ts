@@ -30,8 +30,8 @@ export function resolveModel(modelId: string) {
 export const MODEL_OPTIONS: ModelOption[] = [
   { label: 'GLM-5', modelId: 'z-ai/glm-5', costPerMTok: [1.00, 3.20] },
   { label: 'Kimi K2.5', modelId: 'moonshotai/kimi-k2.5', costPerMTok: [0.60, 3.00] },
-  { label: 'Claude Sonnet 4.6', modelId: 'anthropic/claude-sonnet-4-6', costPerMTok: [3.00, 15.00] },
-  { label: 'DeepSeek V4 Flash', modelId: 'deepseek/deepseek-v4-flash', costPerMTok: [0.10, 0.20] },
+  { label: 'Claude Sonnet (latest)', modelId: '~anthropic/claude-sonnet-latest', costPerMTok: [2.00, 10.00] },
+  { label: 'DeepSeek V4.1 Flash', modelId: 'deepseek/deepseek-v4.1-flash', costPerMTok: [0.01, 1.32] },
   { label: 'DeepSeek V4 Pro', modelId: 'deepseek/deepseek-v4-pro', costPerMTok: [0.44, 0.87] },
 ];
 
@@ -41,7 +41,7 @@ export interface ModelOption {
   costPerMTok: [number, number]; // [input, output] per million tokens
 }
 
-export const DEFAULT_PLANNER = MODEL_OPTIONS[2]; // Claude Sonnet 4.6
+export const DEFAULT_PLANNER = MODEL_OPTIONS[2]; // Claude Sonnet (latest)
 
 // Helper to get model option by label
 export function getModelOptionByLabel(label: string): ModelOption | undefined {

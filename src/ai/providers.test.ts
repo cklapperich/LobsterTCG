@@ -17,8 +17,8 @@ describe('Simplified AI Providers', () => {
     expect(MODEL_OPTIONS).toHaveLength(5);
     expect(MODEL_OPTIONS.map(m => m.label)).toContain('GLM-5');
     expect(MODEL_OPTIONS.map(m => m.label)).toContain('Kimi K2.5');
-    expect(MODEL_OPTIONS.map(m => m.label)).toContain('Claude Sonnet 4.6');
-    expect(MODEL_OPTIONS.map(m => m.label)).toContain('DeepSeek V4 Flash');
+    expect(MODEL_OPTIONS.map(m => m.label)).toContain('Claude Sonnet (latest)');
+    expect(MODEL_OPTIONS.map(m => m.label)).toContain('DeepSeek V4.1 Flash');
     expect(MODEL_OPTIONS.map(m => m.label)).toContain('DeepSeek V4 Pro');
   });
 
@@ -29,19 +29,19 @@ describe('Simplified AI Providers', () => {
     const kimi = MODEL_OPTIONS.find(m => m.label === 'Kimi K2.5');
     expect(kimi?.modelId).toBe('moonshotai/kimi-k2.5');
 
-    const claude = MODEL_OPTIONS.find(m => m.label === 'Claude Sonnet 4.6');
-    expect(claude?.modelId).toBe('anthropic/claude-sonnet-4-6');
+    const claude = MODEL_OPTIONS.find(m => m.label === 'Claude Sonnet (latest)');
+    expect(claude?.modelId).toBe('~anthropic/claude-sonnet-latest');
 
-    const deepseekFlash = MODEL_OPTIONS.find(m => m.label === 'DeepSeek V4 Flash');
-    expect(deepseekFlash?.modelId).toBe('deepseek/deepseek-v4-flash');
+    const deepseekFlash = MODEL_OPTIONS.find(m => m.label === 'DeepSeek V4.1 Flash');
+    expect(deepseekFlash?.modelId).toBe('deepseek/deepseek-v4.1-flash');
 
     const deepseekPro = MODEL_OPTIONS.find(m => m.label === 'DeepSeek V4 Pro');
     expect(deepseekPro?.modelId).toBe('deepseek/deepseek-v4-pro');
   });
 
-  it('DEFAULT_PLANNER should be Claude Sonnet 4.6', () => {
-    expect(DEFAULT_PLANNER.label).toBe('Claude Sonnet 4.6');
-    expect(DEFAULT_PLANNER.modelId).toBe('anthropic/claude-sonnet-4-6');
+  it('DEFAULT_PLANNER should be Claude Sonnet (latest)', () => {
+    expect(DEFAULT_PLANNER.label).toBe('Claude Sonnet (latest)');
+    expect(DEFAULT_PLANNER.modelId).toBe('~anthropic/claude-sonnet-latest');
   });
 
   it('getModelOptionByLabel should find models', () => {
