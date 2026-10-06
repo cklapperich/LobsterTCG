@@ -2,7 +2,7 @@ import type { CardTemplate, PlayerIndex } from './types/card';
 import type { Action } from './types/action';
 import type { GameState } from './types/game';
 import type { ToolSet } from 'ai';
-import { INSTANCE_ID_PREFIX, ORIENTATIONS } from './types/constants';
+import { INSTANCE_ID_PREFIX, ORIENTATIONS, NOTE_DECLARATION_TYPE } from './types/constants';
 import { resolveCardName, formatCardInventory } from './readable';
 import {
   draw,
@@ -27,6 +27,7 @@ import {
   mulligan,
   swapCardStacks,
   rearrangeZone,
+  declareAction,
 } from './action';
 import type { Visibility } from './types/card';
 import { tool as aiTool } from 'ai';
@@ -392,6 +393,10 @@ export function createDefaultTools(ctx: ToolContext): ToolSet {
           return reveal(p, cardIds, 'opponent');
         });
       }),
+
+    announce: createTool('Write a short note to the game log, visible to both players. Use when a card effect makes you choose or name something the opponent must know (e.g. which attack is blocked, which card you named).',
+      z.object({ message: z.string().max(200).describe('The note to log') }),
+      async ({ message }) => ctx.execute(declareAction(p, NOTE_DECLARATION_TYPE, message, undefined, message))),
 
     end_turn: createTool('End your turn and pass to the opponent. Never call in parallel, always call alone.',
       z.object({}),

@@ -30,7 +30,7 @@
   import { toReadableState } from '../../core/readable';
   import { PluginManager } from '../../core/plugin/plugin-manager';
   import { VISIBILITY } from '../../core/types/card';
-  import { PHASES, ACTION_TYPES } from '../../core/types/constants';
+  import { PHASES, ACTION_TYPES, NOTE_DECLARATION_TYPE } from '../../core/types/constants';
   import { gameLog, systemLog } from '../../core/game-log';
   import { fromPlayerPerspective } from '../../core/zone-perspective';
   import { GAME_TYPES } from '../../game-types';
@@ -472,7 +472,7 @@
     }
 
     // Splash announcements for notable actions
-    if (action.type === ACTION_TYPES.DECLARE_ACTION) {
+    if (action.type === ACTION_TYPES.DECLARE_ACTION && action.declarationType !== NOTE_DECLARATION_TYPE) {
       showSplash(action.name.toUpperCase());
     }
 

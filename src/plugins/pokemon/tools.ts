@@ -158,6 +158,7 @@ export function createPokemonCustomTools(ctx: ToolContext): ToolSet {
     inputSchema: z.object({
       attackName: z.string().describe('Name of the attack to use'),
       targetCardName: z.string().optional().describe('Optional: name of a target card'),
+      choice: z.string().optional().describe('Required when the attack text says "choose" or "name" something (e.g. the opponent attack that Amnesia blocks). Logged for the opponent.'),
       allowed_by_card_effect: z.boolean().optional().describe('Set true when a card effect permits bypassing normal rules'),
     }),
     async execute(input) {
@@ -169,7 +170,8 @@ export function createPokemonCustomTools(ctx: ToolContext): ToolSet {
         const topCard = state.zones[activeKey]?.cards.at(-1);
         const activeName = topCard?.template?.name ?? 'Active Pokemon';
         const target = input.targetCardName ? ` targeting ${input.targetCardName}` : '';
-        const msg = `${activeName} used ${input.attackName}!${target}`;
+        const choice = input.choice ? ` (chose: ${input.choice})` : '';
+        const msg = `${activeName} used ${input.attackName}!${target}${choice}`;
         const action = declareAction(p, POKEMON_DECLARATION_TYPES.ATTACK, input.attackName, { targetCardName: input.targetCardName }, msg);
         if (input.allowed_by_card_effect) action.allowed_by_card_effect = true;
         return action;
@@ -203,10 +205,12 @@ export function createPokemonCustomTools(ctx: ToolContext): ToolSet {
       inputSchema: z.object({
         cardName: z.string().describe('Name of the Pokemon with the ability'),
         abilityName: z.string().describe('Name of the ability to use'),
+        choice: z.string().optional().describe('Required when the ability text says "choose" or "name" something. Logged for the opponent.'),
         allowed_by_card_effect: z.boolean().optional().describe('Set true when a card effect permits bypassing normal rules'),
       }),
       async execute(input) {
-        const msg = `${input.cardName} used ability: ${input.abilityName}`;
+        const choice = input.choice ? ` (chose: ${input.choice})` : '';
+        const msg = `${input.cardName} used ability: ${input.abilityName}${choice}`;
         const action = declareAction(p, POKEMON_DECLARATION_TYPES.ABILITY, input.abilityName, { cardName: input.cardName }, msg);
         if (input.allowed_by_card_effect) action.allowed_by_card_effect = true;
         return ctx.execute(action);

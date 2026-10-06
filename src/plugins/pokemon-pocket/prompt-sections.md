@@ -157,9 +157,10 @@ When executing an attack:
 - **`discard_pokemon_cards`**: Bulk discard for KO'd Pokemon and all attached cards
 
 **Declaration Tools:**
-- **`declare_attack`**: Log attack declaration before resolving damage
+- **`declare_attack`**: Log attack declaration before resolving damage. If the attack makes you choose or name something, pass it as `choice`
 - **`declare_retreat`**: Log retreat declaration before paying costs
-- **`declare_ability`**: Log ability usage
+- **`declare_ability`**: Log ability usage. If the ability makes you choose or name something, pass it as `choice`
+- **`announce`**: Write a note to the game log when any other effect makes you choose or name something. Check the log for the opponent's announced choices and honor them
 
 **Information:**
 - **`peek`**: Look at top/bottom N cards of a zone

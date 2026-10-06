@@ -115,6 +115,9 @@ export const CARD_FLAGS = { PLAYED_THIS_TURN: 'played_this_turn' } as const;
 // Default hook priority
 export const DEFAULT_HOOK_PRIORITY = 100;
 
+// Declaration type for free-text log notes (no splash, no plugin semantics)
+export const NOTE_DECLARATION_TYPE = 'note';
+
 // Readable state log limit
 export const READABLE_LOG_LIMIT = 100;
 
