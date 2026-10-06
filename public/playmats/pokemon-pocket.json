@@ -129,7 +129,7 @@
       "ownerCanSeeContents": true,
       "opponentCanSeeCount": true,
       "shared": true,
-      "canHaveCounters": false
+      "canHaveCounters": true
     },
     {
       "id": "energy_discard",
