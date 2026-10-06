@@ -1,6 +1,6 @@
 export const AI_CONFIG = {
   DEFAULT_MODEL: 'accounts/fireworks/models/kimi-k2p5',
-  MAX_TOKENS: 4096,
+  MAX_TOKENS: 16384, // reasoning tokens count against this; 4096 cut turns off mid-thought
   MAX_STEPS: 30,
 } as const;
 

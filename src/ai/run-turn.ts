@@ -142,6 +142,7 @@ async function runAgent(config: AgentConfig): Promise<AgentResult> {
           text: await stream.text,
           reasoning: await stream.reasoning,
           toolCalls: await stream.toolCalls,
+          finishReason: await stream.finishReason,
           response: await stream.response,
           usage: await stream.usage,
         };
@@ -157,6 +158,7 @@ async function runAgent(config: AgentConfig): Promise<AgentResult> {
             text: res.text,
             reasoning: res.reasoning,
             toolCalls: res.toolCalls,
+            finishReason: res.finishReason,
             responseMessages: res.response.messages,
           },
           usageDetails: {
@@ -172,7 +174,7 @@ async function runAgent(config: AgentConfig): Promise<AgentResult> {
         });
 
         if (logging) {
-          console.log(`%c[${label}] step ${step}: ${inputTokens} in / ${outputTokens} out — $${(inputCost + outputCost).toFixed(4)}`, 'color: #8cf');
+          console.log(`%c[${label}] step ${step}: ${inputTokens} in / ${outputTokens} out (${res.finishReason}) — $${(inputCost + outputCost).toFixed(4)}`, 'color: #8cf');
         }
 
         return res;
