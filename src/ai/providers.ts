@@ -28,11 +28,10 @@ export function resolveModel(modelId: string) {
 
 // Cost per million tokens: [input, output]
 export const MODEL_OPTIONS: ModelOption[] = [
-  { label: 'GLM-5', modelId: 'z-ai/glm-5', costPerMTok: [1.00, 3.20] },
-  { label: 'Kimi K2.5', modelId: 'moonshotai/kimi-k2.5', costPerMTok: [0.60, 3.00] },
+  { label: 'GLM 5.3 Flash', modelId: 'z-ai/glm-5.3-flash', costPerMTok: [0.15, 0.50] },
+  { label: 'Kimi K3', modelId: 'moonshotai/kimi-k3', costPerMTok: [0.83, 14.00] },
   { label: 'Claude Sonnet (latest)', modelId: '~anthropic/claude-sonnet-latest', costPerMTok: [2.00, 10.00] },
   { label: 'DeepSeek V4.1 Flash', modelId: 'deepseek/deepseek-v4.1-flash', costPerMTok: [0.01, 1.32] },
-  { label: 'DeepSeek V4 Pro', modelId: 'deepseek/deepseek-v4-pro', costPerMTok: [0.44, 0.87] },
 ];
 
 export interface ModelOption {

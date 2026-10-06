@@ -13,30 +13,26 @@ describe('Simplified AI Providers', () => {
     console.log('VITE_AI_GATEWAY_KEY loaded:', apiKey ? `${apiKey.slice(0, 10)}...` : 'NOT FOUND');
     expect(apiKey).toBeDefined(); // Should be defined from .env file
   });
-  it('MODEL_OPTIONS should have 5 models', () => {
-    expect(MODEL_OPTIONS).toHaveLength(5);
-    expect(MODEL_OPTIONS.map(m => m.label)).toContain('GLM-5');
-    expect(MODEL_OPTIONS.map(m => m.label)).toContain('Kimi K2.5');
+  it('MODEL_OPTIONS should have 4 models', () => {
+    expect(MODEL_OPTIONS).toHaveLength(4);
+    expect(MODEL_OPTIONS.map(m => m.label)).toContain('GLM 5.3 Flash');
+    expect(MODEL_OPTIONS.map(m => m.label)).toContain('Kimi K3');
     expect(MODEL_OPTIONS.map(m => m.label)).toContain('Claude Sonnet (latest)');
     expect(MODEL_OPTIONS.map(m => m.label)).toContain('DeepSeek V4.1 Flash');
-    expect(MODEL_OPTIONS.map(m => m.label)).toContain('DeepSeek V4 Pro');
   });
 
   it('Should have correct model IDs', () => {
-    const glm5 = MODEL_OPTIONS.find(m => m.label === 'GLM-5');
-    expect(glm5?.modelId).toBe('z-ai/glm-5');
+    const glm5 = MODEL_OPTIONS.find(m => m.label === 'GLM 5.3 Flash');
+    expect(glm5?.modelId).toBe('z-ai/glm-5.3-flash');
 
-    const kimi = MODEL_OPTIONS.find(m => m.label === 'Kimi K2.5');
-    expect(kimi?.modelId).toBe('moonshotai/kimi-k2.5');
+    const kimi = MODEL_OPTIONS.find(m => m.label === 'Kimi K3');
+    expect(kimi?.modelId).toBe('moonshotai/kimi-k3');
 
     const claude = MODEL_OPTIONS.find(m => m.label === 'Claude Sonnet (latest)');
     expect(claude?.modelId).toBe('~anthropic/claude-sonnet-latest');
 
     const deepseekFlash = MODEL_OPTIONS.find(m => m.label === 'DeepSeek V4.1 Flash');
     expect(deepseekFlash?.modelId).toBe('deepseek/deepseek-v4.1-flash');
-
-    const deepseekPro = MODEL_OPTIONS.find(m => m.label === 'DeepSeek V4 Pro');
-    expect(deepseekPro?.modelId).toBe('deepseek/deepseek-v4-pro');
   });
 
   it('DEFAULT_PLANNER should be Claude Sonnet (latest)', () => {
@@ -45,9 +41,9 @@ describe('Simplified AI Providers', () => {
   });
 
   it('getModelOptionByLabel should find models', () => {
-    const glm5 = getModelOptionByLabel('GLM-5');
+    const glm5 = getModelOptionByLabel('GLM 5.3 Flash');
     expect(glm5).toBeDefined();
-    expect(glm5?.modelId).toBe('z-ai/glm-5');
+    expect(glm5?.modelId).toBe('z-ai/glm-5.3-flash');
 
     const notFound = getModelOptionByLabel('Non-existent Model');
     expect(notFound).toBeUndefined();
@@ -150,7 +146,7 @@ describe('Simplified AI Providers', () => {
       },
       {
         name: 'Kimi K2.5 via AI Gateway',
-        modelId: 'moonshotai/kimi-k2.5',
+        modelId: 'moonshotai/kimi-k3',
         systemPrompt: 'You are a helpful AI assistant.',
         userMessage: 'Hello! Please respond with just "Kimi working" to confirm connection.',
       },

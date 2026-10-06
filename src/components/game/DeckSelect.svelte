@@ -100,9 +100,12 @@
   let testFlags = $state<Record<string, boolean>>({});
   let playmatImage = $state<string>(saved.playmatImage ?? '');
   let cardbackImage = $state<string>(saved.cardbackImage ?? 'greatwave_back');
-  let aiModel = $state<string>(saved.aiModel ?? 'moonshotai/kimi-k2.5');
+  // Saved model IDs go stale when MODEL_OPTIONS changes; fall back to the default.
+  const knownModel = (id: string | undefined, fallback: string) =>
+    MODEL_OPTIONS.some(m => m.modelId === id) ? id! : fallback;
+  let aiModel = $state<string>(knownModel(saved.aiModel, 'moonshotai/kimi-k3'));
   let aiMode = $state<string>(saved.aiMode ?? 'pipeline');
-  let plannerModel = $state<string>(saved.plannerModel ?? DEFAULT_PLANNER.modelId);
+  let plannerModel = $state<string>(knownModel(saved.plannerModel, DEFAULT_PLANNER.modelId));
   let showSettings = $state(false);
 
   // File input refs for uploads
