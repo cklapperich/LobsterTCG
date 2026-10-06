@@ -153,6 +153,16 @@
     }, 0);
   }
 
+  // Game-over banner — stays up once the engine records a result
+  const gameOverText = $derived.by(() => {
+    const r = gameState?.result;
+    if (!r) return null;
+    const why = r.reason === 'concede' && r.winner !== null
+      ? `PLAYER ${(r.winner === 0 ? 1 : 0) + 1} CONCEDED\n`
+      : r.details ? `${r.details.toUpperCase()}\n` : '';
+    return `GAME OVER\n${why}${r.winner === null ? 'DRAW' : `PLAYER ${r.winner + 1} WINS`}`;
+  });
+
   // Player controllers — polymorphic turn dispatch
   function buildControllers(): [PlayerController, PlayerController] {
     const localCtrl: PlayerController = {
@@ -180,7 +190,7 @@
   async function advance() {
     if (turnFlow.tag !== 'local') return; // re-entry guard
     const gs = gameState;
-    if (!gs) return;
+    if (!gs || gs.result) return; // game over — nothing comes next
 
     // Decision pending — dispatch to non-local responder
     if (gs.pendingDecision) {
@@ -851,6 +861,8 @@
       addLog(`Error: ${e}`);
     }
 
+    if (gameState?.result) return; // game over (concede / victory) — don't auto-end into a new turn
+
     // Safety nets: auto-complete if AI didn't call the expected concluding action
     if (phase === 'decision') {
       if (gameState?.pendingDecision) {
@@ -1107,7 +1119,7 @@
           onZoneCounterDrop={handleZoneCounterDrop}
           onBrowse={handleBrowseZone}
         >
-          <SplashAnnouncement text={splashText} duration={settings.splashDuration} />
+          <SplashAnnouncement text={gameOverText ?? splashText} duration={settings.splashDuration} persist={!!gameOverText} />
         </PlaymatGrid>
       </div>
     </div>

@@ -2,14 +2,15 @@
   interface Props {
     text: string | null;
     duration?: number;
+    persist?: boolean; // stay on screen (no fade-out)
   }
 
-  let { text, duration = 1200 }: Props = $props();
+  let { text, duration = 1200, persist = false }: Props = $props();
 </script>
 
 {#key text}
   {#if text}
-    <div class="splash-wrap" style="--dur: {duration}ms">
+    <div class="splash-wrap" class:persist style="--dur: {duration}ms">
       <div class="splash-inner">{text}</div>
     </div>
   {/if}
@@ -48,6 +49,11 @@
     border-top: 3px solid #f8d830;
     border-bottom: 3px solid #f8d830;
     animation: splash-scale var(--dur) ease-in-out forwards;
+  }
+
+  .persist,
+  .persist .splash-inner {
+    animation: none;
   }
 
   @keyframes splash-fade {
